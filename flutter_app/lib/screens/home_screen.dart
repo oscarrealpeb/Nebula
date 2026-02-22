@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-import '../core/theme/color_utils.dart';
+// import '../core/theme/color_utils.dart';
 import '../core/data/avatar_catalog.dart';
 import '../core/data/planet_ladder.dart';
-import '../widgets/cosmic_background.dart';
+// import '../widgets/cosmic_background.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'explore_learn_screen.dart';
 import 'game_placeholder_screen.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
 import 'settings/settings_screen.dart';
+
+const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
+const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.controller});
@@ -37,6 +40,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
 
@@ -46,10 +50,11 @@ class HomeScreen extends StatelessWidget {
     final remaining = starsToNextPlanet(user.stars);
     final avatarIndex = user.avatarIndex.clamp(0, avatarCatalog.length - 1).toInt();
     final avatar = avatarCatalog[avatarIndex];
+    
 
     return Scaffold(
-      body: CosmicBackground(
-        child: SafeArea(
+      backgroundColor: backgroundLilac,
+        body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
             children: [
@@ -99,130 +104,22 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Card(
-                elevation: 0,
-                clipBehavior: Clip.antiAlias,
-                child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        tint(shiftHue(color, -8), 0.80),
-                        tint(shiftHue(color, 20), 0.88),
-                      ],
+              _WelcomeStatusCard(
+                accentColor: controller.accentButtonColor,
+                username: user.username,
+                avatar: avatar,
+                isOnline: controller.isOnline,
+                planetName: planet.name,
+                stars: user.stars,
+                progress: progress,
+                remaining: remaining,
+                onPlanetTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PlanetLadderScreen(controller: controller),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 28,
-                              backgroundColor: Colors.white,
-                              child: Text(
-                                avatar,
-                                style: const TextStyle(fontSize: 24),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Hola, ${user.username}!',
-                                    style: const TextStyle(
-                                      color: Color(0xFF22335D),
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    controller.isOnline ? 'Listo para jugar' : 'Modo offline',
-                                    style: const TextStyle(
-                                      color: Color(0xFF4D5F86),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PlanetLadderScreen(controller: controller),
-                              ),
-                            );
-                          },
-                          child: Ink(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              color: Colors.white.withValues(alpha: 0.90),
-                              border: Border.all(
-                                color: const Color(0xFFD7E2F8),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Planeta ${planet.name}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF253862),
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      '${user.stars} estrellas',
-                                      style: const TextStyle(
-                                        color: Color(0xFF3B4E77),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(99),
-                                  child: LinearProgressIndicator(
-                                    value: progress,
-                                    minHeight: 8,
-                                    backgroundColor: const Color(0xFFE8ECF5),
-                                    valueColor: const AlwaysStoppedAnimation<Color>(
-                                      Color(0xFFFFC55E),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  remaining > 0
-                                      ? 'Faltan $remaining estrellas para el siguiente planeta.'
-                                      : 'Ya alcanzaste el rango maximo.',
-                                  style: const TextStyle(
-                                    color: Color(0xFF526488),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 14),
               const _SectionHeader(
@@ -234,40 +131,33 @@ class HomeScreen extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 1.04,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.85,
                 children: [
                   _GameCard(
-                    title: 'Descubre la emocion',
-                    subtitle: 'Reconoce expresiones',
-                    icon: Icons.psychology_alt_outlined,
-                    colorA: tint(shiftHue(color, -12), 0.76),
-                    colorB: tint(shiftHue(color, -12), 0.89),
+                    title: 'DESCUBRE',
+                    
+                    imagePath: 'assets/images/games/descubre_emocion1.png',
                     onTap: () => _openGame(context, gameName: 'Descubre la emocion'),
+                    accentColor: controller.accentButtonColor,
                   ),
                   _GameCard(
-                    title: 'Conecta las imagenes',
-                    subtitle: 'Une pares correctos',
-                    icon: Icons.hub_outlined,
-                    colorA: tint(shiftHue(color, 18), 0.75),
-                    colorB: tint(shiftHue(color, 18), 0.89),
+                    title: 'CONECTA',
+                    imagePath: 'assets/images/games/conecta_imagenes1.png',
+                    accentColor: controller.accentButtonColor,
                     onTap: () => _openGame(context, gameName: 'Conecta las imagenes'),
                   ),
                   _GameCard(
-                    title: 'Di la palabra',
-                    subtitle: 'Voz y vocabulario',
-                    icon: Icons.record_voice_over_outlined,
-                    colorA: tint(shiftHue(color, 38), 0.74),
-                    colorB: tint(shiftHue(color, 38), 0.89),
+                    title: 'DILO',
+                    imagePath: 'assets/images/games/di_palabra1.png',
+                    accentColor: controller.accentButtonColor,
                     onTap: () => _openGame(context, gameName: 'Di la palabra'),
                   ),
                   _GameCard(
-                    title: 'Explora y aprende',
-                    subtitle: 'Animales y objetos',
-                    icon: Icons.menu_book_outlined,
-                    colorA: tint(shiftHue(color, -34), 0.76),
-                    colorB: tint(shiftHue(color, -34), 0.90),
+                    title: 'EXPLORA',
+                    imagePath: 'assets/images/games/explora_aprende1.png',
+                    accentColor: controller.accentButtonColor,
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -288,11 +178,9 @@ class HomeScreen extends StatelessWidget {
                       width: cardWidth,
                       height: cardHeight,
                       child: _GameCard(
-                        title: 'Minijuegos',
-                        subtitle: '4 retos cortitos',
-                        icon: Icons.extension_rounded,
-                        colorA: tint(shiftHue(color, 55), 0.78),
-                        colorB: tint(shiftHue(color, 55), 0.90),
+                        title: 'MINIJUEGOS',
+                        imagePath: 'assets/images/games/minijuegos1.png',
+                        accentColor: controller.accentButtonColor,
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -308,8 +196,7 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -342,64 +229,187 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _GameCard extends StatelessWidget {
-  const _GameCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.onTap,
-    required this.colorA,
-    required this.colorB,
+class _WelcomeStatusCard extends StatelessWidget {
+  const _WelcomeStatusCard({
+    required this.username,
+    required this.avatar,
+    required this.isOnline,
+    required this.planetName,
+    required this.stars,
+    required this.progress,
+    required this.remaining,
+    required this.onPlanetTap,
+    required this.accentColor,
   });
 
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-  final Color colorA;
-  final Color colorB;
+  final String username;
+  final String avatar;
+  final bool isOnline;
+  final String planetName;
+  final int stars;
+  final double progress;
+  final int remaining;
+  final VoidCallback onPlanetTap;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: InkWell(
+      elevation: 0,   
+      color: accentColor,   
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [colorA, colorB],
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
               children: [
-                Icon(icon, size: 32, color: const Color(0xFF354D7F)),
-                const Spacer(),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.white,
+                  child: Text(
+                    avatar,
+                    style: const TextStyle(fontSize: 24),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF4A5A7D),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hola, $username!',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isOnline ? 'Listo para jugar' : 'Modo offline',
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 16),
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onPlanetTap,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Planeta $planetName',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '$stars ⭐',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      remaining > 0
+                          ? 'Faltan $remaining estrellas.'
+                          : 'Rango máximo alcanzado.',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+class _GameCard extends StatelessWidget {
+  const _GameCard({
+    required this.title,
+    required this.imagePath,
+    required this.onTap,
+    required this.accentColor,
+  });
+
+  final String title;
+  final String imagePath;
+  final VoidCallback onTap;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: accentColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(22),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.grey.withValues(alpha: 0.25),
+        blurRadius: 10,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  ),
+  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Expanded(
+        flex: 4,
+        child: Image.asset(
+          imagePath,
+          fit: BoxFit.contain,
+        ),
+      ),
+      const SizedBox(height: 10),
+      Text(
+        title,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 15,
+        ),
+      ),
+    ],
+  ),
+),
       ),
     );
   }

@@ -90,6 +90,9 @@ class AppController extends ChangeNotifier {
     return HSVColor.fromAHSV(1, hue, 0.78, intensity).toColor();
   }
 
+  // Home UI token from merged branch; mapped to current dynamic accent.
+  Color get accentButtonColor => accentColor;
+
   Future<void> refreshOnlineStatus() async {
     bool online = _isOnline;
     try {

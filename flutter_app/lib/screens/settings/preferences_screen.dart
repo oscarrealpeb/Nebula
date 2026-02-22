@@ -57,7 +57,10 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void _applyThemeRealtime() {
     _themeSyncTimer?.cancel();
     _themeSyncTimer = Timer(const Duration(milliseconds: 70), () {
-      widget.controller.setThemeColor(hue: _hue, intensity: _intensity);
+    // widget.controller.setAccentButtonColor(
+    //   hue: _hue,
+    //   intensity: _intensity,
+    // );    
     });
   }
 
