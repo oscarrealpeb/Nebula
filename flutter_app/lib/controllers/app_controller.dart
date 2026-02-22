@@ -127,6 +127,19 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
+  Future<ActionResult> confirmPendingGoogleLogin() async {
+    final result = await _authService.confirmPendingGoogleLogin();
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<void> cancelPendingGoogleLogin() async {
+    await _authService.cancelPendingGoogleLogin();
+  }
+
   Future<ActionResult> register({
     required String name,
     required String username,
@@ -319,6 +332,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     return ActionResult(ok: true, message: result.message);
   }
+
   bool isValidParentalPinFormat(String value) {
     return _authService.isValidParentalPinFormat(value);
   }
@@ -362,6 +376,51 @@ class AppController extends ChangeNotifier {
     }
     final result =
         await _authService.disableParentalPin(currentPin: currentPin);
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> requestParentalPinRecoveryEmail() async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    final result = await _authService.sendParentalPinRecoveryEmail();
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> recoverParentalPinWithPassword({
+    required String accountPassword,
+    required String newPin,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    final result = await _authService.recoverParentalPinWithPassword(
+      accountPassword: accountPassword,
+      newPin: newPin,
+    );
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> recoverParentalPinWithGoogle({
+    required String newPin,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    final result = await _authService.recoverParentalPinWithGoogle(
+      newPin: newPin,
+    );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
       notifyListeners();

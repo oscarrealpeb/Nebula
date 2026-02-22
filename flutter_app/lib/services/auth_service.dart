@@ -42,6 +42,10 @@ class AuthService {
   NebulaUser? _pendingLocalUserForLink;
   String? _pendingGoogleAccessTokenForLink;
   String? _pendingGoogleIdTokenForLink;
+  String? _pendingGoogleAccessTokenForConfirm;
+  String? _pendingGoogleIdTokenForConfirm;
+  String? _pendingGoogleEmailForConfirm;
+  String? _pendingGoogleNameForConfirm;
 
   bool get _useFirebase => _firebaseAuth != null && _firestore != null;
 
@@ -71,14 +75,35 @@ class AuthService {
     }
 
     final users = await _store.readUsers();
+    NebulaUser? sessionUser;
     for (final user in users) {
       if (user.id == sessionUserId) {
-        _currentUser = user;
-        return user;
+        sessionUser = user;
+        break;
       }
     }
-    _currentUser = null;
-    return null;
+    if (sessionUser == null) {
+      _currentUser = null;
+      await _store.clearSession();
+      return null;
+    }
+
+    if (_useFirebase) {
+      final firebaseUser = _firebaseAuth?.currentUser;
+      if (firebaseUser != null) {
+        final verificationGate = await _enforceVerifiedEmailForPasswordUser(
+          firebaseUser,
+          fallbackEmail: sessionUser.email,
+        );
+        if (!verificationGate.ok) {
+          _currentUser = null;
+          return null;
+        }
+      }
+    }
+
+    _currentUser = sessionUser;
+    return sessionUser;
   }
 
   Future<bool> checkUsernameAvailable(String username) async {
@@ -94,9 +119,8 @@ class AuthService {
 
   String generateSuggestedUsername(String email) {
     final normalized = email.trim().toLowerCase();
-    final seed = normalized.contains('@')
-        ? normalized.split('@').first
-        : normalized;
+    final seed =
+        normalized.contains('@') ? normalized.split('@').first : normalized;
     return _sanitizeUsernameSeed(seed);
   }
 
@@ -190,8 +214,53 @@ class AuthService {
       );
     }
 
+    String userId = _uuid.v4();
+    User? firebaseUser;
+    if (_useFirebase) {
+      try {
+        final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+          email: normalizedEmail,
+          password: trimmedPassword,
+        );
+        firebaseUser = credential.user;
+        if (firebaseUser == null) {
+          return const ServiceResult(
+            ok: false,
+            message: 'No pudimos crear tu cuenta en Firebase Auth.',
+          );
+        }
+        userId = firebaseUser.uid;
+        try {
+          await firebaseUser.updateDisplayName(trimmedName);
+        } catch (_) {}
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          return const ServiceResult(
+            ok: false,
+            message: 'Ese correo ya esta registrado.',
+          );
+        }
+        if (e.code == 'weak-password') {
+          return const ServiceResult(
+            ok: false,
+            message: 'La contrasena es muy debil. Usa al menos 6 caracteres.',
+          );
+        }
+        if (e.code == 'invalid-email') {
+          return const ServiceResult(
+            ok: false,
+            message: 'El correo no es valido.',
+          );
+        }
+        return ServiceResult(
+          ok: false,
+          message: 'Error al crear cuenta en Firebase: ${e.message ?? e.code}',
+        );
+      }
+    }
+
     final newUser = NebulaUser(
-      id: _uuid.v4(),
+      id: userId,
       name: trimmedName,
       username: trimmedUsername,
       email: normalizedEmail,
@@ -206,7 +275,38 @@ class AuthService {
       customImages: const {},
     );
 
-    await _store.writeUsers([...users, newUser]);
+    if (_useFirebase) {
+      try {
+        await _writeCloudUser(newUser);
+        if (firebaseUser != null) {
+          await _firebaseAuth?.setLanguageCode('es');
+          await firebaseUser.sendEmailVerification();
+        }
+        await _firebaseAuth?.signOut();
+        await _store.clearSession();
+        _currentUser = null;
+        return const ServiceResult(
+          ok: true,
+          message:
+              'Cuenta creada. Te enviamos un correo de verificacion. Tienes 1 hora para verificarlo o la cuenta se eliminara por seguridad.',
+        );
+      } catch (e) {
+        try {
+          await firebaseUser?.delete();
+        } catch (_) {}
+        try {
+          await _firebaseAuth?.signOut();
+        } catch (_) {}
+        _currentUser = null;
+        await _store.clearSession();
+        return ServiceResult(
+          ok: false,
+          message: 'No pudimos completar el registro y verificar el correo: $e',
+        );
+      }
+    }
+
+    await _upsertLocal(newUser);
     await _store.saveSessionUserId(newUser.id);
     _currentUser = newUser;
 
@@ -240,6 +340,26 @@ class AuthService {
       }
     }
 
+    if (match == null && _useFirebase) {
+      var loginEmail = needle.contains('@') ? needle : '';
+      if (loginEmail.isEmpty) {
+        loginEmail = await _lookupEmailByUsernameFromCloud(needle) ?? '';
+      }
+      if (loginEmail.isNotEmpty) {
+        final firebaseOnlyLogin = await _loginUsingFirebaseWithoutLocalUser(
+          email: loginEmail,
+          password: secret,
+        );
+        if (firebaseOnlyLogin.ok && firebaseOnlyLogin.data != null) {
+          return firebaseOnlyLogin;
+        }
+        return ServiceResult(
+          ok: false,
+          message: firebaseOnlyLogin.message,
+        );
+      }
+    }
+
     if (match != null && match.password.trim().isEmpty) {
       return const ServiceResult(
         ok: false,
@@ -248,7 +368,35 @@ class AuthService {
       );
     }
 
-    if (match == null || !_passwordMatches(stored: match.password, input: secret)) {
+    if (match == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No pudimos entrar. Revisa tus datos e intenta otra vez.',
+      );
+    }
+
+    final localPasswordMatches = _passwordMatches(
+      stored: match.password,
+      input: secret,
+    );
+    if (!localPasswordMatches) {
+      if (_useFirebase) {
+        final firebaseSync = await _ensureFirebaseUserForPasswordLogin(
+          localUser: match,
+          plainPassword: secret,
+          createIfMissing: false,
+        );
+        if (firebaseSync.ok && firebaseSync.data != null) {
+          match = firebaseSync.data!;
+          await _store.saveSessionUserId(match.id);
+          _currentUser = match;
+          return ServiceResult(
+            ok: true,
+            message: 'Listo, ya estas dentro.',
+            data: match,
+          );
+        }
+      }
       return const ServiceResult(
         ok: false,
         message: 'No pudimos entrar. Revisa tus datos e intenta otra vez.',
@@ -261,9 +409,21 @@ class AuthService {
       match = migrated;
     }
 
+    if (_useFirebase) {
+      final firebaseSync = await _ensureFirebaseUserForPasswordLogin(
+        localUser: match,
+        plainPassword: secret,
+      );
+      if (!firebaseSync.ok || firebaseSync.data == null) {
+        return ServiceResult(ok: false, message: firebaseSync.message);
+      }
+      match = firebaseSync.data!;
+    }
+
     await _store.saveSessionUserId(match.id);
     _currentUser = match;
-    return ServiceResult(ok: true, message: 'Listo, ya estas dentro.', data: match);
+    return ServiceResult(
+        ok: true, message: 'Listo, ya estas dentro.', data: match);
   }
 
   Future<void> logout() async {
@@ -281,15 +441,11 @@ class AuthService {
     } catch (_) {}
     _currentUser = null;
     _clearPendingGoogleLink();
+    _clearPendingGoogleConfirmation();
   }
 
   Future<ServiceResult<NebulaUser>> updateUser(NebulaUser nextUser) async {
-    final users = await _store.readUsers();
-    final replaced = users.map((user) {
-      if (user.id == nextUser.id) return nextUser;
-      return user;
-    }).toList();
-    await _store.writeUsers(replaced);
+    await _upsertLocal(nextUser);
     await _store.saveSessionUserId(nextUser.id);
     _currentUser = nextUser;
     return ServiceResult(
@@ -367,6 +523,9 @@ class AuthService {
     }
 
     try {
+      _clearPendingGoogleLink();
+      _clearPendingGoogleConfirmation();
+
       // Limpia cuenta de Google en memoria para forzar selector de cuenta.
       try {
         await _googleSignIn.signOut();
@@ -380,23 +539,7 @@ class AuthService {
         );
       }
 
-      final auth = await account.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: auth.accessToken,
-        idToken: auth.idToken,
-      );
-
-      final userCredential = await _firebaseAuth!.signInWithCredential(credential);
-      final firebaseUser = userCredential.user;
-
-      if (firebaseUser == null) {
-        return const ServiceResult(
-          ok: false,
-          message: 'No pudimos crear la sesion de Google.',
-        );
-      }
-
-      final emailLower = (firebaseUser.email ?? '').toLowerCase();
+      final emailLower = account.email.trim().toLowerCase();
       if (emailLower.isEmpty) {
         return const ServiceResult(
           ok: false,
@@ -412,12 +555,24 @@ class AuthService {
         }
       }
 
+      final auth = await account.authentication;
+      final accessToken = auth.accessToken;
+      final idToken = auth.idToken;
+      final hasValidToken =
+          (accessToken ?? '').isNotEmpty || (idToken ?? '').isNotEmpty;
+      if (!hasValidToken) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos validar tu cuenta de Google.',
+        );
+      }
+
       if (existingUser != null && existingUser.password.isNotEmpty) {
         _pendingGoogleUserForLink = NebulaUser(
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName ?? 'Explorador',
-          username: generateSuggestedUsername(firebaseUser.email ?? ''),
-          email: firebaseUser.email ?? '',
+          id: '',
+          name: account.displayName ?? 'Explorador',
+          username: generateSuggestedUsername(account.email),
+          email: emailLower,
           password: '',
           parentalPinHash: '',
           stars: 0,
@@ -429,14 +584,120 @@ class AuthService {
           customImages: const {},
         );
         _pendingLocalUserForLink = existingUser;
-        _pendingGoogleAccessTokenForLink = auth.accessToken;
-        _pendingGoogleIdTokenForLink = auth.idToken;
-        await _firebaseAuth.signOut();
-        await _googleSignIn.signOut();
+        _pendingGoogleAccessTokenForLink = accessToken;
+        _pendingGoogleIdTokenForLink = idToken;
         return const ServiceResult(
           ok: false,
           message: 'EMAIL_EXISTS_NEED_LINK',
           data: null,
+        );
+      }
+
+      _pendingGoogleAccessTokenForConfirm = accessToken;
+      _pendingGoogleIdTokenForConfirm = idToken;
+      _pendingGoogleEmailForConfirm = emailLower;
+      _pendingGoogleNameForConfirm = account.displayName ?? 'Explorador';
+      return ServiceResult(
+        ok: false,
+        message: 'GOOGLE_CONFIRM_REQUIRED:$emailLower',
+      );
+    } catch (e) {
+      _clearPendingGoogleLink();
+      _clearPendingGoogleConfirmation();
+      return ServiceResult(
+        ok: false,
+        message: 'Error al iniciar sesion con Google: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> confirmPendingGoogleLogin() async {
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Google Sign-In solo funciona con Firebase habilitado.',
+      );
+    }
+
+    final accessToken = _pendingGoogleAccessTokenForConfirm;
+    final idToken = _pendingGoogleIdTokenForConfirm;
+    final hasValidToken =
+        (accessToken ?? '').isNotEmpty || (idToken ?? '').isNotEmpty;
+    if (!hasValidToken) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay una confirmacion pendiente de Google.',
+      );
+    }
+
+    try {
+      final credential = GoogleAuthProvider.credential(
+        accessToken: accessToken,
+        idToken: idToken,
+      );
+      final userCredential =
+          await _firebaseAuth!.signInWithCredential(credential);
+      final firebaseUser = userCredential.user;
+      if (firebaseUser == null) {
+        _clearPendingGoogleConfirmation();
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos crear la sesion de Google.',
+        );
+      }
+
+      final emailLower =
+          (firebaseUser.email ?? _pendingGoogleEmailForConfirm ?? '')
+              .trim()
+              .toLowerCase();
+      if (emailLower.isEmpty) {
+        _clearPendingGoogleConfirmation();
+        return const ServiceResult(
+          ok: false,
+          message: 'Tu cuenta de Google no devolvio un correo valido.',
+        );
+      }
+
+      final users = await _store.readUsers();
+      NebulaUser? existingUser;
+      for (final user in users) {
+        if (user.email.toLowerCase() == emailLower) {
+          existingUser = user;
+          break;
+        }
+      }
+
+      if (existingUser != null && existingUser.password.isNotEmpty) {
+        _pendingGoogleUserForLink = NebulaUser(
+          id: firebaseUser.uid,
+          name: _pendingGoogleNameForConfirm ??
+              firebaseUser.displayName ??
+              'Explorador',
+          username: generateSuggestedUsername(emailLower),
+          email: emailLower,
+          password: '',
+          parentalPinHash: '',
+          stars: 0,
+          avatarIndex: 0,
+          selectedNarratorId: 'narrator_1',
+          soundEffectsEnabled: true,
+          accentHue: 196,
+          accentIntensity: 0.97,
+          customImages: const {},
+        );
+        _pendingLocalUserForLink = existingUser;
+        _pendingGoogleAccessTokenForLink = accessToken;
+        _pendingGoogleIdTokenForLink = idToken;
+        _clearPendingGoogleConfirmation();
+        try {
+          await _firebaseAuth.signOut();
+        } catch (_) {}
+        try {
+          await _googleSignIn.signOut();
+        } catch (_) {}
+        return const ServiceResult(
+          ok: false,
+          message: 'EMAIL_EXISTS_NEED_LINK',
         );
       }
 
@@ -446,10 +707,12 @@ class AuthService {
         final preservedUser = NebulaUser(
           id: firebaseUser.uid,
           name: localUser.name.trim().isEmpty
-              ? firebaseUser.displayName ?? 'Explorador'
+              ? (_pendingGoogleNameForConfirm ??
+                  firebaseUser.displayName ??
+                  'Explorador')
               : localUser.name,
           username: localUser.username.trim().isEmpty
-              ? generateSuggestedUsername(firebaseUser.email ?? emailLower)
+              ? generateSuggestedUsername(emailLower)
               : localUser.username,
           email: emailLower,
           password: localUser.password,
@@ -477,8 +740,10 @@ class AuthService {
       } else {
         final newUser = NebulaUser(
           id: firebaseUser.uid,
-          name: firebaseUser.displayName ?? 'Explorador',
-          username: generateSuggestedUsername(firebaseUser.email ?? ''),
+          name: _pendingGoogleNameForConfirm ??
+              firebaseUser.displayName ??
+              'Explorador',
+          username: generateSuggestedUsername(emailLower),
           email: emailLower,
           password: '',
           parentalPinHash: '',
@@ -496,7 +761,9 @@ class AuthService {
 
       await _store.saveSessionUserId(signedUser.id);
       _currentUser = signedUser;
+      await _syncCloudUserBestEffort(signedUser);
       _clearPendingGoogleLink();
+      _clearPendingGoogleConfirmation();
 
       return ServiceResult(
         ok: true,
@@ -504,12 +771,25 @@ class AuthService {
         data: signedUser,
       );
     } catch (e) {
-      _clearPendingGoogleLink();
+      _clearPendingGoogleConfirmation();
       return ServiceResult(
         ok: false,
-        message: 'Error al iniciar sesion con Google: $e',
+        message: 'Error al confirmar Google: $e',
       );
     }
+  }
+
+  Future<void> cancelPendingGoogleLogin() async {
+    _clearPendingGoogleConfirmation();
+    try {
+      await _firebaseAuth?.signOut();
+    } catch (_) {}
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {}
   }
 
   Future<ServiceResult<void>> setPasswordForCurrentUser({
@@ -651,8 +931,7 @@ class AuthService {
     final users = await _store.readUsers();
     final taken = users.any(
       (user) =>
-          user.id != _currentUser!.id &&
-          user.email.toLowerCase() == normalized,
+          user.id != _currentUser!.id && user.email.toLowerCase() == normalized,
     );
     if (taken) {
       return const ServiceResult(
@@ -673,7 +952,8 @@ class AuthService {
     final mustValidatePassword =
         _currentUser!.password.trim().isNotEmpty || !_useFirebase;
     if (mustValidatePassword &&
-        !_passwordMatches(stored: _currentUser!.password, input: passwordToCheck.trim())) {
+        !_passwordMatches(
+            stored: _currentUser!.password, input: passwordToCheck.trim())) {
       return const ServiceResult(
         ok: false,
         message: 'La contrasena actual es incorrecta.',
@@ -713,6 +993,14 @@ class AuthService {
     }
 
     try {
+      final firebaseAuth = _firebaseAuth;
+      if (firebaseAuth == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Password reset requiere Firebase.',
+        );
+      }
+
       final needle = identifier.trim().toLowerCase();
       var emailToReset = needle;
       if (!needle.contains('@')) {
@@ -733,7 +1021,8 @@ class AuthService {
         emailToReset = user.email;
       }
 
-      await _firebaseAuth!.sendPasswordResetEmail(email: emailToReset);
+      await firebaseAuth.setLanguageCode('es');
+      await firebaseAuth.sendPasswordResetEmail(email: emailToReset);
       return const ServiceResult(
         ok: true,
         message: 'Email de reset enviado. Revisa tu bandeja de entrada.',
@@ -779,7 +1068,8 @@ class AuthService {
     }
 
     try {
-      final updated = _currentUser!.copyWith(parentalPinHash: _hashParentalPin(pin));
+      final updated =
+          _currentUser!.copyWith(parentalPinHash: _hashParentalPin(pin));
       await _upsertLocal(updated);
       _currentUser = updated;
       return ServiceResult(
@@ -857,6 +1147,218 @@ class AuthService {
     }
   }
 
+  Future<ServiceResult<void>> sendParentalPinRecoveryEmail() async {
+    if (_currentUser == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay usuario actual.',
+      );
+    }
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Recuperar PIN por correo requiere Firebase.',
+      );
+    }
+
+    try {
+      final firebaseAuth = _firebaseAuth;
+      if (firebaseAuth == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Recuperar PIN por correo requiere Firebase.',
+        );
+      }
+      await firebaseAuth.setLanguageCode('es');
+      await firebaseAuth.sendPasswordResetEmail(email: _currentUser!.email);
+      return const ServiceResult(
+        ok: true,
+        message:
+            'Te enviamos un correo para recuperar el acceso de tu cuenta y poder restablecer el PIN.',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos enviar el correo de recuperacion del PIN: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> recoverParentalPinWithPassword({
+    required String accountPassword,
+    required String newPin,
+  }) async {
+    if (_currentUser == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay usuario actual.',
+      );
+    }
+
+    final trimmedNewPin = newPin.trim();
+    if (!isValidParentalPinFormat(trimmedNewPin)) {
+      return const ServiceResult(
+        ok: false,
+        message: 'El PIN debe tener entre 4 y 6 digitos.',
+      );
+    }
+
+    final typedPassword = accountPassword.trim();
+    if (typedPassword.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Escribe la contrasena de tu cuenta para restablecer el PIN.',
+      );
+    }
+
+    if (_useFirebase) {
+      final firebaseUser = _firebaseAuth?.currentUser;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No hay sesion valida en Firebase para verificar la cuenta.',
+        );
+      }
+      try {
+        final credential = EmailAuthProvider.credential(
+          email: _currentUser!.email,
+          password: typedPassword,
+        );
+        await firebaseUser.reauthenticateWithCredential(credential);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'wrong-password' ||
+            e.code == 'invalid-credential' ||
+            e.code == 'user-mismatch' ||
+            e.code == 'invalid-email') {
+          return const ServiceResult(
+            ok: false,
+            message: 'La contrasena de la cuenta es incorrecta.',
+          );
+        }
+        return ServiceResult(
+          ok: false,
+          message:
+              'No pudimos verificar tu cuenta para restablecer el PIN: ${e.message ?? e.code}',
+        );
+      }
+    } else if (!_passwordMatches(
+      stored: _currentUser!.password,
+      input: typedPassword,
+    )) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La contrasena de la cuenta es incorrecta.',
+      );
+    }
+
+    try {
+      final updated = _currentUser!.copyWith(
+        parentalPinHash: _hashParentalPin(trimmedNewPin),
+        password: _hashPassword(typedPassword),
+      );
+      await _upsertLocal(updated);
+      _currentUser = updated;
+      return ServiceResult(
+        ok: true,
+        message: 'PIN restablecido correctamente.',
+        data: updated,
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos restablecer el PIN: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> recoverParentalPinWithGoogle({
+    required String newPin,
+  }) async {
+    if (_currentUser == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay usuario actual.',
+      );
+    }
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Este metodo requiere Firebase activo.',
+      );
+    }
+
+    final trimmedNewPin = newPin.trim();
+    if (!isValidParentalPinFormat(trimmedNewPin)) {
+      return const ServiceResult(
+        ok: false,
+        message: 'El PIN debe tener entre 4 y 6 digitos.',
+      );
+    }
+
+    try {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+      try {
+        await _googleSignIn.disconnect();
+      } catch (_) {}
+
+      final account = await _googleSignIn.signIn();
+      if (account == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Recuperacion cancelada.',
+        );
+      }
+
+      final selectedEmail = account.email.trim().toLowerCase();
+      final currentEmail = _currentUser!.email.trim().toLowerCase();
+      if (selectedEmail != currentEmail) {
+        return ServiceResult(
+          ok: false,
+          message:
+              'Debes elegir la misma cuenta de Google ($currentEmail) para recuperar el PIN.',
+        );
+      }
+
+      final auth = await account.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: auth.accessToken,
+        idToken: auth.idToken,
+      );
+
+      final firebaseUser = _firebaseAuth?.currentUser;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No hay sesion valida en Firebase para verificar Google.',
+        );
+      }
+      await firebaseUser.reauthenticateWithCredential(credential);
+
+      final updated = _currentUser!
+          .copyWith(parentalPinHash: _hashParentalPin(trimmedNewPin));
+      await _upsertLocal(updated);
+      _currentUser = updated;
+      return ServiceResult(
+        ok: true,
+        message: 'PIN restablecido correctamente con Google.',
+        data: updated,
+      );
+    } on FirebaseAuthException catch (e) {
+      return ServiceResult(
+        ok: false,
+        message:
+            'No pudimos verificar tu cuenta de Google para restablecer el PIN: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos restablecer el PIN con Google: $e',
+      );
+    }
+  }
+
   Future<ServiceResult<void>> deleteCurrentAccount({
     String parentalPin = '',
     String password = '',
@@ -876,7 +1378,8 @@ class AuthService {
     }
 
     if (password.trim().isNotEmpty &&
-        !_passwordMatches(stored: _currentUser!.password, input: password.trim())) {
+        !_passwordMatches(
+            stored: _currentUser!.password, input: password.trim())) {
       return const ServiceResult(
         ok: false,
         message: 'Contrasena incorrecta.',
@@ -893,10 +1396,12 @@ class AuthService {
     }
 
     try {
+      final userId = _currentUser!.id;
       final users = await _store.readUsers();
       final filtered = users.where((u) => u.id != _currentUser!.id).toList();
       await _store.writeUsers(filtered);
       await _store.clearSession();
+      await _deleteCloudUserBestEffort(userId);
 
       if (_useFirebase) {
         await _firebaseAuth!.currentUser?.delete();
@@ -914,6 +1419,7 @@ class AuthService {
       );
     }
   }
+
   Future<ServiceResult<void>> linkGoogleToExistingAccount({
     required String currentPassword,
   }) async {
@@ -932,7 +1438,8 @@ class AuthService {
       if (googleUser == null || localUser == null) {
         return const ServiceResult(
           ok: false,
-          message: 'No hay una vinculacion pendiente. Intenta de nuevo con Google.',
+          message:
+              'No hay una vinculacion pendiente. Intenta de nuevo con Google.',
         );
       }
       if (pendingAccessToken == null || pendingIdToken == null) {
@@ -979,7 +1486,7 @@ class AuthService {
           : _hashPassword(typed);
 
       final merged = NebulaUser(
-        id: googleUser.id,
+        id: firebaseGoogleUser.uid,
         name: localUser.name,
         username: localUser.username,
         email: localUser.email.toLowerCase(),
@@ -996,7 +1503,7 @@ class AuthService {
 
       final nextUsers = users
           .where(
-            (u) => u.id != localUser.id && u.id != googleUser.id,
+            (u) => u.id != localUser.id && u.id != firebaseGoogleUser.uid,
           )
           .toList();
       nextUsers.add(merged);
@@ -1004,6 +1511,7 @@ class AuthService {
       await _store.writeUsers(nextUsers);
       await _store.saveSessionUserId(merged.id);
       _currentUser = merged;
+      await _syncCloudUserBestEffort(merged);
       _clearPendingGoogleLink();
 
       return const ServiceResult(
@@ -1018,6 +1526,397 @@ class AuthService {
     }
   }
 
+  Future<String?> _lookupEmailByUsernameFromCloud(String username) async {
+    if (!_useFirebase) return null;
+    final normalized = username.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+    try {
+      final query = await _firestore!
+          .collection('users')
+          .where('usernameLower', isEqualTo: normalized)
+          .limit(1)
+          .get();
+      if (query.docs.isEmpty) return null;
+      final data = query.docs.first.data();
+      final emailLower = (data['emailLower'] as String?)?.trim();
+      final email = (data['email'] as String?)?.trim();
+      final resolved = (emailLower?.isNotEmpty == true ? emailLower : email)
+              ?.toLowerCase() ??
+          '';
+      if (resolved.isEmpty) return null;
+      return resolved;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> _loginUsingFirebaseWithoutLocalUser({
+    required String email,
+    required String password,
+  }) async {
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Cuenta no encontrada localmente.',
+      );
+    }
+
+    try {
+      final credential = await _firebaseAuth!.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos recuperar tu cuenta en Firebase.',
+        );
+      }
+      final verificationGate = await _enforceVerifiedEmailForPasswordUser(
+        firebaseUser,
+        fallbackEmail: email,
+      );
+      if (!verificationGate.ok) {
+        return ServiceResult(
+          ok: false,
+          message: verificationGate.message,
+        );
+      }
+
+      final cloudDoc =
+          await _firestore!.collection('users').doc(firebaseUser.uid).get();
+      final cloud = cloudDoc.data();
+      final restored = NebulaUser(
+        id: firebaseUser.uid,
+        name: (cloud?['name'] as String?)?.trim().isNotEmpty == true
+            ? (cloud!['name'] as String)
+            : (firebaseUser.displayName ?? 'Explorador'),
+        username: (cloud?['username'] as String?)?.trim().isNotEmpty == true
+            ? (cloud!['username'] as String)
+            : generateSuggestedUsername(firebaseUser.email ?? email),
+        email: ((cloud?['email'] as String?) ?? email).trim().toLowerCase(),
+        password: _hashPassword(password),
+        parentalPinHash: (cloud?['parentalPinHash'] as String?) ?? '',
+        stars: (cloud?['stars'] as num?)?.toInt() ?? 0,
+        avatarIndex: (cloud?['avatarIndex'] as num?)?.toInt() ?? 0,
+        selectedNarratorId:
+            (cloud?['selectedNarratorId'] as String?) ?? 'narrator_1',
+        soundEffectsEnabled: (cloud?['soundEffectsEnabled'] as bool?) ?? true,
+        accentHue: (cloud?['accentHue'] as num?)?.toDouble() ?? 196,
+        accentIntensity:
+            (cloud?['accentIntensity'] as num?)?.toDouble() ?? 0.97,
+        customImages: Map<String, String>.from(
+          cloud?['customImages'] as Map? ?? const {},
+        ),
+      );
+
+      await _upsertLocal(restored);
+      await _store.saveSessionUserId(restored.id);
+      _currentUser = restored;
+      return ServiceResult(
+        ok: true,
+        message: 'Listo, ya estas dentro.',
+        data: restored,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'wrong-password') {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos entrar. Revisa tus datos e intenta otra vez.',
+        );
+      }
+      return ServiceResult(
+        ok: false,
+        message: 'Error al iniciar sesion con Firebase: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error al recuperar tu cuenta de Firebase: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> _ensureFirebaseUserForPasswordLogin({
+    required NebulaUser localUser,
+    required String plainPassword,
+    bool createIfMissing = true,
+  }) async {
+    if (!_useFirebase) {
+      return ServiceResult(
+        ok: true,
+        message: 'Firebase no activo.',
+        data: localUser,
+      );
+    }
+
+    try {
+      UserCredential credential;
+      try {
+        credential = await _firebaseAuth!.signInWithEmailAndPassword(
+          email: localUser.email,
+          password: plainPassword,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found') {
+          if (!createIfMissing) {
+            return const ServiceResult(
+              ok: false,
+              message: 'Cuenta no encontrada en Firebase.',
+            );
+          }
+          credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+            email: localUser.email,
+            password: plainPassword,
+          );
+        } else if (e.code == 'wrong-password' ||
+            e.code == 'invalid-credential') {
+          return const ServiceResult(
+            ok: false,
+            message:
+                'Tu contrasena no coincide con Firebase. Prueba recuperar contrasena.',
+          );
+        } else {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos validar tu cuenta en Firebase: ${e.message ?? e.code}',
+          );
+        }
+      }
+
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos recuperar tu sesion en Firebase.',
+        );
+      }
+      final verificationGate = await _enforceVerifiedEmailForPasswordUser(
+        firebaseUser,
+        fallbackEmail: localUser.email,
+      );
+      if (!verificationGate.ok) {
+        return ServiceResult(
+          ok: false,
+          message: verificationGate.message,
+        );
+      }
+
+      var syncedUser =
+          localUser.copyWith(password: _hashPassword(plainPassword));
+      if (localUser.id != firebaseUser.uid) {
+        syncedUser = _copyUserWithId(syncedUser, firebaseUser.uid);
+        final users = await _store.readUsers();
+        final nextUsers = users
+            .where(
+              (u) => u.id != localUser.id && u.id != firebaseUser.uid,
+            )
+            .toList();
+        nextUsers.add(syncedUser);
+        await _store.writeUsers(nextUsers);
+      } else {
+        await _upsertLocal(syncedUser);
+      }
+
+      await _syncCloudUserBestEffort(syncedUser);
+      return ServiceResult(
+        ok: true,
+        message: 'Firebase validado.',
+        data: syncedUser,
+      );
+    } on FirebaseAuthException catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error de Firebase: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error al sincronizar login con Firebase: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<void>> _enforceVerifiedEmailForPasswordUser(
+    User firebaseUser, {
+    required String fallbackEmail,
+  }) async {
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: true,
+        message: 'Firebase no activo.',
+      );
+    }
+
+    final usesPasswordProvider = firebaseUser.providerData.any(
+      (provider) => provider.providerId == EmailAuthProvider.PROVIDER_ID,
+    );
+    if (!usesPasswordProvider) {
+      return const ServiceResult(
+        ok: true,
+        message: 'No requiere verificacion por correo.',
+      );
+    }
+
+    try {
+      await firebaseUser.reload();
+    } catch (_) {}
+    final refreshed = _firebaseAuth?.currentUser ?? firebaseUser;
+    if (refreshed.emailVerified) {
+      return const ServiceResult(
+        ok: true,
+        message: 'Correo verificado.',
+      );
+    }
+
+    final createdAt = refreshed.metadata.creationTime;
+    if (createdAt != null) {
+      final age = DateTime.now().difference(createdAt);
+      const ttl = Duration(hours: 1);
+      if (age >= ttl) {
+        await _deleteUnverifiedFirebaseAccount(
+          refreshed,
+          fallbackEmail: fallbackEmail,
+        );
+        return const ServiceResult(
+          ok: false,
+          message:
+              'No verificaste tu correo en 1 hora. La cuenta se elimino por seguridad. Registrate otra vez.',
+        );
+      }
+
+      final left = ttl - age;
+      final minutesLeft =
+          (left.inMinutes + ((left.inSeconds % 60 == 0) ? 0 : 1)).clamp(1, 60);
+      try {
+        await _firebaseAuth?.setLanguageCode('es');
+        await refreshed.sendEmailVerification();
+      } catch (_) {}
+      try {
+        await _firebaseAuth?.signOut();
+      } catch (_) {}
+      _currentUser = null;
+      await _store.clearSession();
+      return ServiceResult(
+        ok: false,
+        message:
+            'Tu correo no esta verificado. Revisa tu email y vuelve a entrar. Si no verificas en $minutesLeft min, la cuenta se elimina.',
+      );
+    }
+
+    try {
+      await _firebaseAuth?.setLanguageCode('es');
+      await refreshed.sendEmailVerification();
+    } catch (_) {}
+    try {
+      await _firebaseAuth?.signOut();
+    } catch (_) {}
+    _currentUser = null;
+    await _store.clearSession();
+    return const ServiceResult(
+      ok: false,
+      message:
+          'Tu correo no esta verificado. Revisa tu email para activar la cuenta.',
+    );
+  }
+
+  Future<void> _deleteUnverifiedFirebaseAccount(
+    User firebaseUser, {
+    required String fallbackEmail,
+  }) async {
+    final uid = firebaseUser.uid;
+    final emailToClean =
+        (firebaseUser.email ?? fallbackEmail).trim().toLowerCase();
+
+    try {
+      await _deleteCloudUserBestEffort(uid);
+    } catch (_) {}
+
+    try {
+      final users = await _store.readUsers();
+      final filtered = users
+          .where(
+            (u) => u.id != uid && u.email.toLowerCase() != emailToClean,
+          )
+          .toList();
+      await _store.writeUsers(filtered);
+    } catch (_) {}
+
+    try {
+      await firebaseUser.delete();
+    } catch (_) {}
+    try {
+      await _firebaseAuth?.signOut();
+    } catch (_) {}
+    _currentUser = null;
+    try {
+      await _store.clearSession();
+    } catch (_) {}
+  }
+
+  NebulaUser _copyUserWithId(NebulaUser user, String id) {
+    return NebulaUser(
+      id: id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      parentalPinHash: user.parentalPinHash,
+      stars: user.stars,
+      avatarIndex: user.avatarIndex,
+      selectedNarratorId: user.selectedNarratorId,
+      soundEffectsEnabled: user.soundEffectsEnabled,
+      accentHue: user.accentHue,
+      accentIntensity: user.accentIntensity,
+      customImages: user.customImages,
+    );
+  }
+
+  Map<String, dynamic> _toCloudUserData(NebulaUser user) {
+    return {
+      'id': user.id,
+      'name': user.name,
+      'username': user.username,
+      'usernameLower': user.username.toLowerCase(),
+      'email': user.email,
+      'emailLower': user.email.toLowerCase(),
+      'parentalPinHash': user.parentalPinHash,
+      'stars': user.stars,
+      'avatarIndex': user.avatarIndex,
+      'selectedNarratorId': user.selectedNarratorId,
+      'soundEffectsEnabled': user.soundEffectsEnabled,
+      'accentHue': user.accentHue,
+      'accentIntensity': user.accentIntensity,
+      'customImages': user.customImages,
+    };
+  }
+
+  Future<void> _writeCloudUser(NebulaUser user) async {
+    if (!_useFirebase) return;
+    await _firestore!.collection('users').doc(user.id).set(
+          _toCloudUserData(user),
+          SetOptions(merge: true),
+        );
+  }
+
+  Future<void> _syncCloudUserBestEffort(NebulaUser user) async {
+    if (!_useFirebase) return;
+    try {
+      await _writeCloudUser(user);
+    } catch (_) {}
+  }
+
+  Future<void> _deleteCloudUserBestEffort(String userId) async {
+    if (!_useFirebase) return;
+    try {
+      await _firestore!.collection('users').doc(userId).delete();
+    } catch (_) {}
+  }
+
   Future<void> _upsertLocal(NebulaUser user) async {
     final users = await _store.readUsers();
     final updated = users.map((u) => u.id == user.id ? user : u).toList();
@@ -1025,6 +1924,7 @@ class AuthService {
       updated.add(user);
     }
     await _store.writeUsers(updated);
+    await _syncCloudUserBestEffort(user);
   }
 
   bool isValidEmailFormat(String email) {
@@ -1070,4 +1970,10 @@ class AuthService {
     _pendingGoogleIdTokenForLink = null;
   }
 
+  void _clearPendingGoogleConfirmation() {
+    _pendingGoogleAccessTokenForConfirm = null;
+    _pendingGoogleIdTokenForConfirm = null;
+    _pendingGoogleEmailForConfirm = null;
+    _pendingGoogleNameForConfirm = null;
+  }
 }

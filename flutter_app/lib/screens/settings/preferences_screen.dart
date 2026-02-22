@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/app_controller.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
+import '../../widgets/nebula_snack.dart';
 
 class PreferencesScreen extends StatefulWidget {
   const PreferencesScreen({super.key, required this.controller});
@@ -75,11 +76,10 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
       hue: _hue,
       intensity: _intensity,
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Listo. Tus cambios ya se aplicaron al instante.'),
-        backgroundColor: Color(0xFF2FA56A),
-      ),
+    NebulaSnack.show(
+      context,
+      message: 'Listo. Tus cambios ya se aplicaron al instante.',
+      ok: true,
     );
   }
 
@@ -157,12 +157,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                                 Text(option.$2),
                                 IconButton(
                                   onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
+                                    NebulaSnack.show(
+                                      context,
+                                      message:
                                           'Hola, soy ${option.$2}. Vamos a jugar y aprender juntos.',
-                                        ),
-                                      ),
+                                      ok: true,
                                     );
                                   },
                                   icon: const Icon(Icons.play_arrow_rounded),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
+import '../widgets/nebula_snack.dart';
 
 class GamePlaceholderScreen extends StatelessWidget {
   const GamePlaceholderScreen({
@@ -69,8 +70,10 @@ class GamePlaceholderScreen extends StatelessWidget {
                 onPressed: () async {
                   await controller.addStars(120);
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Genial, ganaste 120 estrellas.')),
+                  NebulaSnack.show(
+                    context,
+                    message: 'Genial, ganaste 120 estrellas.',
+                    ok: true,
                   );
                 },
               ),

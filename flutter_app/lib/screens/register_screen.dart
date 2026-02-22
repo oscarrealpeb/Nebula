@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
+import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
 import 'home_screen.dart';
 
@@ -66,7 +67,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         !_googleSubmitting;
   }
 
-
   Future<void> _register() async {
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
@@ -81,6 +81,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _showSnack(result.message, ok: result.ok);
 
     if (result.ok) {
+      if (widget.controller.currentUser == null) {
+        if (_isVerificationPendingMessage(result.message)) {
+          await _showVerificationRequiredNotice(fromMessage: result.message);
+        }
+        return;
+      }
       await _maybeOfferParentalPin();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -91,12 +97,126 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  bool _isVerificationPendingMessage(String message) {
+    final text = message.toLowerCase();
+    return text.contains('correo de verificacion') ||
+        text.contains('correo no esta verificado') ||
+        text.contains('verifica tu cuenta');
+  }
+
+  Future<void> _showVerificationRequiredNotice({String? fromMessage}) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.92, end: 1),
+          duration: const Duration(milliseconds: 520),
+          curve: Curves.easeOutBack,
+          builder: (context, value, child) => Transform.scale(
+            scale: value,
+            child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFFE7F4FF),
+                  ),
+                  child: const Icon(
+                    Icons.mark_email_unread_rounded,
+                    size: 36,
+                    color: Color(0xFF1F86E6),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Revisa tu correo',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Te enviamos un correo de verificacion. Debes verificarlo para activar la cuenta.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Importante: tienes 1 hora. Si no verificas a tiempo, la cuenta se elimina por seguridad.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFE76F51),
+                  ),
+                ),
+                if (fromMessage != null && fromMessage.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    fromMessage,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 14),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Entendido'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _registerWithGoogle() async {
     FocusScope.of(context).unfocus();
     setState(() => _googleSubmitting = true);
     final result = await widget.controller.loginWithGoogle();
     if (!mounted) return;
     setState(() => _googleSubmitting = false);
+
+    if (_isGoogleConfirmRequired(result.message)) {
+      final email = _extractGoogleConfirmEmail(result.message);
+      final confirmed = await _confirmGoogleSelection(email);
+      if (!mounted) return;
+      if (!confirmed) {
+        await widget.controller.cancelPendingGoogleLogin();
+        return;
+      }
+
+      setState(() => _googleSubmitting = true);
+      final confirmedResult =
+          await widget.controller.confirmPendingGoogleLogin();
+      if (!mounted) return;
+      setState(() => _googleSubmitting = false);
+
+      if (confirmedResult.message == 'EMAIL_EXISTS_NEED_LINK') {
+        await _handleGoogleLinkFlow();
+        return;
+      }
+
+      _showSnack(confirmedResult.message, ok: confirmedResult.ok);
+      if (!confirmedResult.ok) return;
+
+      await _maybeOfferParentalPin();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(controller: widget.controller),
+        ),
+        (_) => false,
+      );
+      return;
+    }
 
     if (result.message == 'EMAIL_EXISTS_NEED_LINK') {
       await _handleGoogleLinkFlow();
@@ -113,6 +233,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
           builder: (_) => HomeScreen(controller: widget.controller)),
       (_) => false,
     );
+  }
+
+  bool _isGoogleConfirmRequired(String message) {
+    return message.startsWith('GOOGLE_CONFIRM_REQUIRED:');
+  }
+
+  String _extractGoogleConfirmEmail(String message) {
+    const prefix = 'GOOGLE_CONFIRM_REQUIRED:';
+    if (!message.startsWith(prefix)) return '';
+    return message.substring(prefix.length).trim();
+  }
+
+  Future<bool> _confirmGoogleSelection(String email) async {
+    final selected = email.isEmpty ? 'esta cuenta' : email;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirmar cuenta Google'),
+        content: Text(
+          'Vas a entrar con $selected. ¿Deseas continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   Future<void> _handleGoogleLinkFlow() async {
@@ -171,12 +325,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSnack(String message, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: ok ? const Color(0xFF2FA56A) : const Color(0xFFC64040),
-      ),
-    );
+    NebulaSnack.show(context, message: message, ok: ok);
   }
 
   Future<void> _maybeOfferParentalPin() async {
@@ -294,11 +443,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       label: 'Tu apodo (nombre de usuario)',
                       validator: _validateUsername,
                       showValidationStatus: true,
-                      validationMessage: 'Este nombre de usuario ya está en uso',
+                      validationMessage:
+                          'Este nombre de usuario ya está en uso',
                       onChanged: (_) {
                         setState(() {
-                          _usernameValid =
-                              _usernameFormatValid ? null : false;
+                          _usernameValid = _usernameFormatValid ? null : false;
                         });
                       },
                     ),
@@ -350,4 +499,3 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
-

@@ -1,14 +1,16 @@
 ﻿import 'package:flutter/material.dart';
 
 ThemeData buildNebulaTheme(Color accentColor) {
+  final cheerfulSeed =
+      Color.lerp(accentColor, const Color(0xFF72D9FF), 0.32) ?? accentColor;
   final scheme = ColorScheme.fromSeed(
-    seedColor: accentColor,
+    seedColor: cheerfulSeed,
     brightness: Brightness.light,
   );
 
   return ThemeData(
     colorScheme: scheme,
-    scaffoldBackgroundColor: const Color(0xFFF7F8FA),
+    scaffoldBackgroundColor: const Color(0xFFF8FBFF),
     useMaterial3: true,
     appBarTheme: const AppBarTheme(
       centerTitle: true,

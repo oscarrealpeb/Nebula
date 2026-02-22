@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../controllers/app_controller.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
+import '../../widgets/nebula_snack.dart';
 
 class PersonalizationScreen extends StatefulWidget {
   const PersonalizationScreen({super.key, required this.controller});
@@ -32,12 +33,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
+      NebulaSnack.show(
+        context,
+        message:
             'Imagen guardada. Pendiente conectar validacion IA (ML Kit/Firebase).',
-          ),
-        ),
+        ok: true,
       );
     } finally {
       if (mounted) setState(() => _busyKey = null);
@@ -156,8 +156,10 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
             NebulaSecondaryButton(
               text: 'Mantener imagenes predeterminadas',
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Perfecto, dejamos el set original.')),
+                NebulaSnack.show(
+                  context,
+                  message: 'Perfecto, dejamos el set original.',
+                  ok: true,
                 );
               },
             ),

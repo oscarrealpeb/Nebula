@@ -34,6 +34,9 @@ class NebulaTextField extends StatefulWidget {
 }
 
 class _NebulaTextFieldState extends State<NebulaTextField> {
+  static const _okColor = Color(0xFF45C97D);
+  static const _errorColor = Color(0xFFFF6E7A);
+
   late bool _obscure;
   Timer? _debounceTimer;
   bool? _validationResult; // null = no validado, true = válido, false = inválido
@@ -118,7 +121,7 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
             suffixIcon: suffixIcon,
             errorBorder: _validationResult == false
                 ? const OutlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFFC64040)),
+                    borderSide: BorderSide(color: _errorColor),
                   )
                 : null,
           ),
@@ -131,7 +134,7 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               widget.validationMessage!,
-              style: const TextStyle(color: Color(0xFFC64040), fontSize: 12),
+              style: const TextStyle(color: _errorColor, fontSize: 12),
             ),
           ),
       ],
@@ -172,14 +175,14 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
     if (_validationResult == true) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Icon(Icons.check_circle, color: Color(0xFF2FA56A)),
+        child: Icon(Icons.check_circle, color: _okColor),
       );
     }
 
     if (_validationResult == false) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Icon(Icons.cancel, color: Color(0xFFC64040)),
+        child: Icon(Icons.cancel, color: _errorColor),
       );
     }
 

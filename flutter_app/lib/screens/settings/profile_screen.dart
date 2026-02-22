@@ -8,6 +8,7 @@ import '../../core/data/planet_ladder.dart';
 import '../../core/theme/color_utils.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
+import '../../widgets/nebula_snack.dart';
 import '../../widgets/nebula_text_field.dart';
 import '../welcome_screen.dart';
 
@@ -60,12 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showSnack(String message, {required bool ok}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: ok ? const Color(0xFF2FA56A) : const Color(0xFFC64040),
-      ),
-    );
+    NebulaSnack.show(context, message: message, ok: ok);
   }
 
   Future<void> _saveProfile() async {
@@ -97,6 +93,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changeEmailNow() async {
+    final parentalPin = await _askParentalPinIfNeeded(
+      actionText: 'abrir cambio de correo',
+    );
+    if (!mounted || parentalPin == null) return;
+
     if (widget.controller.isGoogleOnlyAccount) {
       _showSnack(
         'Esta cuenta usa Google. Cambia el correo en Google y vuelve a entrar.',
@@ -152,10 +153,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (!mounted) return;
       if (confirmed != true) return;
-      final parentalPin = await _askParentalPinIfNeeded(
-        actionText: 'cambiar el correo',
-      );
-      if (!mounted || parentalPin == null) return;
       final result = await widget.controller.requestEmailChange(
         newEmail: emailController.text,
         currentPassword: needsCurrentPassword ? passwordController.text : '',
@@ -170,6 +167,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changePasswordNow() async {
+    final parentalPin = await _askParentalPinIfNeeded(
+      actionText: 'abrir cambio de contrasena',
+    );
+    if (!mounted || parentalPin == null) return;
+
     final requiresCurrentPassword = !widget.controller.isGoogleOnlyAccount;
 
     final currentController = TextEditingController();
@@ -230,12 +232,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showSnack('La nueva contraseña no coincide.', ok: false);
         return;
       }
-
-      final parentalPin = await _askParentalPinIfNeeded(
-        actionText: 'cambiar la contraseña',
-      );
-      if (!mounted || parentalPin == null) return;
-
+      if (next.length < 6) {
+        _showSnack('La contraseña debe tener al menos 6 caracteres.',
+            ok: false);
+        return;
+      }
       final result = await widget.controller.changePassword(
         currentPassword: requiresCurrentPassword ? currentController.text : '',
         newPassword: nextController.text,
@@ -270,6 +271,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'PIN de adulto',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
             ],
           ),
@@ -346,6 +349,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'PIN (4 a 6 números)',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
               const SizedBox(height: 10),
               NebulaTextField(
@@ -353,6 +358,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'Repite el PIN',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
             ],
           ),
@@ -407,6 +414,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'PIN actual',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
               const SizedBox(height: 10),
               NebulaTextField(
@@ -414,6 +423,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'Nuevo PIN',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
               const SizedBox(height: 10),
               NebulaTextField(
@@ -421,6 +432,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'Repite nuevo PIN',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
             ],
           ),
@@ -480,6 +493,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'PIN actual',
                 keyboardType: TextInputType.number,
                 obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
               ),
             ],
           ),
@@ -503,6 +518,173 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnack(result.message, ok: result.ok);
     } finally {
       currentController.dispose();
+    }
+  }
+
+  Future<void> _recoverForgottenParentalPin() async {
+    if (!widget.controller.parentalPinEnabled) {
+      _showSnack('No hay PIN de adulto activo en esta cuenta.', ok: false);
+      return;
+    }
+
+    final mailResult =
+        await widget.controller.requestParentalPinRecoveryEmail();
+    if (!mounted) return;
+    _showSnack(mailResult.message, ok: mailResult.ok);
+
+    if (widget.controller.isGoogleOnlyAccount) {
+      await _recoverParentalPinWithGoogleFlow();
+      return;
+    }
+    await _recoverParentalPinWithPasswordFlow();
+  }
+
+  Future<void> _recoverParentalPinWithPasswordFlow() async {
+    final passwordController = TextEditingController();
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Recuperar PIN de adulto'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Confirma la contrasena de la cuenta y elige un PIN nuevo.',
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: passwordController,
+                label: 'Contrasena de la cuenta',
+                obscureText: true,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: pinController,
+                label: 'Nuevo PIN (4 a 6 numeros)',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: confirmController,
+                label: 'Repite el PIN',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Restablecer'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+
+      final newPin = pinController.text.trim();
+      final confirmPin = confirmController.text.trim();
+      if (newPin != confirmPin) {
+        _showSnack('El PIN no coincide.', ok: false);
+        return;
+      }
+      if (!widget.controller.isValidParentalPinFormat(newPin)) {
+        _showSnack('El PIN debe tener 4 a 6 numeros.', ok: false);
+        return;
+      }
+
+      final result = await widget.controller.recoverParentalPinWithPassword(
+        accountPassword: passwordController.text,
+        newPin: newPin,
+      );
+      if (!mounted) return;
+      _showSnack(result.message, ok: result.ok);
+    } finally {
+      passwordController.dispose();
+      pinController.dispose();
+      confirmController.dispose();
+    }
+  }
+
+  Future<void> _recoverParentalPinWithGoogleFlow() async {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Recuperar PIN con Google'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Elige la misma cuenta de Google y define un PIN nuevo.',
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: pinController,
+                label: 'Nuevo PIN (4 a 6 numeros)',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: confirmController,
+                label: 'Repite el PIN',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+
+      final newPin = pinController.text.trim();
+      final confirmPin = confirmController.text.trim();
+      if (newPin != confirmPin) {
+        _showSnack('El PIN no coincide.', ok: false);
+        return;
+      }
+      if (!widget.controller.isValidParentalPinFormat(newPin)) {
+        _showSnack('El PIN debe tener 4 a 6 numeros.', ok: false);
+        return;
+      }
+
+      final result = await widget.controller.recoverParentalPinWithGoogle(
+        newPin: newPin,
+      );
+      if (!mounted) return;
+      _showSnack(result.message, ok: result.ok);
+    } finally {
+      pinController.dispose();
+      confirmController.dispose();
     }
   }
 
@@ -603,8 +785,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ? Icons.wifi_rounded
                               : Icons.wifi_off_rounded,
                           color: widget.controller.isOnline
-                              ? const Color(0xFF2FA56A)
-                              : const Color(0xFFC64040),
+                              ? NebulaSnack.successColor
+                              : NebulaSnack.errorColor,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -631,7 +813,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: EdgeInsets.only(top: 6, bottom: 6),
                     child: Text(
                       'Sin internet: algunos avances podrían no guardarse en la nube.',
-                      style: TextStyle(color: Color(0xFFC64040)),
+                      style: TextStyle(color: NebulaSnack.errorColor),
                     ),
                   ),
                 const SizedBox(height: 8),
@@ -759,6 +941,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: const Icon(Icons.lock_open_rounded),
                             label: const Text('Desactivar PIN de adulto'),
                           ),
+                          TextButton.icon(
+                            onPressed: _recoverForgottenParentalPin,
+                            icon: const Icon(Icons.mail_outline_rounded),
+                            label: const Text('Olvide mi PIN de adulto'),
+                          ),
                         ],
                         TextButton.icon(
                           onPressed: _changeEmailNow,
@@ -825,7 +1012,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     String password = '';
                     if (!widget.controller.parentalPinEnabled &&
                         !widget.controller.isGoogleOnlyAccount) {
-                      final typedPassword = await _askCurrentPasswordForDelete();
+                      final typedPassword =
+                          await _askCurrentPasswordForDelete();
                       if (!context.mounted || typedPassword == null) return;
                       password = typedPassword;
                     }
@@ -847,7 +1035,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                   child: const Text(
                     'Borrar cuenta',
-                    style: TextStyle(color: Color(0xFFC64040)),
+                    style: TextStyle(color: NebulaSnack.errorColor),
                   ),
                 ),
               ],
