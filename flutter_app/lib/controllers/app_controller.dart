@@ -7,6 +7,13 @@ import '../services/auth_service.dart';
 import '../services/cooldown_service.dart';
 import '../services/local_store.dart';
 
+// Color _accentButtonColor = const Color(0xFF8F73C6);
+
+// Color get accentButtonColor => _accentButtonColor;
+
+
+
+
 class ActionResult {
   const ActionResult({
     required this.ok,
@@ -56,10 +63,25 @@ class AppController extends ChangeNotifier {
 
   Color get accentColor {
     final user = _currentUser;
-    final hue = (user?.accentHue ?? 196).toDouble();
+    final hue = (user?.accentHue ?? 259).toDouble();
     final intensity = (user?.accentIntensity ?? 0.97).clamp(0.72, 1.0).toDouble();
     return HSVColor.fromAHSV(1, hue, 0.78, intensity).toColor();
   }
+
+
+
+
+      // Variable privada que guarda el color actual
+  Color _accentButtonColor = const Color.fromARGB(255, 143, 115, 198);
+
+  // Getter público que la UI puede usar
+  Color get accentButtonColor => _accentButtonColor;
+
+  //Setter/método para actualizarlo
+  // void setAccentButtonColor(Color newColor) {
+  //   _accentButtonColor = newColor;
+  //   notifyListeners(); // refresca toda la UI que use accentButtonColor
+  // }
 
   Future<ActionResult> login(String identifier, String password) async {
     final result = await _authService.login(
@@ -72,6 +94,33 @@ class AppController extends ChangeNotifier {
     }
     return ActionResult(ok: result.ok, message: result.message);
   }
+
+ // Fijo / exacto para la UI
+void setAccentButtonColor(Color newColor) {
+  _accentButtonColor = newColor;
+  notifyListeners();
+}
+
+// Para cambiar el color del usuario
+void updateUserAccentColor({
+  required double hue,
+  required double intensity,
+}) {
+  final value = intensity.clamp(0.72, 1.0);
+
+  final user = _currentUser;
+  if (user == null) return;
+
+  _currentUser = user.copyWith(
+    accentHue: hue,
+    accentIntensity: value,
+  );
+
+  notifyListeners();
+}
+
+
+
 
   Future<ActionResult> register({
     required String name,

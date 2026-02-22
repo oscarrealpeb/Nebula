@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-import '../core/theme/color_utils.dart';
-import '../widgets/cosmic_background.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'game_placeholder_screen.dart';
+import 'package:lottie/lottie.dart';
+
+const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
+const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
 
 class MinigamesScreen extends StatelessWidget {
   const MinigamesScreen({super.key, required this.controller});
@@ -30,125 +32,159 @@ class MinigamesScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Minijuegos'),
-      ),
-      body: CosmicBackground(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Elige un minijuego',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: const Color(0xFF253760),
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Retos cortitos para jugar y aprender con alegria.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF617298),
-                    ),
-              ),
-              const SizedBox(height: 14),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 1.04,
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+      title: const Text('Minijuegos'),
+    ),
+    backgroundColor: backgroundLilac,
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Elige un minijuego',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: const Color(0xFF253760),
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Retos cortitos para jugar y aprender con alegria.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF617298),
+                  ),
+            ),
+            const SizedBox(height: 14),
+
+            // 👇 ZONA CONTENIDA CON BORDE
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(8), // 👈 mínimo espacio
+                decoration: const BoxDecoration(
+                  border: Border(
+                    left: BorderSide(width: 2, color: Color(0xFFE4E6F2)),
+                    right: BorderSide(width: 2, color: Color(0xFFE4E6F2)),
+                    bottom: BorderSide(width: 2, color: Color(0xFFE4E6F2)),
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(22),
+                    bottomRight: Radius.circular(22),
+                  ),
+                ),
+                child: Stack(
                   children: [
-                    _MiniGameCard(
-                      title: 'Cartas gemelas',
-                      icon: Icons.style_outlined,
-                      colorA: tint(shiftHue(color, -12), 0.76),
-                      colorB: tint(shiftHue(color, -12), 0.89),
-                      onTap: () => _openGame(context, gameName: 'Cartas gemelas'),
+
+                    // GRID
+                    GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1.04,
+                      children: [
+                        _MiniGameCard(
+                          title: 'Cartas gemelas',
+                          imagePath: 'assets/images/games/cartas_gemelas.png',
+                          onTap: () => _openGame(context, gameName: 'Cartas gemelas'),
+                        ),
+                        _MiniGameCard(
+                          title: 'Que sigue?',
+                          imagePath: 'assets/images/games/que_sigue.png',
+                          onTap: () => _openGame(context, gameName: 'Que sigue?'),
+                        ),
+                        _MiniGameCard(
+                          title: 'Donde va?',
+                          imagePath: 'assets/images/games/donde_va1.png',
+                          onTap: () => _openGame(context, gameName: 'Donde va?'),
+                        ),
+                        _MiniGameCard(
+                          title: 'Arma la imagen',
+                          imagePath: 'assets/images/games/arma_la_imagen1.png',
+                          onTap: () => _openGame(context, gameName: 'Arma la imagen'),
+                        ),
+                      ],
                     ),
-                    _MiniGameCard(
-                      title: 'Que sigue?',
-                      icon: Icons.timeline_rounded,
-                      colorA: tint(shiftHue(color, 18), 0.75),
-                      colorB: tint(shiftHue(color, 18), 0.89),
-                      onTap: () => _openGame(context, gameName: 'Que sigue?'),
-                    ),
-                    _MiniGameCard(
-                      title: 'Donde va?',
-                      icon: Icons.place_outlined,
-                      colorA: tint(shiftHue(color, 38), 0.74),
-                      colorB: tint(shiftHue(color, 38), 0.89),
-                      onTap: () => _openGame(context, gameName: 'Donde va?'),
-                    ),
-                    _MiniGameCard(
-                      title: 'Arma la imagen',
-                      icon: Icons.grid_view_rounded,
-                      colorA: tint(shiftHue(color, -34), 0.76),
-                      colorB: tint(shiftHue(color, -34), 0.90),
-                      onTap: () => _openGame(context, gameName: 'Arma la imagen'),
+
+                    // 🚀 ANIMACIÓN DENTRO DEL BORDE
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: Lottie.asset(
+                          'assets/animations/minijuegos.json',
+                          repeat: true,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
+}
+
 
 class _MiniGameCard extends StatelessWidget {
   const _MiniGameCard({
     required this.title,
-    required this.icon,
-    required this.colorA,
-    required this.colorB,
+    required this.imagePath,
     required this.onTap,
   });
 
   final String title;
-  final IconData icon;
-  final Color colorA;
-  final Color colorB;
+  final String imagePath;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 0,
+      color: cardLilac,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [colorA, colorB],
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 30, color: const Color(0xFF354D7F)),
-                const Spacer(),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 4,
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.image_not_supported_outlined,
+                    size: 50,
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ],
           ),
         ),
       ),
