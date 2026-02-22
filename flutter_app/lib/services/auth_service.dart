@@ -169,10 +169,21 @@ class AuthService {
       );
     }
 
-    final emailTaken = users.any(
-      (user) => user.email.toLowerCase() == normalizedEmail,
-    );
-    if (emailTaken) {
+    NebulaUser? existingEmailUser;
+    for (final user in users) {
+      if (user.email.toLowerCase() == normalizedEmail) {
+        existingEmailUser = user;
+        break;
+      }
+    }
+    if (existingEmailUser != null) {
+      if (existingEmailUser.password.trim().isEmpty) {
+        return const ServiceResult(
+          ok: false,
+          message:
+              'Ese correo ya existe con Google. Entra con Google y luego crea una contrasena desde tu perfil si quieres entrar tambien con contrasena.',
+        );
+      }
       return const ServiceResult(
         ok: false,
         message: 'Ese correo ya esta registrado.',
@@ -229,6 +240,14 @@ class AuthService {
       }
     }
 
+    if (match != null && match.password.trim().isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'Esta cuenta entra con Google. Usa "Entrar con Google" o crea una contrasena desde tu perfil.',
+      );
+    }
+
     if (match == null || !_passwordMatches(stored: match.password, input: secret)) {
       return const ServiceResult(
         ok: false,
@@ -249,6 +268,17 @@ class AuthService {
 
   Future<void> logout() async {
     await _store.clearSession();
+    if (_useFirebase) {
+      try {
+        await _firebaseAuth!.signOut();
+      } catch (_) {}
+    }
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {}
     _currentUser = null;
     _clearPendingGoogleLink();
   }
@@ -337,6 +367,11 @@ class AuthService {
     }
 
     try {
+      // Limpia cuenta de Google en memoria para forzar selector de cuenta.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
       final account = await _googleSignIn.signIn();
       if (account == null) {
         return const ServiceResult(
@@ -362,6 +397,12 @@ class AuthService {
       }
 
       final emailLower = (firebaseUser.email ?? '').toLowerCase();
+      if (emailLower.isEmpty) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Tu cuenta de Google no devolvio un correo valido.',
+        );
+      }
       final users = await _store.readUsers();
       NebulaUser? existingUser;
       for (final user in users) {
@@ -399,31 +440,68 @@ class AuthService {
         );
       }
 
-      final newUser = NebulaUser(
-        id: firebaseUser.uid,
-        name: firebaseUser.displayName ?? 'Explorador',
-        username: generateSuggestedUsername(firebaseUser.email ?? ''),
-        email: firebaseUser.email ?? '',
-        password: '',
-        parentalPinHash: '',
-        stars: 0,
-        avatarIndex: 0,
-        selectedNarratorId: 'narrator_1',
-        soundEffectsEnabled: true,
-        accentHue: 196,
-        accentIntensity: 0.97,
-        customImages: const {},
-      );
+      late final NebulaUser signedUser;
+      if (existingUser != null) {
+        final localUser = existingUser;
+        final preservedUser = NebulaUser(
+          id: firebaseUser.uid,
+          name: localUser.name.trim().isEmpty
+              ? firebaseUser.displayName ?? 'Explorador'
+              : localUser.name,
+          username: localUser.username.trim().isEmpty
+              ? generateSuggestedUsername(firebaseUser.email ?? emailLower)
+              : localUser.username,
+          email: emailLower,
+          password: localUser.password,
+          parentalPinHash: localUser.parentalPinHash,
+          stars: localUser.stars,
+          avatarIndex: localUser.avatarIndex,
+          selectedNarratorId: localUser.selectedNarratorId,
+          soundEffectsEnabled: localUser.soundEffectsEnabled,
+          accentHue: localUser.accentHue,
+          accentIntensity: localUser.accentIntensity,
+          customImages: localUser.customImages,
+        );
 
-      await _upsertLocal(newUser);
-      await _store.saveSessionUserId(newUser.id);
-      _currentUser = newUser;
+        final nextUsers = users
+            .where(
+              (u) =>
+                  u.id != localUser.id &&
+                  u.id != firebaseUser.uid &&
+                  u.email.toLowerCase() != emailLower,
+            )
+            .toList();
+        nextUsers.add(preservedUser);
+        await _store.writeUsers(nextUsers);
+        signedUser = preservedUser;
+      } else {
+        final newUser = NebulaUser(
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName ?? 'Explorador',
+          username: generateSuggestedUsername(firebaseUser.email ?? ''),
+          email: emailLower,
+          password: '',
+          parentalPinHash: '',
+          stars: 0,
+          avatarIndex: 0,
+          selectedNarratorId: 'narrator_1',
+          soundEffectsEnabled: true,
+          accentHue: 196,
+          accentIntensity: 0.97,
+          customImages: const {},
+        );
+        await _upsertLocal(newUser);
+        signedUser = newUser;
+      }
+
+      await _store.saveSessionUserId(signedUser.id);
+      _currentUser = signedUser;
       _clearPendingGoogleLink();
 
       return ServiceResult(
         ok: true,
         message: 'Sesion iniciada con Google.',
-        data: newUser,
+        data: signedUser,
       );
     } catch (e) {
       _clearPendingGoogleLink();

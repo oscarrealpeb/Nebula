@@ -78,9 +78,9 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
       return;
     }
 
-    // Iniciar debounce de 500ms
+    // Iniciar debounce de 250ms para feedback mas rapido.
     setState(() => _isValidating = true);
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
       if (!mounted) return;
       final text = widget.controller.text;
       if (text.isEmpty) return;

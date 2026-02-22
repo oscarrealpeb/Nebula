@@ -45,6 +45,12 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   @override
   void dispose() {
+    if (_themeSyncTimer?.isActive ?? false) {
+      widget.controller.setThemeColor(
+        hue: _hue,
+        intensity: _intensity,
+      );
+    }
     _themeSyncTimer?.cancel();
     super.dispose();
   }
@@ -57,14 +63,18 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void _applyThemeRealtime() {
     _themeSyncTimer?.cancel();
     _themeSyncTimer = Timer(const Duration(milliseconds: 70), () {
-    // widget.controller.setAccentButtonColor(
-    //   hue: _hue,
-    //   intensity: _intensity,
-    // );    
+      widget.controller.setThemeColor(
+        hue: _hue,
+        intensity: _intensity,
+      );
     });
   }
 
   void _showSavedSnack() {
+    widget.controller.setThemeColor(
+      hue: _hue,
+      intensity: _intensity,
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Listo. Tus cambios ya se aplicaron al instante.'),

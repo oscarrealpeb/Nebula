@@ -42,16 +42,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return isAvailable;
   }
 
+  bool get _nameValid => _nameController.text.trim().isNotEmpty;
+
+  bool get _usernameFormatValid {
+    final username = _usernameController.text.trim().toLowerCase();
+    return RegExp(r'^[a-z0-9_]{3,18}$').hasMatch(username);
+  }
+
+  bool get _emailValid {
+    final email = _emailController.text.trim().toLowerCase();
+    return widget.controller.authService.isValidEmailFormat(email);
+  }
+
+  bool get _passwordValid => _passwordController.text.trim().length >= 6;
+
   bool get _canSubmit {
-    // Can submit if:
-    // 1. All fields filled
-    // 2. Username is valid
-    // 3. Not already submitting
-    final allFilled = _nameController.text.trim().isNotEmpty &&
-        _usernameController.text.trim().isNotEmpty &&
-        _emailController.text.trim().isNotEmpty &&
-        _passwordController.text.trim().isNotEmpty;
-    return allFilled && _usernameValid == true && !_submitting && !_googleSubmitting;
+    return _nameValid &&
+        _usernameFormatValid &&
+        _usernameValid == true &&
+        _emailValid &&
+        _passwordValid &&
+        !_submitting &&
+        !_googleSubmitting;
   }
 
 
@@ -273,6 +285,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     NebulaTextField(
                       controller: _nameController,
+                      onChanged: (_) => setState(() {}),
                       label: '¿Cómo te llamas?',
                     ),
                     const SizedBox(height: 12),
@@ -284,19 +297,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       validationMessage: 'Este nombre de usuario ya está en uso',
                       onChanged: (_) {
                         setState(() {
-                          _usernameValid = null;
+                          _usernameValid =
+                              _usernameFormatValid ? null : false;
                         });
                       },
                     ),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _emailController,
+                      onChanged: (_) => setState(() {}),
                       label: 'Correo',
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _passwordController,
+                      onChanged: (_) => setState(() {}),
                       label: 'Contraseña',
                       obscureText: true,
                     ),
@@ -334,3 +350,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+

@@ -170,13 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changePasswordNow() async {
-    if (widget.controller.isGoogleOnlyAccount) {
-      _showSnack(
-        'Tu cuenta usa Google. La Contraseña se gestiona desde tu cuenta de Google.',
-        ok: false,
-      );
-      return;
-    }
+    final requiresCurrentPassword = !widget.controller.isGoogleOnlyAccount;
 
     final currentController = TextEditingController();
     final nextController = TextEditingController();
@@ -189,12 +183,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              NebulaTextField(
-                controller: currentController,
-                label: 'Contraseña actual',
-                obscureText: true,
-              ),
-              const SizedBox(height: 10),
+              if (requiresCurrentPassword) ...[
+                NebulaTextField(
+                  controller: currentController,
+                  label: 'Contraseña actual',
+                  obscureText: true,
+                ),
+                const SizedBox(height: 10),
+              ] else ...[
+                const Text(
+                  'Vas a crear una contraseña para poder entrar también con correo y contraseña.',
+                ),
+                const SizedBox(height: 10),
+              ],
               NebulaTextField(
                 controller: nextController,
                 label: 'Nueva Contraseña',
@@ -236,7 +237,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted || parentalPin == null) return;
 
       final result = await widget.controller.changePassword(
-        currentPassword: currentController.text,
+        currentPassword: requiresCurrentPassword ? currentController.text : '',
         newPassword: nextController.text,
         parentalPin: parentalPin,
       );
@@ -773,7 +774,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           icon: const Icon(Icons.password_rounded),
                           label: Text(
                             widget.controller.isGoogleOnlyAccount
-                                ? 'Contraseña administrada por Google'
+                                ? 'Crear contraseña para entrar con correo'
                                 : 'Cambiar contraseña',
                           ),
                         ),
