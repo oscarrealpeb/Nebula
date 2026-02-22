@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
@@ -18,27 +18,29 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  bool _navigating = false;
 
   final _slides = const [
     (
       icon: Icons.rocket_launch_rounded,
-      title: 'Aprende jugando',
-      subtitle: 'Descubre habilidades nuevas con actividades cortas y divertidas.',
+      title: '¡Aprende jugando!',
+      subtitle:
+          'Descubre habilidades nuevas con actividades cortas y divertidas.',
     ),
     (
       icon: Icons.sentiment_satisfied_alt_rounded,
-      title: 'Entiende emociones',
-      subtitle: 'Reconoce caritas y sentimientos con apoyo visual super claro.',
+      title: '¡Entiende emociones!',
+      subtitle: 'Reconoce caritas y sentimientos con apoyo visual súper claro.',
     ),
     (
       icon: Icons.stars_rounded,
-      title: 'Suma estrellas',
+      title: '¡Suma estrellas!',
       subtitle: 'Cada logro te lleva a planetas nuevos y premios geniales.',
     ),
     (
       icon: Icons.family_restroom_rounded,
-      title: 'Acompana en familia',
-      subtitle: 'Una experiencia amable para ninos, padres y terapeutas.',
+      title: '¡Acompaña en familia!',
+      subtitle: 'Una experiencia amable para niños, padres y terapeutas.',
     ),
   ];
 
@@ -46,6 +48,38 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openLogin() async {
+    if (_navigating || !mounted) return;
+    _navigating = true;
+    final navigator = Navigator.of(context);
+    try {
+      FocusScope.of(context).unfocus();
+      await navigator.push(
+        MaterialPageRoute(
+          builder: (_) => LoginScreen(controller: widget.controller),
+        ),
+      );
+    } finally {
+      _navigating = false;
+    }
+  }
+
+  Future<void> _openRegister() async {
+    if (_navigating || !mounted) return;
+    _navigating = true;
+    final navigator = Navigator.of(context);
+    try {
+      FocusScope.of(context).unfocus();
+      await navigator.push(
+        MaterialPageRoute(
+          builder: (_) => RegisterScreen(controller: widget.controller),
+        ),
+      );
+    } finally {
+      _navigating = false;
+    }
   }
 
   @override
@@ -66,7 +100,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       width: 30,
                       height: 30,
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -94,7 +129,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     child: PageView.builder(
                       controller: _pageController,
                       itemCount: _slides.length,
-                      onPageChanged: (value) => setState(() => _currentPage = value),
+                      onPageChanged: (value) =>
+                          setState(() => _currentPage = value),
                       itemBuilder: (context, index) {
                         final slide = _slides[index];
                         return Padding(
@@ -111,8 +147,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      theme.colorScheme.primary.withValues(alpha: 0.22),
-                                      theme.colorScheme.primary.withValues(alpha: 0.08),
+                                      theme.colorScheme.primary
+                                          .withValues(alpha: 0.22),
+                                      theme.colorScheme.primary
+                                          .withValues(alpha: 0.08),
                                     ],
                                   ),
                                 ),
@@ -166,25 +204,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const Spacer(),
                 NebulaPrimaryButton(
-                  text: 'Quiero entrar',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => LoginScreen(controller: widget.controller),
-                      ),
-                    );
-                  },
+                  text: '¡Quiero entrar!',
+                  onPressed: _openLogin,
                 ),
                 const SizedBox(height: 12),
                 NebulaSecondaryButton(
-                  text: 'Crear mi cuenta',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RegisterScreen(controller: widget.controller),
-                      ),
-                    );
-                  },
+                  text: '¡Crear mi cuenta!',
+                  onPressed: _openRegister,
                 ),
               ],
             ),
@@ -194,4 +220,3 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 }
-

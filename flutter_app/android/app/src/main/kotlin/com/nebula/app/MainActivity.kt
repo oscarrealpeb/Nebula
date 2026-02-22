@@ -1,4 +1,4 @@
-package com.example.nebula
+package com.nebula.app
 
 import io.flutter.embedding.android.FlutterActivity
 

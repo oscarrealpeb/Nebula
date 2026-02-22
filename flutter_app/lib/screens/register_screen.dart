@@ -21,6 +21,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _submitting = false;
+  bool _googleSubmitting = false;
+  bool? _usernameValid; // null = no validado, true = válido, false = inválido
 
   @override
   void dispose() {
@@ -31,7 +33,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  Future<bool> _validateUsername(String username) async {
+    final isAvailable =
+        await widget.controller.authService.checkUsernameAvailable(username);
+    setState(() {
+      _usernameValid = isAvailable;
+    });
+    return isAvailable;
+  }
+
+  bool get _canSubmit {
+    // Can submit if:
+    // 1. All fields filled
+    // 2. Username is valid
+    // 3. Not already submitting
+    final allFilled = _nameController.text.trim().isNotEmpty &&
+        _usernameController.text.trim().isNotEmpty &&
+        _emailController.text.trim().isNotEmpty &&
+        _passwordController.text.trim().isNotEmpty;
+    return allFilled && _usernameValid == true && !_submitting && !_googleSubmitting;
+  }
+
+
   Future<void> _register() async {
+    FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
     final result = await widget.controller.register(
       name: _nameController.text,
@@ -41,19 +66,192 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.message),
-        backgroundColor:
-            result.ok ? const Color(0xFF2FA56A) : const Color(0xFFC64040),
-      ),
-    );
+    _showSnack(result.message, ok: result.ok);
 
     if (result.ok) {
+      await _maybeOfferParentalPin();
+      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen(controller: widget.controller)),
+        MaterialPageRoute(
+            builder: (_) => HomeScreen(controller: widget.controller)),
         (_) => false,
       );
+    }
+  }
+
+  Future<void> _registerWithGoogle() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _googleSubmitting = true);
+    final result = await widget.controller.loginWithGoogle();
+    if (!mounted) return;
+    setState(() => _googleSubmitting = false);
+
+    if (result.message == 'EMAIL_EXISTS_NEED_LINK') {
+      await _handleGoogleLinkFlow();
+      return;
+    }
+
+    _showSnack(result.message, ok: result.ok);
+    if (!result.ok) return;
+
+    await _maybeOfferParentalPin();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+          builder: (_) => HomeScreen(controller: widget.controller)),
+      (_) => false,
+    );
+  }
+
+  Future<void> _handleGoogleLinkFlow() async {
+    final passwordController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Vincular cuenta'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Ya existe una cuenta con ese correo. Escribe tu contrasena actual para vincular Google.',
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: passwordController,
+                label: 'Contrasena actual',
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Vincular'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+
+      final linkResult = await widget.controller.linkGoogleToExistingAccount(
+        currentPassword: passwordController.text,
+      );
+      if (!mounted) return;
+      _showSnack(linkResult.message, ok: linkResult.ok);
+      if (!linkResult.ok) return;
+
+      await _maybeOfferParentalPin();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(controller: widget.controller),
+        ),
+        (_) => false,
+      );
+    } finally {
+      passwordController.dispose();
+    }
+  }
+
+  void _showSnack(String message, {required bool ok}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: ok ? const Color(0xFF2FA56A) : const Color(0xFFC64040),
+      ),
+    );
+  }
+
+  Future<void> _maybeOfferParentalPin() async {
+    if (widget.controller.parentalPinEnabled) return;
+    final wantsPin = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('¡Modo adulto opcional!'),
+        content: const Text(
+          '¿Quieres activar un PIN de adulto para proteger acciones sensibles como borrar cuenta o cambiar datos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Ahora no'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Activar PIN'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || wantsPin != true) return;
+    await _setupParentalPin();
+  }
+
+  Future<void> _setupParentalPin() async {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Crear PIN de adulto'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NebulaTextField(
+                controller: pinController,
+                label: 'PIN (4 a 6 números)',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: confirmController,
+                label: 'Repite el PIN',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                digitsOnly: true,
+                maxLength: 6,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Guardar PIN'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+
+      final pin = pinController.text.trim();
+      final confirm = confirmController.text.trim();
+      if (pin != confirm) {
+        _showSnack('Los PIN no coinciden. ¡Intentemos otra vez!', ok: false);
+        return;
+      }
+      if (!widget.controller.isValidParentalPinFormat(pin)) {
+        _showSnack('El PIN debe tener 4 a 6 números.', ok: false);
+        return;
+      }
+      final result = await widget.controller.activateParentalPin(pin);
+      if (!mounted) return;
+      _showSnack(result.message, ok: result.ok);
+    } finally {
+      pinController.dispose();
+      confirmController.dispose();
     }
   }
 
@@ -62,7 +260,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Crear mi cuenta'),
+        title: const Text('¡Crear mi cuenta!'),
       ),
       body: CosmicBackground(
         child: SafeArea(
@@ -75,12 +273,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     NebulaTextField(
                       controller: _nameController,
-                      label: 'Como te llamas?',
+                      label: '¿Cómo te llamas?',
                     ),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _usernameController,
                       label: 'Tu apodo (nombre de usuario)',
+                      validator: _validateUsername,
+                      showValidationStatus: true,
+                      validationMessage: 'Este nombre de usuario ya está en uso',
+                      onChanged: (_) {
+                        setState(() {
+                          _usernameValid = null;
+                        });
+                      },
                     ),
                     const SizedBox(height: 12),
                     NebulaTextField(
@@ -91,13 +297,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _passwordController,
-                      label: 'Contrasena',
+                      label: 'Contraseña',
                       obscureText: true,
                     ),
                     const SizedBox(height: 18),
                     NebulaPrimaryButton(
-                      text: _submitting ? 'Creando...' : 'Empezar aventura',
-                      onPressed: _submitting ? null : _register,
+                      text: _submitting
+                          ? '¡Creando cuenta...!'
+                          : '¡Empezar aventura!',
+                      onPressed: _canSubmit ? _register : null,
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: (_submitting || _googleSubmitting)
+                          ? null
+                          : widget.controller.firebaseEnabled
+                              ? _registerWithGoogle
+                              : null,
+                      icon: const Icon(Icons.account_circle_outlined),
+                      label: Text(
+                        _googleSubmitting
+                            ? 'Conectando con Google...'
+                            : '¡Crear con Google!',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                      ),
                     ),
                   ],
                 ),

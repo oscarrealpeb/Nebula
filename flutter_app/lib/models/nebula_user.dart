@@ -5,6 +5,7 @@ class NebulaUser {
     required this.username,
     required this.email,
     required this.password,
+    required this.parentalPinHash,
     required this.stars,
     required this.avatarIndex,
     required this.selectedNarratorId,
@@ -19,6 +20,7 @@ class NebulaUser {
   final String username;
   final String email;
   final String password;
+  final String parentalPinHash;
   final int stars;
   final int avatarIndex;
   final String selectedNarratorId;
@@ -32,6 +34,7 @@ class NebulaUser {
     String? username,
     String? email,
     String? password,
+    String? parentalPinHash,
     int? stars,
     int? avatarIndex,
     String? selectedNarratorId,
@@ -46,6 +49,7 @@ class NebulaUser {
       username: username ?? this.username,
       email: email ?? this.email,
       password: password ?? this.password,
+      parentalPinHash: parentalPinHash ?? this.parentalPinHash,
       stars: stars ?? this.stars,
       avatarIndex: avatarIndex ?? this.avatarIndex,
       selectedNarratorId: selectedNarratorId ?? this.selectedNarratorId,
@@ -63,6 +67,7 @@ class NebulaUser {
       'username': username,
       'email': email,
       'password': password,
+      'parentalPinHash': parentalPinHash,
       'stars': stars,
       'avatarIndex': avatarIndex,
       'selectedNarratorId': selectedNarratorId,
@@ -80,6 +85,7 @@ class NebulaUser {
       username: json['username'] as String,
       email: json['email'] as String,
       password: json['password'] as String,
+      parentalPinHash: (json['parentalPinHash'] as String?) ?? '',
       stars: (json['stars'] as num?)?.toInt() ?? 0,
       avatarIndex: (json['avatarIndex'] as num?)?.toInt() ?? 0,
       selectedNarratorId: json['selectedNarratorId'] as String? ?? 'narrator_1',

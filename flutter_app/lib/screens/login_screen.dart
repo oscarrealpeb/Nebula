@@ -22,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _submitting = false;
+  bool _googleSubmitting = false;
   int _remaining = 0;
   Timer? _timer;
 
@@ -47,6 +48,78 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => HomeScreen(controller: widget.controller)),
         (_) => false,
       );
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _googleSubmitting = true);
+    final result = await widget.controller.loginWithGoogle();
+    if (!mounted) return;
+    setState(() => _googleSubmitting = false);
+
+    if (result.message == 'EMAIL_EXISTS_NEED_LINK') {
+      await _handleGoogleLinkFlow();
+      return;
+    }
+
+    _showSnack(result.message, ok: result.ok);
+    if (result.ok) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => HomeScreen(controller: widget.controller)),
+        (_) => false,
+      );
+    }
+  }
+
+  Future<void> _handleGoogleLinkFlow() async {
+    final passwordController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Vincular cuenta'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Ya existe una cuenta con ese correo. Escribe tu contrasena actual para vincular Google.',
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: passwordController,
+                label: 'Contrasena actual',
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Vincular'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+
+      final linkResult = await widget.controller.linkGoogleToExistingAccount(
+        currentPassword: passwordController.text,
+      );
+      if (!mounted) return;
+      _showSnack(linkResult.message, ok: linkResult.ok);
+      if (!linkResult.ok) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => HomeScreen(controller: widget.controller)),
+        (_) => false,
+      );
+    } finally {
+      passwordController.dispose();
     }
   }
 
@@ -115,7 +188,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 18),
                       NebulaPrimaryButton(
                         text: _submitting ? 'Entrando...' : 'Comenzar',
-                        onPressed: _submitting ? null : _login,
+                        onPressed: (_submitting || _googleSubmitting) ? null : _login,
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: (_submitting || _googleSubmitting)
+                            ? null
+                            : widget.controller.firebaseEnabled
+                                ? _loginWithGoogle
+                                : null,
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: Text(
+                          _googleSubmitting
+                              ? 'Conectando con Google...'
+                              : 'Entrar con Google',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(50),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Align(
