@@ -270,8 +270,8 @@ class AuthService {
       avatarIndex: 0,
       selectedNarratorId: 'narrator_1',
       soundEffectsEnabled: true,
-      accentHue: 196,
-      accentIntensity: 0.97,
+      accentHue: 190,
+      accentIntensity: 0.55,
       customImages: const {},
     );
 
@@ -579,8 +579,8 @@ class AuthService {
           avatarIndex: 0,
           selectedNarratorId: 'narrator_1',
           soundEffectsEnabled: true,
-          accentHue: 196,
-          accentIntensity: 0.97,
+          accentHue: 190,
+          accentIntensity: 0.55,
           customImages: const {},
         );
         _pendingLocalUserForLink = existingUser;
@@ -681,8 +681,8 @@ class AuthService {
           avatarIndex: 0,
           selectedNarratorId: 'narrator_1',
           soundEffectsEnabled: true,
-          accentHue: 196,
-          accentIntensity: 0.97,
+          accentHue: 190,
+          accentIntensity: 0.55,
           customImages: const {},
         );
         _pendingLocalUserForLink = existingUser;
@@ -751,8 +751,8 @@ class AuthService {
           avatarIndex: 0,
           selectedNarratorId: 'narrator_1',
           soundEffectsEnabled: true,
-          accentHue: 196,
-          accentIntensity: 0.97,
+          accentHue: 190,
+          accentIntensity: 0.55,
           customImages: const {},
         );
         await _upsertLocal(newUser);
@@ -1603,9 +1603,9 @@ class AuthService {
         selectedNarratorId:
             (cloud?['selectedNarratorId'] as String?) ?? 'narrator_1',
         soundEffectsEnabled: (cloud?['soundEffectsEnabled'] as bool?) ?? true,
-        accentHue: (cloud?['accentHue'] as num?)?.toDouble() ?? 196,
+        accentHue: (cloud?['accentHue'] as num?)?.toDouble() ?? 190,
         accentIntensity:
-            (cloud?['accentIntensity'] as num?)?.toDouble() ?? 0.97,
+            (cloud?['accentIntensity'] as num?)?.toDouble() ?? 0.55,
         customImages: Map<String, String>.from(
           cloud?['customImages'] as Map? ?? const {},
         ),

@@ -84,10 +84,10 @@ class AppController extends ChangeNotifier {
 
   Color get accentColor {
     final user = _currentUser;
-    final hue = (user?.accentHue ?? 196).toDouble();
-    final intensity =
-        (user?.accentIntensity ?? 0.97).clamp(0.72, 1.0).toDouble();
-    return HSVColor.fromAHSV(1, hue, 0.78, intensity).toColor();
+    final hue = (user?.accentHue ?? 190).toDouble();
+      final intensity =
+        (user?.accentIntensity ?? 0.55).clamp(0.72, 1.0).toDouble();
+    return HSVColor.fromAHSV(1, hue, 0.71, intensity).toColor();
   }
 
   // Home UI token from merged branch; mapped to current dynamic accent.
@@ -564,10 +564,11 @@ class AppController extends ChangeNotifier {
     final needsMigration = ((user.accentHue - 215).abs() < 0.0001 &&
             (user.accentIntensity - 0.8).abs() < 0.0001) ||
         ((user.accentHue - 205).abs() < 0.0001 &&
-            (user.accentIntensity - 0.9).abs() < 0.0001);
+            (user.accentIntensity - 0.9).abs() < 0.0001)  || ((user.accentHue - 196).abs() < 0.0001 &&
+            (user.accentIntensity - 0.8).abs() < 0.0001);
     if (!needsMigration) return;
 
-    final migrated = user.copyWith(accentHue: 196, accentIntensity: 0.97);
+    final migrated = user.copyWith(accentHue: 255, accentIntensity: 0.776);
     final saved = await _authService.updateUser(migrated);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;

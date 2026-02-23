@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
 import '../widgets/star_difficulty_sheet.dart';
-import 'game_placeholder_screen.dart';
+import 'game_placeholder_screen1.dart';
 import 'package:lottie/lottie.dart';
 
 const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
-const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
+// const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
 
 class MinigamesScreen extends StatelessWidget {
   const MinigamesScreen({super.key, required this.controller});
@@ -87,23 +87,27 @@ Widget build(BuildContext context) {
                       children: [
                         _MiniGameCard(
                           title: 'Cartas gemelas',
-                          imagePath: 'assets/images/games/cartas_gemelas.png',
+                          imagePath: 'assets/images/games/cartas_gemelas1.png',
                           onTap: () => _openGame(context, gameName: 'Cartas gemelas'),
+                          accentColor: controller.accentColor, // <- aquí
                         ),
                         _MiniGameCard(
-                          title: 'Que sigue?',
-                          imagePath: 'assets/images/games/que_sigue.png',
+                          title: '¿Qué sigue?',
+                          imagePath: 'assets/images/games/que_sigue1.png',
                           onTap: () => _openGame(context, gameName: 'Que sigue?'),
+                          accentColor: controller.accentColor, // <- aquí
                         ),
                         _MiniGameCard(
-                          title: 'Donde va?',
+                          title: '¿Dónde va?',
                           imagePath: 'assets/images/games/donde_va1.png',
                           onTap: () => _openGame(context, gameName: 'Donde va?'),
+                          accentColor: controller.accentColor, // <- aquí
                         ),
                         _MiniGameCard(
                           title: 'Arma la imagen',
                           imagePath: 'assets/images/games/arma_la_imagen1.png',
                           onTap: () => _openGame(context, gameName: 'Arma la imagen'),
+                          accentColor: controller.accentColor, // <- aquí
                         ),
                       ],
                     ),
@@ -140,17 +144,21 @@ class _MiniGameCard extends StatelessWidget {
     required this.title,
     required this.imagePath,
     required this.onTap,
+    required this.accentColor, // <- nuevo
+
   });
 
   final String title;
   final String imagePath;
   final VoidCallback onTap;
+  final Color accentColor; // <- nuevo
+
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: cardLilac,
+      color: accentColor, // <- antes era cardLilac
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
       ),

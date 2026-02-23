@@ -7,13 +7,14 @@ import '../core/data/planet_ladder.dart';
 // import '../widgets/cosmic_background.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'explore_learn_screen.dart';
-import 'game_placeholder_screen.dart';
+import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
 import 'settings/settings_screen.dart';
+import 'emotion_screen.dart';
 
-const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
-const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
+// const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
+// const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.controller});
@@ -27,14 +28,40 @@ class HomeScreen extends StatelessWidget {
     final stars = await showStarDifficultySheet(context);
     if (!context.mounted || stars == null) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GamePlaceholderScreen(
+    Widget screen;
+    
+    switch (gameName) {
+      case 'Descubre la emocion':
+        screen = EmotionGameScreen(
           controller: controller,
           gameName: gameName,
           difficultyStars: stars,
-        ),
-      ),
+        );
+        break;
+      case 'Conecta las imagenes':
+        screen = GamePlaceholderScreen(
+          controller: controller,
+          gameName: gameName,
+          difficultyStars: stars,
+        );
+        break;
+      case 'Di la palabra':
+        screen = GamePlaceholderScreen(
+          controller: controller,
+          gameName: gameName,
+          difficultyStars: stars,
+        );
+        break;
+      default:
+        screen = GamePlaceholderScreen(
+          controller: controller,
+          gameName: gameName,
+          difficultyStars: stars,
+        );
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
     );
   }
 
@@ -44,8 +71,7 @@ class HomeScreen extends StatelessWidget {
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
 
-    final color = Theme.of(context).colorScheme.primary;
-    final planet = planetForStars(user.stars);
+    final color = controller.accentButtonColor;    final planet = planetForStars(user.stars);
     final progress = planetProgress(user.stars);
     final remaining = starsToNextPlanet(user.stars);
     final avatarIndex = user.avatarIndex.clamp(0, avatarCatalog.length - 1).toInt();
@@ -365,51 +391,38 @@ class _GameCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: accentColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-      ),
+    return Material(
+      borderRadius: BorderRadius.circular(22),
+      color: accentColor, // <- tu morado
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(22),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.grey.withValues(alpha: 0.25),
-        blurRadius: 10,
-        offset: const Offset(0, 6),
-      ),
-    ],
-  ),
-  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-  child: Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Expanded(
-        flex: 4,
-        child: Image.asset(
-          imagePath,
-          fit: BoxFit.contain,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 4,
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      const SizedBox(height: 10),
-      Text(
-        title,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 15,
-        ),
-      ),
-    ],
-  ),
-),
       ),
     );
   }

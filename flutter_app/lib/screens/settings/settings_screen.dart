@@ -53,6 +53,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     );
                   },
+                  tileColor: controller.accentColor, // <- aquí
                 ),
 
                 const SizedBox(height: 14),
@@ -68,6 +69,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     );
                   },
+                  tileColor: controller.accentColor, // <- aquí
                 ),
 
                 const SizedBox(height: 14),
@@ -84,6 +86,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     );
                   },
+                  tileColor: controller.accentColor, // <- aquí
                 ),
               ],
             ),
@@ -115,18 +118,22 @@ class _SettingsTile extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     required this.onTap,
+    required this.tileColor, // <- nuevo
+
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final VoidCallback onTap;
+  final Color tileColor; // <- nuevo
+
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: settingsLilac, // 👈 mismo color para los 3
+      color: tileColor, // 👈 mismo color para los 3
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
       ),

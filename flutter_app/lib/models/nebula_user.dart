@@ -90,8 +90,8 @@ class NebulaUser {
       avatarIndex: (json['avatarIndex'] as num?)?.toInt() ?? 0,
       selectedNarratorId: json['selectedNarratorId'] as String? ?? 'narrator_1',
       soundEffectsEnabled: json['soundEffectsEnabled'] as bool? ?? true,
-      accentHue: (json['accentHue'] as num?)?.toDouble() ?? 196.0,
-      accentIntensity: (json['accentIntensity'] as num?)?.toDouble() ?? 0.97,
+      accentHue: (json['accentHue'] as num?)?.toDouble() ?? 190.0,
+      accentIntensity: (json['accentIntensity'] as num?)?.toDouble() ?? 0.55,
       customImages: Map<String, String>.from(
         json['customImages'] as Map? ?? const {},
       ),
