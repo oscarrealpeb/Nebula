@@ -85,7 +85,7 @@ class AppController extends ChangeNotifier {
   Color get accentColor {
     final user = _currentUser;
     final hue = (user?.accentHue ?? 190).toDouble();
-      final intensity =
+    final intensity =
         (user?.accentIntensity ?? 0.55).clamp(0.72, 1.0).toDouble();
     return HSVColor.fromAHSV(1, hue, 0.71, intensity).toColor();
   }
@@ -127,8 +127,14 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
-  Future<ActionResult> confirmPendingGoogleLogin() async {
-    final result = await _authService.confirmPendingGoogleLogin();
+  Future<ActionResult> confirmPendingGoogleLogin({
+    String preferredUsernameForNewAccount = '',
+    String preferredPasswordForNewAccount = '',
+  }) async {
+    final result = await _authService.confirmPendingGoogleLogin(
+      preferredUsernameForNewAccount: preferredUsernameForNewAccount,
+      preferredPasswordForNewAccount: preferredPasswordForNewAccount,
+    );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
       notifyListeners();
@@ -179,6 +185,19 @@ class AppController extends ChangeNotifier {
     if (result.ok) {
       final refreshed = await _authService.restoreSession();
       _currentUser = refreshed;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> setupGoogleRecoveryPassword({
+    required String newPassword,
+  }) async {
+    final result = await _authService.setupGoogleRecoveryPassword(
+      newPassword: newPassword,
+    );
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -564,7 +583,8 @@ class AppController extends ChangeNotifier {
     final needsMigration = ((user.accentHue - 215).abs() < 0.0001 &&
             (user.accentIntensity - 0.8).abs() < 0.0001) ||
         ((user.accentHue - 205).abs() < 0.0001 &&
-            (user.accentIntensity - 0.9).abs() < 0.0001)  || ((user.accentHue - 196).abs() < 0.0001 &&
+            (user.accentIntensity - 0.9).abs() < 0.0001) ||
+        ((user.accentHue - 196).abs() < 0.0001 &&
             (user.accentIntensity - 0.8).abs() < 0.0001);
     if (!needsMigration) return;
 

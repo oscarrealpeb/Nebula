@@ -106,15 +106,39 @@ class AuthService {
     return sessionUser;
   }
 
-  Future<bool> checkUsernameAvailable(String username) async {
+  bool isValidUsernameFormat(String username) {
+    final normalized = username.trim().toLowerCase();
+    if (!RegExp(r'^[a-z0-9._-]{3,18}$').hasMatch(normalized)) {
+      return false;
+    }
+    if (RegExp(r'^[._-]|[._-]$').hasMatch(normalized)) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> checkUsernameAvailable(
+    String username, {
+    String excludeUserId = '',
+  }) async {
     final trimmed = username.trim();
-    if (trimmed.length < 3 || trimmed.length > 18) return false;
-    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(trimmed.toLowerCase())) return false;
+    if (!isValidUsernameFormat(trimmed)) return false;
+    final normalized = trimmed.toLowerCase();
 
     final users = await _store.readUsers();
-    return !users.any(
-      (user) => user.username.toLowerCase() == trimmed.toLowerCase(),
+    final localTaken = users.any(
+      (user) =>
+          user.id != excludeUserId && user.username.toLowerCase() == normalized,
     );
+    if (localTaken) return false;
+
+    final cloudTaken = await _isUsernameTakenInCloud(
+      normalized,
+      excludeUserId: excludeUserId,
+    );
+    if (cloudTaken == true) return false;
+
+    return true;
   }
 
   String generateSuggestedUsername(String email) {
@@ -125,28 +149,93 @@ class AuthService {
   }
 
   String _sanitizeUsernameSeed(String seed) {
-    var cleaned = seed.replaceAll(RegExp(r'[^a-z0-9_]'), '_');
+    var cleaned = seed.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]'), '_');
+    cleaned = cleaned.replaceAll(RegExp(r'^[._-]+'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'[._-]+$'), '');
     if (cleaned.length > 18) cleaned = cleaned.substring(0, 18);
-    if (cleaned.length < 3) cleaned = '${cleaned}_user';
+    if (cleaned.length < 3) cleaned = 'user_$cleaned';
+    cleaned = cleaned.replaceAll(RegExp(r'^[._-]+'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'[._-]+$'), '');
+    if (cleaned.length < 3) cleaned = 'user001';
+    if (cleaned.length > 18) cleaned = cleaned.substring(0, 18);
     return cleaned;
+  }
+
+  Future<String> _resolveAvailableUsername({
+    required String email,
+    String preferredUsername = '',
+    String excludeUserId = '',
+  }) async {
+    var base = preferredUsername.trim().toLowerCase();
+    if (base.isEmpty) {
+      base = generateSuggestedUsername(email);
+    }
+    if (!isValidUsernameFormat(base)) {
+      base = _sanitizeUsernameSeed(base);
+    }
+    if (!isValidUsernameFormat(base)) {
+      base = _sanitizeUsernameSeed(generateSuggestedUsername(email));
+    }
+    if (!isValidUsernameFormat(base)) {
+      base = 'user001';
+    }
+
+    var candidate = base;
+    for (var i = 0; i < 500; i++) {
+      final available = await checkUsernameAvailable(
+        candidate,
+        excludeUserId: excludeUserId,
+      );
+      if (available) return candidate;
+
+      final suffix = (i + 1).toString();
+      final maxBase = 18 - suffix.length;
+      final cutBase = base.length > maxBase ? base.substring(0, maxBase) : base;
+      candidate = '$cutBase$suffix';
+    }
+
+    final fallbackSuffix =
+        DateTime.now().millisecondsSinceEpoch.toString().substring(9);
+    final maxBase = 18 - fallbackSuffix.length;
+    final cutBase = base.length > maxBase ? base.substring(0, maxBase) : base;
+    return '$cutBase$fallbackSuffix';
   }
 
   Future<ServiceResult<NebulaUser>> updateUsernameForCurrentUser(
     String newUsername,
   ) async {
-    final trimmed = newUsername.trim();
-    final available = await checkUsernameAvailable(trimmed);
-    if (!available) {
-      return const ServiceResult(
-        ok: false,
-        message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
-      );
-    }
-
     if (_currentUser == null) {
       return const ServiceResult(
         ok: false,
         message: 'No hay usuario actual.',
+      );
+    }
+
+    final trimmed = newUsername.trim();
+    if (!isValidUsernameFormat(trimmed)) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+      );
+    }
+
+    if (_currentUser!.username.toLowerCase() == trimmed.toLowerCase()) {
+      return ServiceResult(
+        ok: true,
+        message: 'Username actualizado correctamente.',
+        data: _currentUser,
+      );
+    }
+
+    final available = await checkUsernameAvailable(
+      trimmed,
+      excludeUserId: _currentUser!.id,
+    );
+    if (!available) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
       );
     }
 
@@ -182,17 +271,30 @@ class AuthService {
       );
     }
 
-    final users = await _store.readUsers();
-    final usernameTaken = users.any(
-      (user) => user.username.toLowerCase() == trimmedUsername.toLowerCase(),
-    );
-    if (usernameTaken) {
+    if (!isValidEmailFormat(normalizedEmail)) {
+      return const ServiceResult(
+        ok: false,
+        message: 'El correo no es valido.',
+      );
+    }
+
+    if (!isValidUsernameFormat(trimmedUsername)) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+      );
+    }
+
+    final usernameAvailable = await checkUsernameAvailable(trimmedUsername);
+    if (!usernameAvailable) {
       return const ServiceResult(
         ok: false,
         message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
       );
     }
 
+    final users = await _store.readUsers();
     NebulaUser? existingEmailUser;
     for (final user in users) {
       if (user.email.toLowerCase() == normalizedEmail) {
@@ -483,12 +585,19 @@ class AuthService {
       );
     }
 
-    final usernameTaken = users.any(
-      (user) =>
-          user.id != userId &&
-          user.username.toLowerCase() == trimmedUsername.toLowerCase(),
+    if (!isValidUsernameFormat(trimmedUsername)) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+      );
+    }
+
+    final usernameAvailable = await checkUsernameAvailable(
+      trimmedUsername,
+      excludeUserId: userId,
     );
-    if (usernameTaken) {
+    if (!usernameAvailable) {
       return const ServiceResult(
         ok: false,
         message: 'Ese apodo ya esta en uso por otra cuenta.',
@@ -554,6 +663,32 @@ class AuthService {
           break;
         }
       }
+      var needsUsernameSetup = existingUser == null;
+      var suggestedUsername = generateSuggestedUsername(emailLower);
+      if (existingUser == null && _useFirebase) {
+        try {
+          final cloudByEmail = await _firestore!
+              .collection('users')
+              .where('emailLower', isEqualTo: emailLower)
+              .limit(1)
+              .get();
+          if (cloudByEmail.docs.isNotEmpty) {
+            final cloudData = cloudByEmail.docs.first.data();
+            final cloudUsername =
+                (cloudData['username'] as String?)?.trim() ?? '';
+            if (cloudUsername.isNotEmpty) {
+              needsUsernameSetup = false;
+              suggestedUsername = cloudUsername;
+            }
+          }
+        } catch (_) {}
+      }
+      if (needsUsernameSetup) {
+        suggestedUsername = await _resolveAvailableUsername(
+          email: emailLower,
+          preferredUsername: suggestedUsername,
+        );
+      }
 
       final auth = await account.authentication;
       final accessToken = auth.accessToken;
@@ -597,6 +732,13 @@ class AuthService {
       _pendingGoogleIdTokenForConfirm = idToken;
       _pendingGoogleEmailForConfirm = emailLower;
       _pendingGoogleNameForConfirm = account.displayName ?? 'Explorador';
+      if (needsUsernameSetup) {
+        return ServiceResult(
+          ok: false,
+          message:
+              'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:$emailLower|$suggestedUsername',
+        );
+      }
       return ServiceResult(
         ok: false,
         message: 'GOOGLE_CONFIRM_REQUIRED:$emailLower',
@@ -611,7 +753,10 @@ class AuthService {
     }
   }
 
-  Future<ServiceResult<NebulaUser>> confirmPendingGoogleLogin() async {
+  Future<ServiceResult<NebulaUser>> confirmPendingGoogleLogin({
+    String preferredUsernameForNewAccount = '',
+    String preferredPasswordForNewAccount = '',
+  }) async {
     if (!_useFirebase) {
       return const ServiceResult(
         ok: false,
@@ -704,6 +849,13 @@ class AuthService {
       late final NebulaUser signedUser;
       if (existingUser != null) {
         final localUser = existingUser;
+        final resolvedUsername = localUser.username.trim().isEmpty
+            ? await _resolveAvailableUsername(
+                email: emailLower,
+                preferredUsername: _pendingGoogleNameForConfirm ?? '',
+                excludeUserId: firebaseUser.uid,
+              )
+            : localUser.username;
         final preservedUser = NebulaUser(
           id: firebaseUser.uid,
           name: localUser.name.trim().isEmpty
@@ -711,9 +863,7 @@ class AuthService {
                   firebaseUser.displayName ??
                   'Explorador')
               : localUser.name,
-          username: localUser.username.trim().isEmpty
-              ? generateSuggestedUsername(emailLower)
-              : localUser.username,
+          username: resolvedUsername,
           email: emailLower,
           password: localUser.password,
           parentalPinHash: localUser.parentalPinHash,
@@ -738,22 +888,151 @@ class AuthService {
         await _store.writeUsers(nextUsers);
         signedUser = preservedUser;
       } else {
+        final cloudDoc =
+            await _firestore!.collection('users').doc(firebaseUser.uid).get();
+        final cloud = cloudDoc.data();
+
+        final cloudUsername = (cloud?['username'] as String?)?.trim() ?? '';
+        final preferredTyped = preferredUsernameForNewAccount.trim();
+        final preferredPassword = preferredPasswordForNewAccount.trim();
+        if (cloudUsername.isEmpty && preferredTyped.isNotEmpty) {
+          if (!isValidUsernameFormat(preferredTyped)) {
+            _clearPendingGoogleConfirmation();
+            try {
+              await _firebaseAuth.signOut();
+            } catch (_) {}
+            try {
+              await _googleSignIn.signOut();
+            } catch (_) {}
+            return const ServiceResult(
+              ok: false,
+              message:
+                  'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+            );
+          }
+          final available = await checkUsernameAvailable(
+            preferredTyped,
+            excludeUserId: firebaseUser.uid,
+          );
+          if (!available) {
+            _clearPendingGoogleConfirmation();
+            try {
+              await _firebaseAuth.signOut();
+            } catch (_) {}
+            try {
+              await _googleSignIn.signOut();
+            } catch (_) {}
+            return const ServiceResult(
+              ok: false,
+              message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
+            );
+          }
+        }
+        if (cloudUsername.isEmpty && preferredPassword.length < 6) {
+          _clearPendingGoogleConfirmation();
+          try {
+            await _firebaseAuth.signOut();
+          } catch (_) {}
+          try {
+            await _googleSignIn.signOut();
+          } catch (_) {}
+          return const ServiceResult(
+            ok: false,
+            message: 'La contrasena debe tener al menos 6 caracteres.',
+          );
+        }
+
+        if (cloudUsername.isEmpty) {
+          try {
+            final hasPasswordProvider = firebaseUser.providerData.any(
+              (provider) =>
+                  provider.providerId == EmailAuthProvider.PROVIDER_ID,
+            );
+            if (hasPasswordProvider) {
+              await firebaseUser.updatePassword(preferredPassword);
+            } else {
+              final emailCredential = EmailAuthProvider.credential(
+                email: emailLower,
+                password: preferredPassword,
+              );
+              await firebaseUser.linkWithCredential(emailCredential);
+            }
+          } on FirebaseAuthException catch (e) {
+            if (e.code == 'provider-already-linked') {
+              try {
+                await firebaseUser.updatePassword(preferredPassword);
+              } on FirebaseAuthException catch (inner) {
+                _clearPendingGoogleConfirmation();
+                try {
+                  await _firebaseAuth.signOut();
+                } catch (_) {}
+                try {
+                  await _googleSignIn.signOut();
+                } catch (_) {}
+                return ServiceResult(
+                  ok: false,
+                  message:
+                      'No pudimos guardar tu contrasena local: ${inner.message ?? inner.code}',
+                );
+              }
+            } else {
+              _clearPendingGoogleConfirmation();
+              try {
+                await _firebaseAuth.signOut();
+              } catch (_) {}
+              try {
+                await _googleSignIn.signOut();
+              } catch (_) {}
+              if (e.code == 'credential-already-in-use' ||
+                  e.code == 'email-already-in-use') {
+                return const ServiceResult(
+                  ok: false,
+                  message:
+                      'No pudimos crear la contrasena local porque ese correo ya esta vinculado en otra cuenta.',
+                );
+              }
+              return ServiceResult(
+                ok: false,
+                message:
+                    'No pudimos crear tu contrasena local: ${e.message ?? e.code}',
+              );
+            }
+          }
+        }
+
+        final preferredForResolve = cloudUsername.isNotEmpty
+            ? cloudUsername
+            : (preferredTyped.isNotEmpty
+                ? preferredTyped
+                : (_pendingGoogleNameForConfirm ?? ''));
+        final resolvedUsername = await _resolveAvailableUsername(
+          email: emailLower,
+          preferredUsername: preferredForResolve,
+          excludeUserId: firebaseUser.uid,
+        );
         final newUser = NebulaUser(
           id: firebaseUser.uid,
-          name: _pendingGoogleNameForConfirm ??
-              firebaseUser.displayName ??
-              'Explorador',
-          username: generateSuggestedUsername(emailLower),
+          name: (cloud?['name'] as String?)?.trim().isNotEmpty == true
+              ? (cloud!['name'] as String)
+              : (_pendingGoogleNameForConfirm ??
+                  firebaseUser.displayName ??
+                  'Explorador'),
+          username: resolvedUsername,
           email: emailLower,
-          password: '',
+          password:
+              cloudUsername.isEmpty ? _hashPassword(preferredPassword) : '',
           parentalPinHash: '',
-          stars: 0,
-          avatarIndex: 0,
-          selectedNarratorId: 'narrator_1',
-          soundEffectsEnabled: true,
-          accentHue: 190,
-          accentIntensity: 0.55,
-          customImages: const {},
+          stars: (cloud?['stars'] as num?)?.toInt() ?? 0,
+          avatarIndex: (cloud?['avatarIndex'] as num?)?.toInt() ?? 0,
+          selectedNarratorId:
+              (cloud?['selectedNarratorId'] as String?) ?? 'narrator_1',
+          soundEffectsEnabled: (cloud?['soundEffectsEnabled'] as bool?) ?? true,
+          accentHue: (cloud?['accentHue'] as num?)?.toDouble() ?? 190,
+          accentIntensity:
+              (cloud?['accentIntensity'] as num?)?.toDouble() ?? 0.55,
+          customImages: Map<String, String>.from(
+            cloud?['customImages'] as Map? ?? const {},
+          ),
         );
         await _upsertLocal(newUser);
         signedUser = newUser;
@@ -835,6 +1114,124 @@ class AuthService {
       return ServiceResult(
         ok: false,
         message: 'Error al establecer contrasena: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> setupGoogleRecoveryPassword({
+    required String newPassword,
+  }) async {
+    if (_currentUser == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay usuario actual.',
+      );
+    }
+    if (!_useFirebase || !isCurrentUserGoogleProvider) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Este flujo solo aplica para cuentas de Google.',
+      );
+    }
+
+    final trimmed = newPassword.trim();
+    if (trimmed.length < 6) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La contrasena debe tener al menos 6 caracteres.',
+      );
+    }
+
+    final firebaseUser = _firebaseAuth?.currentUser;
+    if (firebaseUser == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay sesion valida en Firebase.',
+      );
+    }
+
+    final currentEmail = _currentUser!.email.trim().toLowerCase();
+    if (currentEmail.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No pudimos leer un correo valido en tu cuenta.',
+      );
+    }
+
+    try {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+      try {
+        await _googleSignIn.disconnect();
+      } catch (_) {}
+
+      final account = await _googleSignIn.signIn();
+      if (account == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Proceso cancelado.',
+        );
+      }
+
+      final selectedEmail = account.email.trim().toLowerCase();
+      if (selectedEmail != currentEmail) {
+        return ServiceResult(
+          ok: false,
+          message: 'Debes elegir la misma cuenta de Google ($currentEmail).',
+        );
+      }
+
+      final auth = await account.authentication;
+      final googleCredential = GoogleAuthProvider.credential(
+        accessToken: auth.accessToken,
+        idToken: auth.idToken,
+      );
+      await firebaseUser.reauthenticateWithCredential(googleCredential);
+
+      if (isCurrentUserPasswordProvider) {
+        await firebaseUser.updatePassword(trimmed);
+      } else {
+        final emailCredential = EmailAuthProvider.credential(
+          email: currentEmail,
+          password: trimmed,
+        );
+        try {
+          await firebaseUser.linkWithCredential(emailCredential);
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'provider-already-linked') {
+            await firebaseUser.updatePassword(trimmed);
+          } else if (e.code == 'credential-already-in-use' ||
+              e.code == 'email-already-in-use') {
+            return const ServiceResult(
+              ok: false,
+              message:
+                  'Ese correo ya esta vinculado con contrasena en otra cuenta.',
+            );
+          } else {
+            rethrow;
+          }
+        }
+      }
+
+      final updated = _currentUser!.copyWith(password: _hashPassword(trimmed));
+      await _upsertLocal(updated);
+      _currentUser = updated;
+      return ServiceResult(
+        ok: true,
+        message: 'Contrasena de respaldo creada correctamente.',
+        data: updated,
+      );
+    } on FirebaseAuthException catch (e) {
+      return ServiceResult(
+        ok: false,
+        message:
+            'No pudimos crear la contrasena de respaldo: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos crear la contrasena de respaldo: $e',
       );
     }
   }
@@ -1377,21 +1774,20 @@ class AuthService {
       );
     }
 
-    if (password.trim().isNotEmpty &&
-        !_passwordMatches(
-            stored: _currentUser!.password, input: password.trim())) {
-      return const ServiceResult(
-        ok: false,
-        message: 'Contrasena incorrecta.',
-      );
-    }
-
-    if (!_requiresParentalPin() &&
-        _currentUser!.password.trim().isNotEmpty &&
-        password.trim().isEmpty) {
+    if (_currentUser!.password.trim().isNotEmpty && password.trim().isEmpty) {
       return const ServiceResult(
         ok: false,
         message: 'Escribe tu contrasena actual para borrar la cuenta.',
+      );
+    }
+    if (_currentUser!.password.trim().isNotEmpty &&
+        !_passwordMatches(
+          stored: _currentUser!.password,
+          input: password.trim(),
+        )) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Contrasena incorrecta.',
       );
     }
 
@@ -1526,6 +1922,33 @@ class AuthService {
     }
   }
 
+  Future<bool?> _isUsernameTakenInCloud(
+    String normalizedUsername, {
+    String excludeUserId = '',
+  }) async {
+    if (!_useFirebase) return false;
+    if (normalizedUsername.trim().isEmpty) return false;
+    try {
+      final query = await _firestore!
+          .collection('users')
+          .where('usernameLower',
+              isEqualTo: normalizedUsername.trim().toLowerCase())
+          .limit(5)
+          .get();
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final idFromField = (data['id'] as String?)?.trim() ?? '';
+        final docId = doc.id.trim();
+        final matchesExcluded = excludeUserId.isNotEmpty &&
+            (docId == excludeUserId || idFromField == excludeUserId);
+        if (!matchesExcluded) return true;
+      }
+      return false;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String?> _lookupEmailByUsernameFromCloud(String username) async {
     if (!_useFirebase) return null;
     final normalized = username.trim().toLowerCase();
@@ -1587,14 +2010,18 @@ class AuthService {
       final cloudDoc =
           await _firestore!.collection('users').doc(firebaseUser.uid).get();
       final cloud = cloudDoc.data();
+      final preferredUsername = (cloud?['username'] as String?)?.trim() ?? '';
+      final resolvedUsername = await _resolveAvailableUsername(
+        email: firebaseUser.email ?? email,
+        preferredUsername: preferredUsername,
+        excludeUserId: firebaseUser.uid,
+      );
       final restored = NebulaUser(
         id: firebaseUser.uid,
         name: (cloud?['name'] as String?)?.trim().isNotEmpty == true
             ? (cloud!['name'] as String)
             : (firebaseUser.displayName ?? 'Explorador'),
-        username: (cloud?['username'] as String?)?.trim().isNotEmpty == true
-            ? (cloud!['username'] as String)
-            : generateSuggestedUsername(firebaseUser.email ?? email),
+        username: resolvedUsername,
         email: ((cloud?['email'] as String?) ?? email).trim().toLowerCase(),
         password: _hashPassword(password),
         parentalPinHash: (cloud?['parentalPinHash'] as String?) ?? '',

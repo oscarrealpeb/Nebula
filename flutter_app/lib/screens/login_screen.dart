@@ -153,9 +153,29 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      var preferredUsernameForNewAccount = '';
+      var preferredPasswordForNewAccount = '';
+      if (_isGoogleConfirmWithUsername(result.message)) {
+        final suggested =
+            _extractGoogleConfirmSuggestedUsername(result.message);
+        final chosen = await _askGoogleUsernameForGoogle(
+          email: email,
+          suggested: suggested,
+        );
+        if (!mounted) return;
+        if (chosen == null) {
+          await widget.controller.cancelPendingGoogleLogin();
+          return;
+        }
+        preferredUsernameForNewAccount = chosen['username'] ?? '';
+        preferredPasswordForNewAccount = chosen['password'] ?? '';
+      }
+
       setState(() => _googleSubmitting = true);
-      final confirmedResult =
-          await widget.controller.confirmPendingGoogleLogin();
+      final confirmedResult = await widget.controller.confirmPendingGoogleLogin(
+        preferredUsernameForNewAccount: preferredUsernameForNewAccount,
+        preferredPasswordForNewAccount: preferredPasswordForNewAccount,
+      );
       if (!mounted) return;
       setState(() => _googleSubmitting = false);
 
@@ -191,13 +211,210 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   bool _isGoogleConfirmRequired(String message) {
-    return message.startsWith('GOOGLE_CONFIRM_REQUIRED:');
+    return message.startsWith('GOOGLE_CONFIRM_REQUIRED:') ||
+        message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
   String _extractGoogleConfirmEmail(String message) {
+    const prefixWithUsername = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
+    if (message.startsWith(prefixWithUsername)) {
+      final payload = message.substring(prefixWithUsername.length);
+      return payload.split('|').first.trim();
+    }
     const prefix = 'GOOGLE_CONFIRM_REQUIRED:';
     if (!message.startsWith(prefix)) return '';
     return message.substring(prefix.length).trim();
+  }
+
+  bool _isGoogleConfirmWithUsername(String message) {
+    return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
+  }
+
+  String _extractGoogleConfirmSuggestedUsername(String message) {
+    const prefix = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
+    if (!message.startsWith(prefix)) return '';
+    final payload = message.substring(prefix.length);
+    final parts = payload.split('|');
+    if (parts.length < 2) return '';
+    return parts[1].trim();
+  }
+
+  Future<Map<String, String>?> _askGoogleUsernameForGoogle({
+    required String email,
+    required String suggested,
+  }) async {
+    final usernameController = TextEditingController(
+      text: suggested.trim().isNotEmpty
+          ? suggested.trim()
+          : widget.controller.authService.generateSuggestedUsername(email),
+    );
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    bool? usernameValid;
+
+    bool usernameFormatValid(String value) {
+      return widget.controller.authService.isValidUsernameFormat(value);
+    }
+
+    bool passwordValid() => passwordController.text.trim().length >= 6;
+
+    bool passwordsMatch() =>
+        confirmController.text == passwordController.text &&
+        confirmController.text.isNotEmpty;
+
+    bool canContinue() {
+      return usernameFormatValid(usernameController.text) &&
+          usernameValid == true &&
+          passwordValid() &&
+          passwordsMatch();
+    }
+
+    String validationMessage() {
+      if (usernameController.text.trim().isEmpty) {
+        return 'Escribe un nombre de usuario.';
+      }
+      if (!usernameFormatValid(usernameController.text)) {
+        return 'Usa 3 a 18 caracteres: letras, numeros, ., _, -.';
+      }
+      return 'Ese nombre de usuario ya esta en uso.';
+    }
+
+    Future<bool> validateUsername(String username) async {
+      final typed = username.trim();
+      final normalizedTyped = typed.toLowerCase();
+      if (!usernameFormatValid(typed)) {
+        if (usernameController.text.trim().toLowerCase() == normalizedTyped) {
+          usernameValid = false;
+        }
+        return false;
+      }
+      final available =
+          await widget.controller.authService.checkUsernameAvailable(typed);
+      if (usernameController.text.trim().toLowerCase() != normalizedTyped) {
+        return available;
+      }
+      usernameValid = available;
+      return available;
+    }
+
+    final initialTyped = usernameController.text.trim();
+    if (usernameFormatValid(initialTyped)) {
+      usernameValid =
+          await widget.controller.authService.checkUsernameAvailable(
+        initialTyped,
+      );
+    }
+    if (!mounted) {
+      usernameController.dispose();
+      return null;
+    }
+
+    try {
+      final selectedData = await showDialog<Map<String, String>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setLocal) {
+              return AlertDialog(
+                title: const Text('Elige tu nombre de usuario'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Estas entrando con $email. Elige tu apodo y crea una contrasena para entrar luego con Google o con correo y contrasena.',
+                    ),
+                    const SizedBox(height: 10),
+                    NebulaTextField(
+                      controller: usernameController,
+                      label: 'Nombre de usuario',
+                      validator: (value) async {
+                        final result = await validateUsername(value);
+                        if (!mounted) return result;
+                        setLocal(() {});
+                        return result;
+                      },
+                      showValidationStatus: true,
+                      validationMessage: validationMessage(),
+                      onChanged: (_) {
+                        setLocal(() {
+                          usernameValid =
+                              usernameFormatValid(usernameController.text)
+                                  ? null
+                                  : false;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    NebulaTextField(
+                      controller: passwordController,
+                      label: 'Contrasena (minimo 6)',
+                      obscureText: true,
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    NebulaTextField(
+                      controller: confirmController,
+                      label: 'Repite la contrasena',
+                      obscureText: true,
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    if (passwordController.text.isNotEmpty &&
+                        !passwordValid()) ...[
+                      const SizedBox(height: 6),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'La contrasena debe tener al menos 6 caracteres.',
+                          style: TextStyle(
+                            color: Color(0xFFFF6E7A),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (confirmController.text.isNotEmpty &&
+                        !passwordsMatch()) ...[
+                      const SizedBox(height: 6),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Las contrasenas no coinciden.',
+                          style: TextStyle(
+                            color: Color(0xFFFF6E7A),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancelar'),
+                  ),
+                  FilledButton(
+                    onPressed: canContinue()
+                        ? () => Navigator.of(context).pop(<String, String>{
+                              'username': usernameController.text.trim(),
+                              'password': passwordController.text.trim(),
+                            })
+                        : null,
+                    child: const Text('Continuar'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      return selectedData;
+    } finally {
+      usernameController.dispose();
+      passwordController.dispose();
+      confirmController.dispose();
+    }
   }
 
   Future<bool> _confirmGoogleSelection(String email) async {

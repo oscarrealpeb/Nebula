@@ -39,7 +39,8 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
 
   late bool _obscure;
   Timer? _debounceTimer;
-  bool? _validationResult; // null = no validado, true = válido, false = inválido
+  bool?
+      _validationResult; // null = no validado, true = válido, false = inválido
   bool _isValidating = false;
 
   @override
@@ -82,14 +83,20 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
     }
 
     // Iniciar debounce de 250ms para feedback mas rapido.
-    setState(() => _isValidating = true);
+    setState(() {
+      // Limpia resultado previo para evitar "flash" de error viejo.
+      _validationResult = null;
+      _isValidating = true;
+    });
     _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
       if (!mounted) return;
-      final text = widget.controller.text;
-      if (text.isEmpty) return;
+      final textSnapshot = widget.controller.text;
+      if (textSnapshot.isEmpty) return;
 
-      final result = await widget.validator!(text);
+      final result = await widget.validator!(textSnapshot);
       if (!mounted) return;
+      // Descarta respuestas viejas si el texto cambio durante la validacion.
+      if (widget.controller.text != textSnapshot) return;
       setState(() {
         _validationResult = result;
         _isValidating = false;
@@ -128,6 +135,7 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
         ),
         if (widget.showValidationStatus &&
             widget.controller.text.isNotEmpty &&
+            !_isValidating &&
             _validationResult == false &&
             widget.validationMessage != null)
           Padding(

@@ -29,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Timer? _timer;
   bool _saving = false;
   bool _loggingOut = false;
+  bool? _usernameValid = true;
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _usernameController = TextEditingController(text: user.username);
     _avatarIndex = user.avatarIndex;
     _remaining = widget.controller.profileResetRemaining();
+    _usernameValid = true;
     _startTickIfNeeded();
   }
 
@@ -64,7 +66,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
     NebulaSnack.show(context, message: message, ok: ok);
   }
 
+  bool get _nameValid => _nameController.text.trim().isNotEmpty;
+
+  bool get _usernameFormatValid {
+    return widget.controller.authService
+        .isValidUsernameFormat(_usernameController.text);
+  }
+
+  bool get _canSaveProfile {
+    return _nameValid &&
+        _usernameFormatValid &&
+        _usernameValid == true &&
+        !_saving;
+  }
+
+  String get _usernameValidationMessage {
+    if (_usernameController.text.trim().isEmpty) {
+      return 'Escribe un apodo.';
+    }
+    if (!_usernameFormatValid) {
+      return 'Usa 3 a 18 caracteres: letras, numeros, ., _, -.';
+    }
+    return 'Ese apodo ya esta en uso.';
+  }
+
+  Future<bool> _validateProfileUsername(String username) async {
+    final typed = username.trim();
+    final normalizedTyped = typed.toLowerCase();
+    if (!widget.controller.authService.isValidUsernameFormat(typed)) {
+      if (mounted &&
+          _usernameController.text.trim().toLowerCase() == normalizedTyped) {
+        setState(() => _usernameValid = false);
+      }
+      return false;
+    }
+
+    final currentUser = widget.controller.currentUser;
+    if (currentUser == null) return false;
+    if (currentUser.username.trim().toLowerCase() == normalizedTyped) {
+      if (mounted &&
+          _usernameController.text.trim().toLowerCase() == normalizedTyped) {
+        setState(() => _usernameValid = true);
+      }
+      return true;
+    }
+
+    final isAvailable =
+        await widget.controller.authService.checkUsernameAvailable(
+      typed,
+      excludeUserId: currentUser.id,
+    );
+    if (!mounted) return isAvailable;
+    if (_usernameController.text.trim().toLowerCase() != normalizedTyped) {
+      return isAvailable;
+    }
+    setState(() => _usernameValid = isAvailable);
+    return isAvailable;
+  }
+
   Future<void> _saveProfile() async {
+    if (!_nameValid) {
+      _showSnack('Escribe tu nombre.', ok: false);
+      return;
+    }
+    if (!_usernameFormatValid) {
+      _showSnack('Revisa el formato del apodo.', ok: false);
+      return;
+    }
+    if (_usernameValid != true) {
+      _showSnack('Revisa el apodo antes de guardar.', ok: false);
+      return;
+    }
     setState(() => _saving = true);
     final result = await widget.controller.saveProfile(
       name: _nameController.text,
@@ -295,7 +367,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<String?> _askCurrentPasswordForDelete() async {
+  Future<String?> _askCurrentPasswordForDelete({
+    required bool requirePassword,
+  }) async {
     final passwordController = TextEditingController();
     try {
       final confirmed = await showDialog<bool>(
@@ -305,13 +379,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Escribe tu contrasena actual para borrar la cuenta.'),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: passwordController,
-                label: 'Contrasena actual',
-                obscureText: true,
+              const Text(
+                '¿Seguro que quieres borrar tu cuenta? Perderas tu progreso y configuracion guardada.',
               ),
+              if (requirePassword) ...[
+                const SizedBox(height: 10),
+                const Text('Escribe tu contrasena actual para continuar.'),
+                const SizedBox(height: 10),
+                NebulaTextField(
+                  controller: passwordController,
+                  label: 'Contrasena actual',
+                  obscureText: true,
+                ),
+              ],
             ],
           ),
           actions: [
@@ -321,13 +401,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Continuar'),
+              child: const Text('Borrar cuenta'),
             ),
           ],
         ),
       );
       if (confirmed != true) return null;
-      return passwordController.text.trim();
+      final typed = passwordController.text.trim();
+      if (requirePassword && typed.isEmpty) {
+        _showSnack('Debes escribir tu contrasena para borrar la cuenta.',
+            ok: false);
+        return null;
+      }
+      return typed;
     } finally {
       passwordController.dispose();
     }
@@ -526,17 +612,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnack('No hay PIN de adulto activo en esta cuenta.', ok: false);
       return;
     }
-
-    final mailResult =
-        await widget.controller.requestParentalPinRecoveryEmail();
-    if (!mounted) return;
-    _showSnack(mailResult.message, ok: mailResult.ok);
-
-    if (widget.controller.isGoogleOnlyAccount) {
-      await _recoverParentalPinWithGoogleFlow();
-      return;
+    final user = widget.controller.currentUser;
+    if (widget.controller.isGoogleOnlyAccount &&
+        (user?.password.trim().isEmpty ?? true)) {
+      final passwordReady = await _setupGoogleRecoveryPasswordOnce();
+      if (!mounted || !passwordReady) return;
     }
     await _recoverParentalPinWithPasswordFlow();
+  }
+
+  Future<bool> _setupGoogleRecoveryPasswordOnce() async {
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Tu contraseña de respaldo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Esta cuenta de Google es antigua y aun no tiene contraseña local. Crea una ahora para recuperar tu PIN solo con contraseña.',
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tip: cuando quieras entrar, podrás usar Google o correo + contraseña.',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: passwordController,
+                label: 'Escribe una contraseña (mínimo 6)',
+                obscureText: true,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: confirmController,
+                label: 'Repite la contraseña',
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return false;
+
+      final next = passwordController.text.trim();
+      final confirm = confirmController.text.trim();
+      if (next != confirm) {
+        _showSnack('La contraseña no coincide.', ok: false);
+        return false;
+      }
+      if (next.length < 6) {
+        _showSnack('La contraseña debe tener al menos 6 caracteres.',
+            ok: false);
+        return false;
+      }
+
+      final result = await widget.controller.setupGoogleRecoveryPassword(
+        newPassword: next,
+      );
+      if (!mounted) return false;
+      _showSnack(result.message, ok: result.ok);
+      return result.ok;
+    } finally {
+      passwordController.dispose();
+      confirmController.dispose();
+    }
   }
 
   Future<void> _recoverParentalPinWithPasswordFlow() async {
@@ -613,76 +766,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnack(result.message, ok: result.ok);
     } finally {
       passwordController.dispose();
-      pinController.dispose();
-      confirmController.dispose();
-    }
-  }
-
-  Future<void> _recoverParentalPinWithGoogleFlow() async {
-    final pinController = TextEditingController();
-    final confirmController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Recuperar PIN con Google'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Elige la misma cuenta de Google y define un PIN nuevo.',
-              ),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: pinController,
-                label: 'Nuevo PIN (4 a 6 numeros)',
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                digitsOnly: true,
-                maxLength: 6,
-              ),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: confirmController,
-                label: 'Repite el PIN',
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                digitsOnly: true,
-                maxLength: 6,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Continuar'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || confirmed != true) return;
-
-      final newPin = pinController.text.trim();
-      final confirmPin = confirmController.text.trim();
-      if (newPin != confirmPin) {
-        _showSnack('El PIN no coincide.', ok: false);
-        return;
-      }
-      if (!widget.controller.isValidParentalPinFormat(newPin)) {
-        _showSnack('El PIN debe tener 4 a 6 numeros.', ok: false);
-        return;
-      }
-
-      final result = await widget.controller.recoverParentalPinWithGoogle(
-        newPin: newPin,
-      );
-      if (!mounted) return;
-      _showSnack(result.message, ok: result.ok);
-    } finally {
       pinController.dispose();
       confirmController.dispose();
     }
@@ -825,11 +908,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         NebulaTextField(
                           controller: _nameController,
                           label: '¿Cómo te llamas?',
+                          onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
                         NebulaTextField(
                           controller: _usernameController,
                           label: 'Tu apodo genial',
+                          validator: _validateProfileUsername,
+                          showValidationStatus: true,
+                          validationMessage: _usernameValidationMessage,
+                          onChanged: (_) {
+                            setState(() {
+                              _usernameValid =
+                                  _usernameFormatValid ? null : false;
+                            });
+                          },
                         ),
                       ],
                     ),
@@ -981,7 +1074,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
                 NebulaPrimaryButton(
                   text: _saving ? '¡Guardando...!' : '¡Guardar cambios!',
-                  onPressed: _saving ? null : _saveProfile,
+                  onPressed: _canSaveProfile ? _saveProfile : null,
                 ),
                 const SizedBox(height: 12),
                 NebulaSecondaryButton(
@@ -992,13 +1085,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     setState(() => _loggingOut = true);
                     await widget.controller.logout();
                     if (!context.mounted) return;
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            WelcomeScreen(controller: widget.controller),
-                      ),
-                      (_) => false,
-                    );
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WelcomeScreen(controller: widget.controller),
+                        ),
+                        (_) => false,
+                      );
+                    });
                   },
                 ),
                 const SizedBox(height: 8),
@@ -1009,29 +1105,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                     if (!context.mounted || parentalPin == null) return;
 
-                    String password = '';
-                    if (!widget.controller.parentalPinEnabled &&
-                        !widget.controller.isGoogleOnlyAccount) {
-                      final typedPassword =
-                          await _askCurrentPasswordForDelete();
-                      if (!context.mounted || typedPassword == null) return;
-                      password = typedPassword;
-                    }
+                    final hasLocalPassword = (widget
+                            .controller.currentUser?.password
+                            .trim()
+                            .isNotEmpty ??
+                        false);
+                    final password = await _askCurrentPasswordForDelete(
+                      requirePassword: hasLocalPassword,
+                    );
+                    if (!context.mounted || password == null) return;
 
                     final result = await widget.controller.requestDeleteAccount(
                       parentalPin: parentalPin,
                       password: password,
                     );
                     if (!context.mounted) return;
-                    _showSnack(result.message, ok: result.ok);
-                    if (!result.ok) return;
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            WelcomeScreen(controller: widget.controller),
-                      ),
-                      (_) => false,
-                    );
+                    if (!result.ok) {
+                      _showSnack(result.message, ok: false);
+                      return;
+                    }
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WelcomeScreen(controller: widget.controller),
+                        ),
+                        (_) => false,
+                      );
+                    });
                   },
                   child: const Text(
                     'Borrar cuenta',

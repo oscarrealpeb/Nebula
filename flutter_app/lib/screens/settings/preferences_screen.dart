@@ -41,7 +41,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     _narratorId = user.selectedNarratorId;
     _soundEnabled = user.soundEffectsEnabled;
     _hue = user.accentHue;
-    _intensity = user.accentIntensity;
+    _intensity = user.accentIntensity.clamp(0.72, 1.0).toDouble();
   }
 
   @override
@@ -49,7 +49,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     if (_themeSyncTimer?.isActive ?? false) {
       widget.controller.setThemeColor(
         hue: _hue,
-        intensity: _intensity,
+        intensity: _intensity.clamp(0.72, 1.0).toDouble(),
       );
     }
     _themeSyncTimer?.cancel();
@@ -66,7 +66,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     _themeSyncTimer = Timer(const Duration(milliseconds: 70), () {
       widget.controller.setThemeColor(
         hue: _hue,
-        intensity: _intensity,
+        intensity: _intensity.clamp(0.72, 1.0).toDouble(),
       );
     });
   }
@@ -74,7 +74,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void _showSavedSnack() {
     widget.controller.setThemeColor(
       hue: _hue,
-      intensity: _intensity,
+      intensity: _intensity.clamp(0.72, 1.0).toDouble(),
     );
     NebulaSnack.show(
       context,
@@ -120,7 +120,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       itemCount: _narrators.length,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         mainAxisSpacing: 8,
                         crossAxisSpacing: 8,
@@ -207,7 +208,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       itemCount: _hues.length,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
                         mainAxisSpacing: 10,
                         crossAxisSpacing: 10,
@@ -227,7 +229,9 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                               borderRadius: BorderRadius.circular(14),
                               color: _colorFromHue(hue),
                               border: Border.all(
-                                color: selected ? Colors.white : Colors.transparent,
+                                color: selected
+                                    ? Colors.white
+                                    : Colors.transparent,
                                 width: 2,
                               ),
                             ),
@@ -256,7 +260,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            NebulaPrimaryButton(text: 'Listo, me gusta asi', onPressed: _showSavedSnack),
+            NebulaPrimaryButton(
+                text: 'Listo, me gusta asi', onPressed: _showSavedSnack),
           ],
         ),
       ),
