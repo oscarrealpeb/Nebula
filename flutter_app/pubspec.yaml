@@ -32,6 +32,10 @@ flutter:
   assets:
     - assets/animations/
     - assets/images/games/
+    - assets/images/facil/
+    - assets/images/medio/
+    - assets/images/dificil/
+
 
 flutter_launcher_icons:
   android: true
