@@ -10,9 +10,14 @@ import '../widgets/nebula_text_field.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.controller});
+  const LoginScreen({
+    super.key,
+    required this.controller,
+    this.initialIdentifier = '',
+  });
 
   final AppController controller;
+  final String initialIdentifier;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -26,6 +31,15 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _googleSubmitting = false;
   int _remaining = 0;
   Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialIdentifier.trim();
+    if (initial.isNotEmpty) {
+      _identifierController.text = initial;
+    }
+  }
 
   @override
   void dispose() {
@@ -318,6 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (context, setLocal) {
               return AlertDialog(
                 title: const Text('Elige tu nombre de usuario'),
+                scrollable: true,
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

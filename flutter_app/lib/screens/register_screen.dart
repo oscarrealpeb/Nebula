@@ -6,6 +6,7 @@ import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, required this.controller});
@@ -105,7 +106,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (result.ok) {
       if (widget.controller.currentUser == null) {
         if (_isVerificationPendingMessage(result.message)) {
-          await _showVerificationRequiredNotice(fromMessage: result.message);
+          await _showVerificationRequiredNotice();
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => LoginScreen(
+                controller: widget.controller,
+                initialIdentifier: _emailController.text.trim(),
+              ),
+            ),
+          );
         }
         return;
       }
@@ -126,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         text.contains('verifica tu cuenta');
   }
 
-  Future<void> _showVerificationRequiredNotice({String? fromMessage}) async {
+  Future<void> _showVerificationRequiredNotice() async {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -166,26 +176,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Te enviamos un correo de verificacion. Debes verificarlo para activar la cuenta.',
+                  'Te enviamos un correo de verificacion.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Importante: tienes 1 hora. Si no verificas a tiempo, la cuenta se elimina por seguridad.',
+                  'Tienes 1 hora para verificar tu cuenta. Revisa tambien la carpeta Spam.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: Color(0xFFE76F51),
                   ),
                 ),
-                if (fromMessage != null && fromMessage.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    fromMessage,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
                 const SizedBox(height: 14),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(),
@@ -385,6 +387,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             builder: (context, setLocal) {
               return AlertDialog(
                 title: const Text('Elige tu nombre de usuario'),
+                scrollable: true,
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

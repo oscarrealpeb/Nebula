@@ -119,6 +119,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<ActionResult> loginWithGoogle() async {
+    await refreshOnlineStatus();
+    if (!_isOnline) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'Sin internet. Para entrar con Google, revisa tu conexion e intenta de nuevo.',
+      );
+    }
     final result = await _authService.loginWithGoogle();
     if (result.ok && result.data != null) {
       _currentUser = result.data;
@@ -203,23 +211,17 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
-  /// Improved changePassword that handles Google-only users
+  /// Mantiene compatibilidad, pero el cambio en-app esta deshabilitado.
   Future<ActionResult> changePasswordImproved({
     String currentPassword = '',
     required String newPassword,
     String parentalPin = '',
   }) async {
-    final result = await _authService.changePassword(
-      currentPassword: currentPassword,
-      newPassword: newPassword,
-      parentalPin: parentalPin,
+    return const ActionResult(
+      ok: false,
+      message:
+          'El cambio de contrasena en la app esta deshabilitado. Usa el correo de restablecimiento.',
     );
-    if (result.ok) {
-      final user = await _authService.restoreSession();
-      _currentUser = user;
-      notifyListeners();
-    }
-    return ActionResult(ok: result.ok, message: result.message);
   }
 
   Future<ActionResult> linkGoogleToExistingAccount({
@@ -248,7 +250,7 @@ class AppController extends ChangeNotifier {
         !_authService.isValidEmailFormat(normalized)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo válido.',
+        message: 'Escribe un correo valido.',
       );
     }
 
@@ -274,7 +276,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestProfilePasswordReset() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final key = 'profile_reset_${user.id}';
     final remaining = _cooldownService.remainingSeconds(key);
@@ -299,20 +301,10 @@ class AppController extends ChangeNotifier {
     String currentPassword = '',
     String parentalPin = '',
   }) async {
-    final user = _currentUser;
-    if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
-    }
-    final result = await _authService.changeEmail(
-      newEmail: newEmail,
-      currentPassword: currentPassword,
-      parentalPin: parentalPin,
+    return const ActionResult(
+      ok: false,
+      message: 'El cambio de correo desde la app esta deshabilitado.',
     );
-    if (result.ok && result.data != null) {
-      _currentUser = result.data;
-      notifyListeners();
-    }
-    return ActionResult(ok: result.ok, message: result.message);
   }
 
   Future<ActionResult> changePassword({
@@ -320,16 +312,11 @@ class AppController extends ChangeNotifier {
     required String newPassword,
     String parentalPin = '',
   }) async {
-    final user = _currentUser;
-    if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
-    }
-    final result = await _authService.changePassword(
-      currentPassword: currentPassword,
-      newPassword: newPassword,
-      parentalPin: parentalPin,
+    return const ActionResult(
+      ok: false,
+      message:
+          'El cambio de contrasena en la app esta deshabilitado. Usa el correo de restablecimiento.',
     );
-    return ActionResult(ok: result.ok, message: result.message);
   }
 
   Future<ActionResult> requestDeleteAccount({
@@ -338,7 +325,17 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    if (_firebaseEnabled) {
+      await refreshOnlineStatus();
+      if (!_isOnline) {
+        return const ActionResult(
+          ok: false,
+          message:
+              'Sin internet. Conectate para borrar la cuenta de forma segura.',
+        );
+      }
     }
     final result = await _authService.deleteCurrentAccount(
       parentalPin: parentalPin,
@@ -359,7 +356,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> activateParentalPin(String pin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final result = await _authService.setParentalPin(pin: pin);
     if (result.ok && result.data != null) {
@@ -375,7 +372,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final result = await _authService.changeParentalPin(
       currentPin: currentPin,
@@ -391,7 +388,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deactivateParentalPin(String currentPin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final result =
         await _authService.disableParentalPin(currentPin: currentPin);
@@ -405,7 +402,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestParentalPinRecoveryEmail() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final result = await _authService.sendParentalPinRecoveryEmail();
     return ActionResult(ok: result.ok, message: result.message);
@@ -417,7 +414,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
     final result = await _authService.recoverParentalPinWithPassword(
       accountPassword: accountPassword,
@@ -464,7 +461,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
     }
 
     final result = await _authService.updateProfile(

@@ -149,178 +149,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _resetPassword() async {
-    if (widget.controller.isGoogleOnlyAccount) {
-      _showSnack(
-        'Tu cuenta usa Google. Recupera el acceso desde tu cuenta de Google.',
-        ok: false,
-      );
-      return;
-    }
     if (_remaining > 0) return;
     final result = await widget.controller.requestProfilePasswordReset();
     if (!mounted) return;
     _showSnack(result.message, ok: result.ok);
     setState(() => _remaining = widget.controller.profileResetRemaining());
     _startTickIfNeeded();
-  }
-
-  Future<void> _changeEmailNow() async {
-    final parentalPin = await _askParentalPinIfNeeded(
-      actionText: 'abrir cambio de correo',
-    );
-    if (!mounted || parentalPin == null) return;
-
-    if (widget.controller.isGoogleOnlyAccount) {
-      _showSnack(
-        'Esta cuenta usa Google. Cambia el correo en Google y vuelve a entrar.',
-        ok: false,
-      );
-      return;
-    }
-
-    final needsCurrentPassword = !widget.controller.isGoogleOnlyAccount;
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Cambiar correo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NebulaTextField(
-                controller: emailController,
-                label: 'Nuevo correo',
-                keyboardType: TextInputType.emailAddress,
-              ),
-              if (needsCurrentPassword) ...[
-                const SizedBox(height: 10),
-                NebulaTextField(
-                  controller: passwordController,
-                  label: 'Tu Contraseña actual',
-                  obscureText: true,
-                ),
-              ] else ...[
-                const SizedBox(height: 10),
-                const Text(
-                  'Como entraste con Google, luego te pediremos confirmar tu cuenta de Google.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Cambiar'),
-            ),
-          ],
-        ),
-      );
-
-      if (!mounted) return;
-      if (confirmed != true) return;
-      final result = await widget.controller.requestEmailChange(
-        newEmail: emailController.text,
-        currentPassword: needsCurrentPassword ? passwordController.text : '',
-        parentalPin: parentalPin,
-      );
-      if (!mounted) return;
-      _showSnack(result.message, ok: result.ok);
-    } finally {
-      emailController.dispose();
-      passwordController.dispose();
-    }
-  }
-
-  Future<void> _changePasswordNow() async {
-    final parentalPin = await _askParentalPinIfNeeded(
-      actionText: 'abrir cambio de contrasena',
-    );
-    if (!mounted || parentalPin == null) return;
-
-    final requiresCurrentPassword = !widget.controller.isGoogleOnlyAccount;
-
-    final currentController = TextEditingController();
-    final nextController = TextEditingController();
-    final confirmController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Cambiar Contraseña'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (requiresCurrentPassword) ...[
-                NebulaTextField(
-                  controller: currentController,
-                  label: 'Contraseña actual',
-                  obscureText: true,
-                ),
-                const SizedBox(height: 10),
-              ] else ...[
-                const Text(
-                  'Vas a crear una contraseña para poder entrar también con correo y contraseña.',
-                ),
-                const SizedBox(height: 10),
-              ],
-              NebulaTextField(
-                controller: nextController,
-                label: 'Nueva Contraseña',
-                obscureText: true,
-              ),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: confirmController,
-                label: 'Repite nueva Contraseña',
-                obscureText: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Guardar'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      if (confirmed != true) return;
-
-      final next = nextController.text.trim();
-      final confirm = confirmController.text.trim();
-      if (next != confirm) {
-        _showSnack('La nueva contraseña no coincide.', ok: false);
-        return;
-      }
-      if (next.length < 6) {
-        _showSnack('La contraseña debe tener al menos 6 caracteres.',
-            ok: false);
-        return;
-      }
-      final result = await widget.controller.changePassword(
-        currentPassword: requiresCurrentPassword ? currentController.text : '',
-        newPassword: nextController.text,
-        parentalPin: parentalPin,
-      );
-      if (!mounted) return;
-      _showSnack(result.message, ok: result.ok);
-    } finally {
-      currentController.dispose();
-      nextController.dispose();
-      confirmController.dispose();
-    }
   }
 
   Future<String?> _askParentalPinIfNeeded({
@@ -380,7 +214,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                '¿Seguro que quieres borrar tu cuenta? Perderas tu progreso y configuracion guardada.',
+                'Ten presente que si borras tu cuenta, perderas tu progreso y configuracion guardada.',
               ),
               if (requirePassword) ...[
                 const SizedBox(height: 10),
@@ -432,7 +266,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               NebulaTextField(
                 controller: pinController,
-                label: 'PIN (4 a 6 números)',
+                label: 'PIN (4 a 6 numeros)',
                 keyboardType: TextInputType.number,
                 obscureText: true,
                 digitsOnly: true,
@@ -470,7 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
       if (!widget.controller.isValidParentalPinFormat(pin)) {
-        _showSnack('El PIN debe tener 4 a 6 números.', ok: false);
+        _showSnack('El PIN debe tener 4 a 6 numeros.', ok: false);
         return;
       }
 
@@ -545,7 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
       if (!widget.controller.isValidParentalPinFormat(newPin)) {
-        _showSnack('El nuevo PIN debe tener 4 a 6 números.', ok: false);
+        _showSnack('El nuevo PIN debe tener 4 a 6 numeros.', ok: false);
         return;
       }
 
@@ -628,28 +462,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Tu contraseña de respaldo'),
+          title: const Text('Tu contrasena de respaldo'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Esta cuenta de Google es antigua y aun no tiene contraseña local. Crea una ahora para recuperar tu PIN solo con contraseña.',
+                'Esta cuenta de Google es antigua y aun no tiene contrasena local. Crea una ahora para recuperar tu PIN solo con contrasena.',
               ),
               const SizedBox(height: 8),
               const Text(
-                'Tip: cuando quieras entrar, podrás usar Google o correo + contraseña.',
+                'Tip: cuando quieras entrar, podras usar Google o correo + contrasena.',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: passwordController,
-                label: 'Escribe una contraseña (mínimo 6)',
+                label: 'Escribe una contrasena (minimo 6)',
                 obscureText: true,
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: confirmController,
-                label: 'Repite la contraseña',
+                label: 'Repite la contrasena',
                 obscureText: true,
               ),
             ],
@@ -671,11 +505,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final next = passwordController.text.trim();
       final confirm = confirmController.text.trim();
       if (next != confirm) {
-        _showSnack('La contraseña no coincide.', ok: false);
+        _showSnack('La contrasena no coincide.', ok: false);
         return false;
       }
       if (next.length < 6) {
-        _showSnack('La contraseña debe tener al menos 6 caracteres.',
+        _showSnack('La contrasena debe tener al menos 6 caracteres.',
             ok: false);
         return false;
       }
@@ -895,7 +729,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Padding(
                     padding: EdgeInsets.only(top: 6, bottom: 6),
                     child: Text(
-                      'Sin internet: algunos avances podrían no guardarse en la nube.',
+                      'Sin internet: algunos avances podrian no guardarse en la nube.',
                       style: TextStyle(color: NebulaSnack.errorColor),
                     ),
                   ),
@@ -907,7 +741,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         NebulaTextField(
                           controller: _nameController,
-                          label: '¿Cómo te llamas?',
+                          label: 'Como te llamas?',
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
@@ -1004,7 +838,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          '¡Seguridad!',
+                          'Seguridad!',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
@@ -1012,8 +846,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 6),
                         Text(
                           widget.controller.parentalPinEnabled
-                              ? 'PIN de adulto: activo ✅'
-                              : 'PIN de adulto: opcional ✨',
+                              ? 'PIN de adulto: activo'
+                              : 'PIN de adulto: opcional',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
@@ -1041,44 +875,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ],
                         TextButton.icon(
-                          onPressed: _changeEmailNow,
-                          icon: const Icon(Icons.mark_email_read_outlined),
-                          label: Text(
-                            widget.controller.isGoogleOnlyAccount
-                                ? 'Correo administrado por Google'
-                                : 'Cambiar correo',
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _changePasswordNow,
+                          onPressed: _remaining > 0 ? null : _resetPassword,
                           icon: const Icon(Icons.password_rounded),
                           label: Text(
-                            widget.controller.isGoogleOnlyAccount
-                                ? 'Crear contraseña para entrar con correo'
-                                : 'Cambiar contraseña',
+                            _remaining > 0
+                                ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
+                                : 'Restablecer contrasena por correo',
                           ),
                         ),
-                        if (!widget.controller.isGoogleOnlyAccount)
-                          TextButton(
-                            onPressed: _remaining > 0 ? null : _resetPassword,
-                            child: Text(
-                              _remaining > 0
-                                  ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
-                                  : 'Olvidé mi contraseña',
-                            ),
-                          ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 NebulaPrimaryButton(
-                  text: _saving ? '¡Guardando...!' : '¡Guardar cambios!',
+                  text: _saving ? 'Guardando...' : 'Guardar cambios!',
                   onPressed: _canSaveProfile ? _saveProfile : null,
                 ),
                 const SizedBox(height: 12),
                 NebulaSecondaryButton(
-                  text: _loggingOut ? 'Cerrando...' : 'Cerrar sesión',
+                  text: _loggingOut ? 'Cerrando...' : 'Cerrar sesion',
                   onPressed: () async {
                     if (_loggingOut) return;
                     FocusScope.of(context).unfocus();
@@ -1089,8 +905,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (!context.mounted) return;
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              WelcomeScreen(controller: widget.controller),
+                          builder: (_) => WelcomeScreen(
+                            controller: widget.controller,
+                          ),
                         ),
                         (_) => false,
                       );
@@ -1105,13 +922,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                     if (!context.mounted || parentalPin == null) return;
 
-                    final hasLocalPassword = (widget
+                    var hasLocalPassword = (widget
                             .controller.currentUser?.password
                             .trim()
                             .isNotEmpty ??
                         false);
+                    if (!hasLocalPassword &&
+                        widget.controller.isGoogleOnlyAccount) {
+                      final setupOk = await _setupGoogleRecoveryPasswordOnce();
+                      if (!context.mounted || !setupOk) return;
+                      hasLocalPassword = (widget
+                              .controller.currentUser?.password
+                              .trim()
+                              .isNotEmpty ??
+                          false);
+                    }
+                    if (!hasLocalPassword) {
+                      _showSnack(
+                        'Primero crea una contrasena en tu perfil para continuar.',
+                        ok: false,
+                      );
+                      return;
+                    }
+
+                    // Valida PIN primero; solo si pasa, pedimos contrasena.
+                    final precheck =
+                        await widget.controller.requestDeleteAccount(
+                      parentalPin: parentalPin,
+                      password: '',
+                    );
+                    const needsPasswordMessage =
+                        'Escribe tu contrasena actual para borrar la cuenta.';
+                    if (!context.mounted) return;
+                    if (!precheck.ok &&
+                        precheck.message != needsPasswordMessage) {
+                      _showSnack(precheck.message, ok: false);
+                      return;
+                    }
+
                     final password = await _askCurrentPasswordForDelete(
-                      requirePassword: hasLocalPassword,
+                      requirePassword: true,
                     );
                     if (!context.mounted || password == null) return;
 
@@ -1128,8 +978,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (!context.mounted) return;
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              WelcomeScreen(controller: widget.controller),
+                          builder: (_) => WelcomeScreen(
+                            controller: widget.controller,
+                            flashMessage: 'Cuenta eliminada correctamente.',
+                            flashOk: true,
+                          ),
                         ),
                         (_) => false,
                       );

@@ -3,13 +3,21 @@ import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
+import '../widgets/nebula_snack.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({super.key, required this.controller});
+  const WelcomeScreen({
+    super.key,
+    required this.controller,
+    this.flashMessage = '',
+    this.flashOk = true,
+  });
 
   final AppController controller;
+  final String flashMessage;
+  final bool flashOk;
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -19,6 +27,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _navigating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final flash = widget.flashMessage.trim();
+    if (flash.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        NebulaSnack.show(context, message: flash, ok: widget.flashOk);
+      });
+    }
+  }
 
   final _slides = const [
     (

@@ -135,14 +135,23 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
         ),
         if (widget.showValidationStatus &&
             widget.controller.text.isNotEmpty &&
-            !_isValidating &&
-            _validationResult == false &&
             widget.validationMessage != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              widget.validationMessage!,
-              style: const TextStyle(color: _errorColor, fontSize: 12),
+            child: SizedBox(
+              height: 16,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: (!_isValidating && _validationResult == false)
+                    ? Text(
+                        widget.validationMessage!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(color: _errorColor, fontSize: 12),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ),
           ),
       ],
