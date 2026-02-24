@@ -20,6 +20,7 @@ dependencies:
   google_sign_in: ^6.3.0
   internet_connection_checker_plus: ^2.7.2
   crypto: ^3.0.6
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -36,6 +37,10 @@ flutter:
   assets:
     - assets/animations/
     - assets/images/games/
+    - assets/images/facil/
+    - assets/images/medio/
+    - assets/images/dificil/
+    - assets/images/conecta/
 
 flutter_launcher_icons:
   android: true

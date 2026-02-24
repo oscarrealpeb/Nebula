@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
+import 'home_screen.dart';
 
 class EmotionQuestion {
   final String imagePath;
@@ -29,10 +30,6 @@ class EmotionGameScreen extends StatefulWidget {
 
 class _EmotionGameScreenState extends State<EmotionGameScreen> {
 
-  // =============================
-  // CONFIGURACIÓN GENERAL
-  // =============================
-
   static const int totalRounds = 5;
 
   final List<String> allEmotions = [
@@ -40,21 +37,14 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     'Triste',
     'Enojado',
     'Sorprendido',
+    'Asustado',
   ];
-
-  // =============================
-  // IMÁGENES POR DIFICULTAD
-  // =============================
 
   late final List<EmotionQuestion> easyQuestions;
   late final List<EmotionQuestion> mediumQuestions;
   late final List<EmotionQuestion> hardQuestions;
 
   late List<EmotionQuestion> activeQuestions;
-
-  // =============================
-  // ESTADO DEL JUEGO
-  // =============================
 
   EmotionQuestion? currentQuestion;
   List<String> currentOptions = [];
@@ -66,47 +56,331 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
   int totalMistakes = 0;
 
   String? feedbackMessage;
+  bool _isFinishing = false;
+
+
+  // 🔁 REPETICIÓN ESPACIADA (memoria local simple)
+  static final List<EmotionQuestion> reviewPool = [];
 
   @override
   void initState() {
     super.initState();
 
-    // 🔹 EJEMPLOS (luego agrega todas tus imágenes aquí)
     easyQuestions = [
       EmotionQuestion(
-        imagePath: 'assets/images/games/feliz1.jpg',
+        imagePath: 'assets/images/facil/feliz1.jpg',
         correctEmotion: 'Feliz',
       ),
       EmotionQuestion(
-        imagePath: 'assets/images/games/triste1.jpg',
+        imagePath: 'assets/images/facil/feliz2.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz3.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz4.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz5.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz6.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz7.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz9.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/feliz10.jpg',
+        correctEmotion: 'Feliz',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste1.jpg',
         correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste2.jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste3.jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste4.jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste5.jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/triste6.jpg',
+        correctEmotion: 'Triste',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado1.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado2.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado3.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado4.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado5.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado6.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado7.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado8.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado9.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/enojado10.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      
+
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/asustado4.jpg',
+        correctEmotion: 'Asustado',
+      ),
+      
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/asustado6.jpg',
+        correctEmotion: 'Asustado',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido1.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido2.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorpendido3.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido4.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido5.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido6.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido7.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/facil/sorprendido8.jpg',
+        correctEmotion: 'Sorprendido',
       ),
     ];
 
     mediumQuestions = [
       EmotionQuestion(
-        imagePath: 'assets/images/games/situacion1.jpg',
+        imagePath: 'assets/images/medio/s-asustado.jpg',
+        correctEmotion: 'Asustado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-asustado2.jpg',
+        correctEmotion: 'Asustado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-asustado3.jpg',
+        correctEmotion: 'Asustado',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-enojada.jpg',
+        correctEmotion: 'Enojado',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz1.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz2.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz3jpg.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz4.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz5.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz6.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-feliz7.jpg',
+        correctEmotion: 'Feliz',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-sorprendido1.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-sorprendido2.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-sorprendido3.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-triste6.jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-triste7 (recortar).jpg',
+        correctEmotion: 'Triste',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/medio/s-triste8.jpg',
         correctEmotion: 'Triste',
       ),
     ];
 
     hardQuestions = [
       EmotionQuestion(
-        imagePath: 'assets/images/games/compleja1.jpg',
+        imagePath: 'assets/images/dificil/d-asustado1.jpg',
+        correctEmotion: 'Asustado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-asustado2.jpg',
+        correctEmotion: 'Asustado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-asustado3.jpg',
+        correctEmotion: 'Asustado',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-enojado1.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-enojado2.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-enojado3.jpg',
+        correctEmotion: 'Enojado',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-enojado5.jpg',
+        correctEmotion: 'Enojado',
+      ),
+
+
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz.jpg',
         correctEmotion: 'Feliz',
       ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz1.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz3.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz5.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz6.jpg',
+        correctEmotion: 'Feliz',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-feliz7.jpg',
+        correctEmotion: 'Feliz',
+      ),
+
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-sorprendidos.jpg',
+        correctEmotion: 'Sorprendido',
+      ),
+      EmotionQuestion(
+        imagePath: 'assets/images/dificil/d-triste1.jpg',
+        correctEmotion: 'Triste',
+      ),
+
     ];
 
-    // 🔹 Selección por dificultad
     if (widget.difficultyStars == 1) {
-      activeQuestions = easyQuestions;
+      activeQuestions = [...easyQuestions];
     } else if (widget.difficultyStars == 2) {
-      activeQuestions = mediumQuestions;
+      activeQuestions = [...mediumQuestions];
     } else {
-      activeQuestions = hardQuestions;
+      activeQuestions = [...hardQuestions];
+    }
+
+    // 🔁 Insertar preguntas falladas primero
+    if (reviewPool.isNotEmpty) {
+      activeQuestions.insertAll(0, reviewPool);
     }
 
     activeQuestions.shuffle();
+
     loadNextQuestion();
   }
 
@@ -119,7 +393,19 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     currentQuestion =
         activeQuestions[currentRound % activeQuestions.length];
 
-    currentOptions = List.from(allEmotions)..shuffle();
+    // 🔹 Generar solo 4 opciones (incluyendo la correcta)
+    List<String> wrongOptions = allEmotions
+        .where((emotion) => emotion != currentQuestion!.correctEmotion)
+        .toList();
+
+    wrongOptions.shuffle();
+
+    currentOptions = [
+      currentQuestion!.correctEmotion,
+      ...wrongOptions.take(3),
+    ];
+
+    currentOptions.shuffle();
 
     selectedEmotion = null;
     disabledOptions.clear();
@@ -140,50 +426,169 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     if (selectedEmotion == null) return;
 
     if (selectedEmotion == currentQuestion!.correctEmotion) {
+
+      // 🔹 Mensaje positivo verde claro
+      setState(() {
+        feedbackMessage = "¡Muy bien!";
+      });
+
+      await Future.delayed(const Duration(milliseconds: 700));
+
+      // Si estaba en reviewPool y ahora acertó, la quitamos
+      reviewPool.removeWhere((q) =>
+          q.imagePath == currentQuestion!.imagePath);
+
       currentRound++;
-      loadNextQuestion();
+      
+      if (currentRound >= totalRounds) {
+        await finishGame();
+      } else {
+        loadNextQuestion();
+      }
+
     } else {
       totalMistakes++;
+
+      // 🔁 Agregar a revisión si no está ya
+      if (!reviewPool.any(
+          (q) => q.imagePath == currentQuestion!.imagePath)) {
+        reviewPool.add(currentQuestion!);
+      }
 
       setState(() {
         disabledOptions.add(selectedEmotion!);
         selectedEmotion = null;
-        feedbackMessage = "¡Casi lo logras, prueba de nuevo!";
+        feedbackMessage = "¡Casi, prueba de nuevo!";
       });
     }
   }
 
-  void finishGame() async {
-    int baseStars;
+  Future<void> finishGame() async {
+  if (_isFinishing) return;
+  _isFinishing = true;
 
-    if (totalMistakes == 0) {
-      baseStars = 20;
-    } else if (totalMistakes <= 3) {
-      baseStars = 15;
-    } else {
-      baseStars = 10;
-    }
-
-    if (widget.difficultyStars == 2) {
-      baseStars += 5;
-    } else if (widget.difficultyStars == 3) {
-      baseStars += 10;
-    }
-
-    await widget.controller.addStars(baseStars);
-
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
+  int baseStars;
+  if (totalMistakes == 0) {
+    baseStars = 20;
+  } else if (totalMistakes <= 3) {
+    baseStars = 15;
+  } else {
+    baseStars = 10;
   }
 
-  // =============================
-  // BUILD
-  // =============================
+  if (widget.difficultyStars == 2) {
+    baseStars += 5;
+  } else if (widget.difficultyStars == 3) {
+    baseStars += 10;
+  }
+
+  try {
+    await widget.controller
+        .addStars(baseStars)
+        .timeout(const Duration(seconds: 2));
+  } catch (e) {
+    debugPrint('finishGame/addStars error: $e');
+  }
+
+  if (!mounted) return;
+
+  // 🔹 CUADRITO TRANQUILO
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => Dialog(
+      backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Ganaste $baseStars estrellas ⭐",
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Terminaste el juego",
+              style: TextStyle(
+                fontSize: 18,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  // 🔹 Espera breve para que lo lean
+  await Future.delayed(const Duration(seconds: 2));
+
+  if (!mounted) return;
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(
+      builder: (_) => HomeScreen(controller: widget.controller),
+    ),
+    (route) => false,
+  );
+}
+
+  Future<bool> _onWillPop() async {
+  if (_isFinishing) return false;
+
+  final shouldExit = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: const Text(
+        "¿Salir del juego?",
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: const Text(
+        "Si sales ahora, perderás el progreso de esta partida.",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text("Cancelar"),
+        ),
+        ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red.shade300,
+          foregroundColor: Colors.white, // texto blanco
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: () => Navigator.of(context).pop(true),
+        child: const Text(
+          "Salir",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      ],
+    ),
+  );
+
+  return shouldExit ?? false;
+}
+
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.gameName),
       ),
@@ -193,7 +598,6 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
         child: Column(
           children: [
 
-            // 🔹 Imagen
             Expanded(
               flex: 5,
               child: Center(
@@ -220,10 +624,10 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
                 ),
               ),
             ),
+        
 
             const SizedBox(height: 16),
 
-            // 🔹 Instrucción
             const Text(
               'Elige cómo crees que se siente 😊',
               textAlign: TextAlign.center,
@@ -236,100 +640,100 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
 
             const SizedBox(height: 8),
 
-            // 🔹 Feedback si se equivoca
+            // 🔹 Feedback dinámico
             if (feedbackMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: feedbackMessage == "¡Muy bien!"
+                        ? Colors.green.shade100
+                        : Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Text(
                     feedbackMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20, // 👈 MÁS GRANDE
+                    style: TextStyle(
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.red,
+                      color: feedbackMessage == "¡Muy bien!"
+                          ? Colors.green
+                          : Colors.red,
                     ),
                   ),
                 ),
               ),
-            ),
 
-            // 🔹 Opciones
             Expanded(
-            flex: 4,
-            child: GridView.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: currentOptions.map((emotion) {
-                final bool isDisabled = disabledOptions.contains(emotion);
-                final bool isSelected = selectedEmotion == emotion;
+              flex: 4,
+              child: GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.5,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: currentOptions.map((emotion) {
+                  final bool isDisabled = disabledOptions.contains(emotion);
+                  final bool isSelected = selectedEmotion == emotion;
 
-                return Material(
-                  color: isDisabled
-                      ? Colors.grey.shade300
-                      : isSelected
-                          ? widget.controller.accentColor
-                          : widget.controller.accentColor
-                              .withAlpha((0.55 * 255).toInt()),
-                  borderRadius: BorderRadius.circular(14),
-                  child: InkWell(
+                  return Material(
+                    color: isDisabled
+                        ? Colors.grey.shade300
+                        : isSelected
+                            ? widget.controller.accentColor
+                            : widget.controller.accentColor
+                                .withAlpha((0.55 * 255).toInt()),
                     borderRadius: BorderRadius.circular(14),
-                    onTap: isDisabled ? null : () => selectEmotion(emotion),
-                    child: Center(
-                      child: Text(
-                        emotion,
-                        style: TextStyle(
-                          color: isDisabled
-                              ? Colors.grey
-                              : Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: isDisabled ? null : () => selectEmotion(emotion),
+                      child: Center(
+                        child: Text(
+                          emotion,
+                          style: TextStyle(
+                            color: isDisabled
+                                ? Colors.grey
+                                : Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
 
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-            // 🔹 Botón confirmar
             Center(
-            child: SizedBox(
-              width: 220,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.controller.accentColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                width: 220,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.controller.accentColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                ),
-                onPressed: confirmAnswer,
-                child: const Text(
-                  'Confirmar',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  onPressed: _isFinishing ? null : confirmAnswer,
+                  child: const Text(
+                    'Confirmar',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           ],
         ),
+      ),
       ),
     );
   }

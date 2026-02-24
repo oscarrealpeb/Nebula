@@ -12,6 +12,7 @@ import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
 import 'settings/settings_screen.dart';
 import 'emotion_screen.dart';
+import 'connect_screen.dart';
 
 // const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
 // const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
@@ -39,12 +40,27 @@ class HomeScreen extends StatelessWidget {
         );
         break;
       case 'Conecta las imagenes':
-        screen = GamePlaceholderScreen(
-          controller: controller,
-          gameName: gameName,
-          difficultyStars: stars,
-        );
-        break;
+      GameDifficulty difficulty;
+
+      switch (stars) {
+        case 1:
+          difficulty = GameDifficulty.easy;
+          break;
+        case 2:
+          difficulty = GameDifficulty.medium;
+          break;
+        case 3:
+          difficulty = GameDifficulty.hard;
+          break;
+        default:
+          difficulty = GameDifficulty.easy;
+      }
+
+      screen = ConnectSoundGameScreen(
+        controller: controller,
+        difficulty: difficulty,
+      );
+      break;
       case 'Di la palabra':
         screen = GamePlaceholderScreen(
           controller: controller,

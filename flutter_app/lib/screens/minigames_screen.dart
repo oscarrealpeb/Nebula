@@ -117,10 +117,10 @@ Widget build(BuildContext context) {
                       bottom: 0,
                       right: 0,
                       child: SizedBox(
-                        width: 120,
-                        height: 120,
+                        width: 140,
+                        height: 140,
                         child: Lottie.asset(
-                          'assets/animations/minijuegos.json',
+                          'assets/animations/minijuegos1.json',
                           repeat: true,
                           fit: BoxFit.contain,
                         ),
