@@ -96,8 +96,8 @@ class SettingsScreen extends StatelessWidget {
               bottom: 10,
               left: 10,
               child: SizedBox(
-                width: 160,
-                height: 160,
+                width: 180,
+                height: 180,
                 child: Lottie.asset(
                   'assets/animations/settings.json', // 👈 cambia si tu archivo tiene otro nombre
                   repeat: true,

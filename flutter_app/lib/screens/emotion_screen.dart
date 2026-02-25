@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import 'home_screen.dart';
+import 'package:lottie/lottie.dart';
+
 
 class EmotionQuestion {
   final String imagePath;
@@ -514,13 +516,17 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            const Text(
-              "Terminaste el juego",
-              style: TextStyle(
-                fontSize: 18,
+
+            const SizedBox(height: 18),
+
+            /// ✨ ANIMACIÓN ESTRELLAS
+            SizedBox(
+              height: 140,
+              child: Lottie.asset(
+                'assets/animations/estrellas.json',
+                repeat: true,
+                fit: BoxFit.contain,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -528,8 +534,8 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     ),
   );
 
-  // 🔹 Espera breve para que lo lean
-  await Future.delayed(const Duration(seconds: 2));
+  /// 🔹 Espera breve para que lo lean
+  await Future.delayed(const Duration(seconds: 3));
 
   if (!mounted) return;
 
@@ -597,6 +603,19 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+
+            // 🔹 NUEVO TEXTO GUÍA
+            const Text(
+              "Mira la imagen:",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+
+            const SizedBox(height: 12),
 
             Expanded(
               flex: 5,
@@ -671,7 +690,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.5,
+                childAspectRatio: 1.7,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: currentOptions.map((emotion) {
                   final bool isDisabled = disabledOptions.contains(emotion);
