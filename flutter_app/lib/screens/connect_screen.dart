@@ -61,11 +61,35 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   int _totalMistakes = 0;
 
   final List<String> _allImages = [
-    'assets/images/conecta/perro.jpg',
-    'assets/images/conecta/gato.jpg',
-    'assets/images/conecta/pajaro.jpg',
+    'assets/images/conecta/arpa.jpg',
+    'assets/images/conecta/ballena.jpg',
+    'assets/images/conecta/buho.jpg',
+    'assets/images/conecta/burro.jpg',
     'assets/images/conecta/caballo.jpg',
-    'assets/images/conecta/campana.jpg',
+    'assets/images/conecta/delfin.jpg',
+    'assets/images/conecta/elefante.jpg',
+    'assets/images/conecta/gallo.jpg',
+    'assets/images/conecta/gato.jpg',
+    'assets/images/conecta/grillo.jpg',
+    'assets/images/conecta/guitarra.jpg',
+    'assets/images/conecta/pato.jpg',
+    'assets/images/conecta/perro.jpg',
+    'assets/images/conecta/piano.jpg',
+    'assets/images/conecta/vaca.jpg',
+    'assets/images/conecta/violin.jpg',
+    'assets/images/conecta/olas.jpg',
+    'assets/images/conecta/aspiradora.jpg',
+    'assets/images/conecta/microondas.jpg',
+    'assets/images/conecta/puerta.jpg',
+    'assets/images/conecta/bebe.jpg',
+    'assets/images/conecta/aplausos.jpg',
+    'assets/images/conecta/claxon.jpg',
+    'assets/images/conecta/centro_comercial.jpg',
+    'assets/images/conecta/restaurante.jpg',
+    'assets/images/conecta/niños.jpg',
+    'assets/images/conecta/tormenta.jpg',
+    'assets/images/conecta/coro.jpg',
+
   ];
 
   @override
@@ -81,22 +105,124 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         return [
           SoundItem(
               category: 'animales',
+              soundAsset: 'sounds/arpa.mp3',
+              correctImage: 'assets/images/conecta/arpa.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/ballena.mp3',
+              correctImage: 'assets/images/conecta/ballena.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/buho.mp3',
+              correctImage: 'assets/images/conecta/buho.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/burro.mp3',
+              correctImage: 'assets/images/conecta/burro.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/caballo.mp3',
+              correctImage: 'assets/images/conecta/caballo.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/delfin.mp3',
+              correctImage: 'assets/images/conecta/delfin.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/elefante.mp3',
+              correctImage: 'assets/images/conecta/elefante.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/gallo.mp3',
+              correctImage: 'assets/images/conecta/gallo.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/gato.mp3',
+              correctImage: 'assets/images/conecta/gato.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/grillo.mp3',
+              correctImage: 'assets/images/conecta/grillo.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/guitarra.mp3',
+              correctImage: 'assets/images/conecta/guitarra.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/pato.mp3',
+              correctImage: 'assets/images/conecta/pato.jpg'),
+          SoundItem(
+              category: 'animales',
               soundAsset: 'sounds/perro.mp3',
               correctImage: 'assets/images/conecta/perro.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/piano.mp3',
+              correctImage: 'assets/images/conecta/piano.jpg'),
+          SoundItem(
+              category: 'animales',
+              soundAsset: 'sounds/vaca.mp3',
+              correctImage: 'assets/images/conecta/vaca.jpg'),
+          SoundItem(
+          category: 'animales',
+          soundAsset: 'sounds/violin.mp3',
+          correctImage: 'assets/images/conecta/violin.jpg'),
+              
+
         ];
       case GameDifficulty.medium:
         return [
           SoundItem(
               category: 'objetos',
-              soundAsset: 'sounds/perro.mp3',
-              correctImage: 'assets/images/conecta/perro.jpg'),
+              soundAsset: 'sounds/olas.mp3',
+              correctImage: 'assets/images/conecta/olas.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/aspiradora.mp3',
+              correctImage: 'assets/images/conecta/aspiradora.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/microondas.mp3',
+              correctImage: 'assets/images/conecta/microondas.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/puerta.mp3',
+              correctImage: 'assets/images/conecta/puerta.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/bebe.mp3',
+              correctImage: 'assets/images/conecta/bebe.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/aplausos.mp3',
+              correctImage: 'assets/images/conecta/aplausos.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/claxon.mp3',
+              correctImage: 'assets/images/conecta/claxon.jpg'),
         ];
       case GameDifficulty.hard:
         return [
           SoundItem(
-              category: 'entorno',
-              soundAsset: 'sounds/perro.mp3',
-              correctImage: 'assets/images/conecta/perro.jpg'),
+              category: 'objetos',
+              soundAsset: 'sounds/niños.mp3',
+              correctImage: 'assets/images/conecta/niños.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/restaurante.mp3',
+              correctImage: 'assets/images/conecta/restaurante.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/centro_comercial.mp3',
+              correctImage: 'assets/images/conecta/centro_comercial.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/tormenta.mp3',
+              correctImage: 'assets/images/conecta/tormenta.jpg'),
+          SoundItem(
+              category: 'objetos',
+              soundAsset: 'sounds/coro.mp3',
+              correctImage: 'assets/images/conecta/coro.jpg'),
         ];
     }
   }
@@ -291,11 +417,63 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     super.dispose();
   }
 
+
+  Future<bool> _onWillPop() async {
+  if (_isFinishing) return false;
+
+  final shouldExit = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: const Text(
+        "¿Salir del juego?",
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: const Text(
+        "Si sales ahora, perderás el progreso de esta partida.",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text("Cancelar"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red.shade300,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: () async {
+            await _player.stop(); // 🔊 detenemos audio
+            if (context.mounted) {
+              Navigator.of(context).pop(true);
+            }
+          },
+          child: const Text(
+            "Salir",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return shouldExit ?? false;
+}
+  
+
+
   @override
 Widget build(BuildContext context) {
   final options = _currentOptions;
 
-  return Scaffold(
+  return WillPopScope(
+  onWillPop: _onWillPop,
+  child: Scaffold(
     appBar: AppBar(
       title: const Text('Conecta el sonido'),
     ),
@@ -475,6 +653,8 @@ Widget build(BuildContext context) {
         ],
       ),
     ),
+    ),
   );
 }
 }
+
