@@ -75,7 +75,7 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: 14),
 
                 _SettingsTile(
-                  title: 'Personalizacion',
+                  title: 'Personalización',
                   subtitle: 'Sube fotos divertidas para animales y objetos.',
                   icon: Icons.auto_awesome_outlined,
                   onTap: () {

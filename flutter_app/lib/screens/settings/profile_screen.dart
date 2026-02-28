@@ -218,11 +218,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               if (requirePassword) ...[
                 const SizedBox(height: 10),
-                const Text('Escribe tu contrasena actual para continuar.'),
+                const Text('Escribe tu contraseña actual para continuar.'),
                 const SizedBox(height: 10),
                 NebulaTextField(
                   controller: passwordController,
-                  label: 'Contrasena actual',
+                  label: 'contraseña actual',
                   obscureText: true,
                 ),
               ],
@@ -243,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (confirmed != true) return null;
       final typed = passwordController.text.trim();
       if (requirePassword && typed.isEmpty) {
-        _showSnack('Debes escribir tu contrasena para borrar la cuenta.',
+        _showSnack('Debes escribir tu contraseña para borrar la cuenta.',
             ok: false);
         return null;
       }
@@ -462,28 +462,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Tu contrasena de respaldo'),
+          title: const Text('Tu contraseña de respaldo'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Esta cuenta de Google es antigua y aun no tiene contrasena local. Crea una ahora para recuperar tu PIN solo con contrasena.',
+                'Esta cuenta de Google es antigua y aun no tiene contraseña local. Crea una ahora para recuperar tu PIN solo con contraseña.',
               ),
               const SizedBox(height: 8),
               const Text(
-                'Tip: cuando quieras entrar, podras usar Google o correo + contrasena.',
+                'Tip: cuando quieras entrar, podras usar Google o correo + contraseña.',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: passwordController,
-                label: 'Escribe una contrasena (minimo 6)',
+                label: 'Escribe una contraseña (minimo 6)',
                 obscureText: true,
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: confirmController,
-                label: 'Repite la contrasena',
+                label: 'Repite la contraseña',
                 obscureText: true,
               ),
             ],
@@ -505,11 +505,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final next = passwordController.text.trim();
       final confirm = confirmController.text.trim();
       if (next != confirm) {
-        _showSnack('La contrasena no coincide.', ok: false);
+        _showSnack('La contraseña no coincide.', ok: false);
         return false;
       }
       if (next.length < 6) {
-        _showSnack('La contrasena debe tener al menos 6 caracteres.',
+        _showSnack('La contraseña debe tener al menos 6 caracteres.',
             ok: false);
         return false;
       }
@@ -539,12 +539,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Confirma la contrasena de la cuenta y elige un PIN nuevo.',
+                'Confirma la contraseña de la cuenta y elige un PIN nuevo.',
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: passwordController,
-                label: 'Contrasena de la cuenta',
+                label: 'contraseña de la cuenta',
                 obscureText: true,
               ),
               const SizedBox(height: 10),
@@ -880,7 +880,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: Text(
                             _remaining > 0
                                 ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
-                                : 'Restablecer contrasena por correo',
+                                : 'Restablecer contraseña por correo',
                           ),
                         ),
                       ],
@@ -894,7 +894,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 NebulaSecondaryButton(
-                  text: _loggingOut ? 'Cerrando...' : 'Cerrar sesion',
+                  text: _loggingOut ? 'Cerrando...' : 'Cerrar sesión',
                   onPressed: () async {
                     if (_loggingOut) return;
                     FocusScope.of(context).unfocus();
@@ -939,20 +939,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                     if (!hasLocalPassword) {
                       _showSnack(
-                        'Primero crea una contrasena en tu perfil para continuar.',
+                        'Primero crea una contraseña en tu perfil para continuar.',
                         ok: false,
                       );
                       return;
                     }
 
-                    // Valida PIN primero; solo si pasa, pedimos contrasena.
+                    // Valida PIN primero; solo si pasa, pedimos contraseña.
                     final precheck =
                         await widget.controller.requestDeleteAccount(
                       parentalPin: parentalPin,
                       password: '',
                     );
                     const needsPasswordMessage =
-                        'Escribe tu contrasena actual para borrar la cuenta.';
+                        'Escribe tu contraseña actual para borrar la cuenta.';
                     if (!context.mounted) return;
                     if (!precheck.ok &&
                         precheck.message != needsPasswordMessage) {

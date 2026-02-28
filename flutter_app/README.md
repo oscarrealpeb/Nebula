@@ -6,12 +6,12 @@ Base funcional para Android en Flutter, alineada al flujo descrito (welcome, aut
 
 - Flujo de onboarding con slides y dots.
 - Registro y login con unicidad de correo/username.
-- Sesion persistente local (no pide login al reabrir).
+- sesión persistente local (no pide login al reabrir).
 - Home con juegos, minijuegos y escalera de planetas.
 - Configuracion: Perfil, Preferencias y Personalizacion.
 - Cooldowns:
-  - Login -> "Olvide mi contrasena": 2 minutos.
-  - Perfil -> reset de contrasena: 5 minutos.
+  - Login -> "Olvide mi contraseña": 2 minutos.
+  - Perfil -> reset de contraseña: 5 minutos.
 - Base offline/local con `shared_preferences`.
 
 ## Pendiente de integrar

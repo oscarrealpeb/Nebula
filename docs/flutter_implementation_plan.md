@@ -4,7 +4,7 @@
 
 - Se creo un modulo nuevo en `flutter_app/` para no romper el prototipo web existente.
 - Estado global con `AppController` (`ChangeNotifier`) y persistencia local con `shared_preferences`.
-- Flujo de sesion persistente: si el usuario ya inicio sesion, abre directo en Home.
+- Flujo de sesión persistente: si el usuario ya inicio sesión, abre directo en Home.
 - Registro/Login locales:
   - correo y username unicos,
   - login por correo o username.
@@ -40,7 +40,7 @@
 ## Requisitos cubiertos de tu descripcion
 
 - Bordes redondeados y estilo uniforme.
-- Persistencia de sesion.
+- Persistencia de sesión.
 - Unicidad de correo/apodo.
 - Mensajes de recuperacion de cuenta con anti-spam temporal.
 - Sistema de planetas con rangos y progreso.

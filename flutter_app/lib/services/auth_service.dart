@@ -267,7 +267,7 @@ class AuthService {
       return const ServiceResult(
         ok: false,
         message:
-            'Completa todos los campos. La contrasena debe tener al menos 6 caracteres.',
+            'Completa todos los campos. La contraseña debe tener al menos 6 caracteres.',
       );
     }
 
@@ -307,7 +307,7 @@ class AuthService {
         return const ServiceResult(
           ok: false,
           message:
-              'Ese correo ya existe con Google. Entra con Google y luego crea una contrasena desde tu perfil si quieres entrar tambien con contrasena.',
+              'Ese correo ya existe con Google. Entra con Google y luego crea una contraseña desde tu perfil si quieres entrar tambien con contraseña.',
         );
       }
       return const ServiceResult(
@@ -345,7 +345,7 @@ class AuthService {
         if (e.code == 'weak-password') {
           return const ServiceResult(
             ok: false,
-            message: 'La contrasena es muy debil. Usa al menos 6 caracteres.',
+            message: 'La contraseña es muy debil. Usa al menos 6 caracteres.',
           );
         }
         if (e.code == 'invalid-email') {
@@ -428,7 +428,7 @@ class AuthService {
     if (needle.isEmpty || secret.isEmpty) {
       return const ServiceResult(
         ok: false,
-        message: 'Escribe tu usuario/correo y tu contrasena para entrar.',
+        message: 'Escribe tu usuario/correo y tu contraseña para entrar.',
       );
     }
 
@@ -466,7 +466,7 @@ class AuthService {
       return const ServiceResult(
         ok: false,
         message:
-            'Esta cuenta entra con Google. Usa "Entrar con Google" o crea una contrasena desde tu perfil.',
+            'Esta cuenta entra con Google. Usa "Entrar con Google" o crea una contraseña desde tu perfil.',
       );
     }
 
@@ -733,7 +733,7 @@ class AuthService {
       _clearPendingGoogleConfirmation();
       return ServiceResult(
         ok: false,
-        message: 'Error al iniciar sesion con Google: $e',
+        message: 'Error al iniciar sesión con Google: $e',
       );
     }
   }
@@ -772,7 +772,7 @@ class AuthService {
         _clearPendingGoogleConfirmation();
         return const ServiceResult(
           ok: false,
-          message: 'No pudimos crear la sesion de Google.',
+          message: 'No pudimos crear la sesión de Google.',
         );
       }
 
@@ -964,7 +964,7 @@ class AuthService {
             } catch (_) {}
             return const ServiceResult(
               ok: false,
-              message: 'La contrasena debe tener al menos 6 caracteres.',
+              message: 'La contraseña debe tener al menos 6 caracteres.',
             );
           }
 
@@ -995,7 +995,7 @@ class AuthService {
                 return ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos guardar tu contrasena local: ${inner.message ?? inner.code}',
+                      'No pudimos guardar tu contraseña local: ${inner.message ?? inner.code}',
                 );
               }
             } else {
@@ -1011,13 +1011,13 @@ class AuthService {
                 return const ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos crear la contrasena local porque ese correo ya esta vinculado en otra cuenta.',
+                      'No pudimos crear la contraseña local porque ese correo ya esta vinculado en otra cuenta.',
                 );
               }
               return ServiceResult(
                 ok: false,
                 message:
-                    'No pudimos crear tu contrasena local: ${e.message ?? e.code}',
+                    'No pudimos crear tu contraseña local: ${e.message ?? e.code}',
               );
             }
           }
@@ -1133,7 +1133,7 @@ class AuthService {
           } catch (_) {}
           return const ServiceResult(
             ok: false,
-            message: 'La contrasena debe tener al menos 6 caracteres.',
+            message: 'La contraseña debe tener al menos 6 caracteres.',
           );
         }
 
@@ -1165,7 +1165,7 @@ class AuthService {
                 return ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos guardar tu contrasena local: ${inner.message ?? inner.code}',
+                      'No pudimos guardar tu contraseña local: ${inner.message ?? inner.code}',
                 );
               }
             } else {
@@ -1181,13 +1181,13 @@ class AuthService {
                 return const ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos crear la contrasena local porque ese correo ya esta vinculado en otra cuenta.',
+                      'No pudimos crear la contraseña local porque ese correo ya esta vinculado en otra cuenta.',
                 );
               }
               return ServiceResult(
                 ok: false,
                 message:
-                    'No pudimos crear tu contrasena local: ${e.message ?? e.code}',
+                    'No pudimos crear tu contraseña local: ${e.message ?? e.code}',
               );
             }
           }
@@ -1239,7 +1239,7 @@ class AuthService {
 
       return ServiceResult(
         ok: true,
-        message: 'Sesion iniciada con Google.',
+        message: 'sesión iniciada con Google.',
         data: signedUser,
       );
     } catch (e) {
@@ -1279,7 +1279,7 @@ class AuthService {
     if (trimmed.length < 6) {
       return const ServiceResult(
         ok: false,
-        message: 'La contrasena debe tener al menos 6 caracteres.',
+        message: 'La contraseña debe tener al menos 6 caracteres.',
       );
     }
 
@@ -1301,12 +1301,12 @@ class AuthService {
 
       return const ServiceResult(
         ok: true,
-        message: 'Contrasena establecida correctamente.',
+        message: 'contraseña establecida correctamente.',
       );
     } catch (e) {
       return ServiceResult(
         ok: false,
-        message: 'Error al establecer contrasena: $e',
+        message: 'Error al establecer contraseña: $e',
       );
     }
   }
@@ -1331,7 +1331,7 @@ class AuthService {
     if (trimmed.length < 6) {
       return const ServiceResult(
         ok: false,
-        message: 'La contrasena debe tener al menos 6 caracteres.',
+        message: 'La contraseña debe tener al menos 6 caracteres.',
       );
     }
 
@@ -1339,7 +1339,7 @@ class AuthService {
     if (firebaseUser == null) {
       return const ServiceResult(
         ok: false,
-        message: 'No hay sesion valida en Firebase.',
+        message: 'No hay sesión valida en Firebase.',
       );
     }
 
@@ -1399,7 +1399,7 @@ class AuthService {
             return const ServiceResult(
               ok: false,
               message:
-                  'Ese correo ya esta vinculado con contrasena en otra cuenta.',
+                  'Ese correo ya esta vinculado con contraseña en otra cuenta.',
             );
           } else {
             rethrow;
@@ -1412,19 +1412,19 @@ class AuthService {
       _currentUser = updated;
       return ServiceResult(
         ok: true,
-        message: 'Contrasena de respaldo creada correctamente.',
+        message: 'contraseña de respaldo creada correctamente.',
         data: updated,
       );
     } on FirebaseAuthException catch (e) {
       return ServiceResult(
         ok: false,
         message:
-            'No pudimos crear la contrasena de respaldo: ${e.message ?? e.code}',
+            'No pudimos crear la contraseña de respaldo: ${e.message ?? e.code}',
       );
     } catch (e) {
       return ServiceResult(
         ok: false,
-        message: 'No pudimos crear la contrasena de respaldo: $e',
+        message: 'No pudimos crear la contraseña de respaldo: $e',
       );
     }
   }
@@ -1438,7 +1438,7 @@ class AuthService {
     return const ServiceResult(
       ok: false,
       message:
-          'El cambio de contrasena en la app esta deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseña en la app esta deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1679,7 +1679,7 @@ class AuthService {
     if (typedPassword.isEmpty) {
       return const ServiceResult(
         ok: false,
-        message: 'Escribe la contrasena de tu cuenta para restablecer el PIN.',
+        message: 'Escribe la contraseña de tu cuenta para restablecer el PIN.',
       );
     }
 
@@ -1688,7 +1688,7 @@ class AuthService {
       if (firebaseUser == null) {
         return const ServiceResult(
           ok: false,
-          message: 'No hay sesion valida en Firebase para verificar la cuenta.',
+          message: 'No hay sesión valida en Firebase para verificar la cuenta.',
         );
       }
       try {
@@ -1704,7 +1704,7 @@ class AuthService {
             e.code == 'invalid-email') {
           return const ServiceResult(
             ok: false,
-            message: 'La contrasena de la cuenta es incorrecta.',
+            message: 'La contraseña de la cuenta es incorrecta.',
           );
         }
         return ServiceResult(
@@ -1719,7 +1719,7 @@ class AuthService {
     )) {
       return const ServiceResult(
         ok: false,
-        message: 'La contrasena de la cuenta es incorrecta.',
+        message: 'La contraseña de la cuenta es incorrecta.',
       );
     }
 
@@ -1803,7 +1803,7 @@ class AuthService {
       if (firebaseUser == null) {
         return const ServiceResult(
           ok: false,
-          message: 'No hay sesion valida en Firebase para verificar Google.',
+          message: 'No hay sesión valida en Firebase para verificar Google.',
         );
       }
       await firebaseUser.reauthenticateWithCredential(credential);
@@ -1853,14 +1853,14 @@ class AuthService {
       return const ServiceResult(
         ok: false,
         message:
-            'Primero crea una contrasena local desde tu perfil para poder borrar la cuenta.',
+            'Primero crea una contraseña local desde tu perfil para poder borrar la cuenta.',
       );
     }
 
     if (_currentUser!.password.trim().isNotEmpty && password.trim().isEmpty) {
       return const ServiceResult(
         ok: false,
-        message: 'Escribe tu contrasena actual para borrar la cuenta.',
+        message: 'Escribe tu contraseña actual para borrar la cuenta.',
       );
     }
     if (_currentUser!.password.trim().isNotEmpty &&
@@ -1870,7 +1870,7 @@ class AuthService {
         )) {
       return const ServiceResult(
         ok: false,
-        message: 'Contrasena incorrecta.',
+        message: 'contraseña incorrecta.',
       );
     }
 
@@ -1925,7 +1925,7 @@ class AuthService {
         _clearPendingGoogleLink();
         return const ServiceResult(
           ok: false,
-          message: 'No pudimos recuperar la sesion de Google para vincular.',
+          message: 'No pudimos recuperar la sesión de Google para vincular.',
         );
       }
 
@@ -1934,7 +1934,7 @@ class AuthService {
           !_passwordMatches(stored: localUser.password, input: typed)) {
         return const ServiceResult(
           ok: false,
-          message: 'La contrasena actual no es correcta.',
+          message: 'La contraseña actual no es correcta.',
         );
       }
 
@@ -2003,7 +2003,7 @@ class AuthService {
 
       return const ServiceResult(
         ok: true,
-        message: 'Cuenta vinculada. Ya puedes entrar con Google o contrasena.',
+        message: 'Cuenta vinculada. Ya puedes entrar con Google o contraseña.',
       );
     } catch (e) {
       return ServiceResult(
@@ -2148,7 +2148,7 @@ class AuthService {
       }
       return ServiceResult(
         ok: false,
-        message: 'Error al iniciar sesion con Firebase: ${e.message ?? e.code}',
+        message: 'Error al iniciar sesión con Firebase: ${e.message ?? e.code}',
       );
     } catch (e) {
       return ServiceResult(
@@ -2195,7 +2195,7 @@ class AuthService {
           return const ServiceResult(
             ok: false,
             message:
-                'Tu contrasena no coincide con Firebase. Prueba recuperar contrasena.',
+                'Tu contraseña no coincide con Firebase. Prueba recuperar contraseña.',
           );
         } else {
           return ServiceResult(
@@ -2210,7 +2210,7 @@ class AuthService {
       if (firebaseUser == null) {
         return const ServiceResult(
           ok: false,
-          message: 'No pudimos recuperar tu sesion en Firebase.',
+          message: 'No pudimos recuperar tu sesión en Firebase.',
         );
       }
       final verificationGate = await _enforceVerifiedEmailForPasswordUser(

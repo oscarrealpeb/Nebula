@@ -84,7 +84,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Personalizacion'),
+        title: const Text('Personalización'),
       ),
       body: CosmicBackground(
         child: ListView(

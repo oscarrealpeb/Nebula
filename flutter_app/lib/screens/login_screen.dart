@@ -337,7 +337,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Estas entrando con $email. Elige tu apodo y crea una contrasena para entrar luego con Google o con correo y contrasena.',
+                      'Estas entrando con $email. Elige tu apodo y crea una contraseña para entrar luego con Google o con correo y contraseña.',
                     ),
                     const SizedBox(height: 10),
                     NebulaTextField(
@@ -363,14 +363,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: passwordController,
-                      label: 'Contrasena (minimo 6)',
+                      label: 'contraseña (minimo 6)',
                       obscureText: true,
                       onChanged: (_) => setLocal(() {}),
                     ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
-                      label: 'Repite la contrasena',
+                      label: 'Repite la contraseña',
                       obscureText: true,
                       onChanged: (_) => setLocal(() {}),
                     ),
@@ -380,7 +380,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'La contrasena debe tener al menos 6 caracteres.',
+                          'La contraseña debe tener al menos 6 caracteres.',
                           style: TextStyle(
                             color: Color(0xFFFF6E7A),
                             fontSize: 12,
@@ -394,7 +394,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Las contrasenas no coinciden.',
+                          'Las contraseñas no coinciden.',
                           style: TextStyle(
                             color: Color(0xFFFF6E7A),
                             fontSize: 12,
@@ -467,12 +467,12 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Ya existe una cuenta con ese correo. Escribe tu contrasena actual para vincular Google.',
+                'Ya existe una cuenta con ese correo. Escribe tu contraseña actual para vincular Google.',
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: passwordController,
-                label: 'Contrasena actual',
+                label: 'contraseña actual',
                 obscureText: true,
               ),
             ],
@@ -562,7 +562,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 12),
                       NebulaTextField(
                         controller: _passwordController,
-                        label: 'Contrasena',
+                        label: 'Contraseña',
                         obscureText: true,
                       ),
                       const SizedBox(height: 18),
@@ -593,7 +593,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerLeft,
                         child: TextButton(
                           onPressed: _requestReset,
-                          child: const Text('Ayuda con mi contrasena'),
+                          child: const Text('Ayuda con mi contraseña'),
                         ),
                       ),
                       if (_remaining > 0)
