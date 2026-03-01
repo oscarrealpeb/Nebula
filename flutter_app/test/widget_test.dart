@@ -16,8 +16,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nebula'), findsOneWidget);
-    expect(find.text('¡Quiero entrar!'), findsOneWidget);
-    expect(find.text('¡Crear mi cuenta!'), findsOneWidget);
+    expect(find.text('Iniciar sesion'), findsOneWidget);
+    expect(find.text('Crear cuenta'), findsOneWidget);
 
     controller.dispose();
   });

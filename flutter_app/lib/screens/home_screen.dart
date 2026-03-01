@@ -1,244 +1,326 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-// import '../core/theme/color_utils.dart';
 import '../core/data/avatar_catalog.dart';
 import '../core/data/planet_ladder.dart';
-// import '../widgets/cosmic_background.dart';
+import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
+import 'child_profile_setup_screen.dart';
+import 'connect_screen.dart';
+import 'emotion_screen.dart';
 import 'explore_learn_screen.dart';
 import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
 import 'settings/settings_screen.dart';
-import 'emotion_screen.dart';
-import 'connect_screen.dart';
 
-// const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255); // fondo
-// const Color cardLilac = Color.fromARGB(255, 143, 115, 198);       // cards
-
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.controller});
 
   final AppController controller;
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _checkedChildProfile = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _redirectIfMissingChildProfile();
+    });
+  }
+
+  Future<void> _redirectIfMissingChildProfile() async {
+    if (_checkedChildProfile || !mounted) return;
+    _checkedChildProfile = true;
+    if (!widget.controller.hasChildProfile) {
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ChildProfileSetupScreen(
+            controller: widget.controller,
+            isMandatory: true,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<bool> _guardGameAccess(
+    BuildContext context, {
+    required String gameKey,
+  }) async {
+    final check = widget.controller.canLaunchGame(gameKey);
+    if (!check.ok) {
+      await NebulaSnack.show(context, message: check.message, ok: false);
+      return false;
+    }
+
+    final sync = await widget.controller.syncGlobalGameContentForPlay();
+    if (!context.mounted) return false;
+    if (!sync.ok) {
+      await NebulaSnack.show(context, message: sync.message, ok: false);
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _openGame(
     BuildContext context, {
     required String gameName,
+    required String gameKey,
   }) async {
+    final allowed = await _guardGameAccess(context, gameKey: gameKey);
+    if (!context.mounted || !allowed) return;
+
     final stars = await showStarDifficultySheet(context);
     if (!context.mounted || stars == null) return;
 
     Widget screen;
-    
-    switch (gameName) {
-      case 'Descubre la emocion':
+    switch (gameKey) {
+      case 'descubre_emocion':
         screen = EmotionGameScreen(
-          controller: controller,
+          controller: widget.controller,
           gameName: gameName,
           difficultyStars: stars,
         );
         break;
-      case 'Conecta las imagenes':
-      GameDifficulty difficulty;
-
-      switch (stars) {
-        case 1:
-          difficulty = GameDifficulty.easy;
-          break;
-        case 2:
-          difficulty = GameDifficulty.medium;
-          break;
-        case 3:
-          difficulty = GameDifficulty.hard;
-          break;
-        default:
-          difficulty = GameDifficulty.easy;
-      }
-
-      screen = ConnectSoundGameScreen(
-        controller: controller,
-        difficulty: difficulty,
-      );
-      break;
-      case 'Di la palabra':
-        screen = GamePlaceholderScreen(
-          controller: controller,
-          gameName: gameName,
-          difficultyStars: stars,
+      case 'conecta_sonidos':
+        final difficulty = switch (stars) {
+          1 => GameDifficulty.easy,
+          2 => GameDifficulty.medium,
+          3 => GameDifficulty.hard,
+          _ => GameDifficulty.easy,
+        };
+        screen = ConnectSoundGameScreen(
+          controller: widget.controller,
+          difficulty: difficulty,
         );
         break;
       default:
         screen = GamePlaceholderScreen(
-          controller: controller,
+          controller: widget.controller,
           gameName: gameName,
+          gameKey: gameKey,
           difficultyStars: stars,
         );
+        break;
     }
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => screen),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    
-    final user = controller.currentUser;
+    final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
 
-    final color = controller.accentButtonColor;    final planet = planetForStars(user.stars);
+    final descubreLabel = widget.controller.gameLabelForKey('descubre_emocion');
+    final conectaLabel = widget.controller.gameLabelForKey('conecta_sonidos');
+    final diLabel = widget.controller.gameLabelForKey('di_palabra');
+    final exploraLabel = widget.controller.gameLabelForKey('explora_aprende');
+    final miniLabel = widget.controller.gameLabelForKey('minijuegos');
+    final color = widget.controller.accentButtonColor;
+    final planet = planetForStars(user.stars);
     final progress = planetProgress(user.stars);
     final remaining = starsToNextPlanet(user.stars);
-    final avatarIndex = user.avatarIndex.clamp(0, avatarCatalog.length - 1).toInt();
+    final avatarIndex =
+        user.avatarIndex.clamp(0, avatarCatalog.length - 1).toInt();
     final avatar = avatarCatalog[avatarIndex];
-    
 
     return Scaffold(
-      backgroundColor: backgroundLilac,
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.white.withValues(alpha: 0.88),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.rocket_launch_rounded,
+                        size: 18,
+                        color: color,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Nebula',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(
+                          controller: widget.controller,
+                          allowPersonalization: false,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Ink(
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      color: Colors.white.withValues(alpha: 0.88),
+                      color: Colors.white.withValues(alpha: 0.90),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.rocket_launch_rounded,
-                          size: 18,
-                          color: color,
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Nebula',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                    child: const Icon(Icons.settings_rounded),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (widget.controller.appInMaintenance && widget.controller.isAdmin)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.admin_panel_settings_rounded),
+                    title: const Text('Modo mantenimiento activo'),
+                    subtitle: Text(
+                      widget.controller.appMaintenanceMessage.trim().isEmpty
+                          ? 'Los perfiles ni\u00f1o/cuidador no podran abrir juegos.'
+                          : widget.controller.appMaintenanceMessage,
                     ),
                   ),
-                  const Spacer(),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SettingsScreen(controller: controller),
-                        ),
-                      );
-                    },
-                    child: Ink(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: Colors.white.withValues(alpha: 0.90),
+                ),
+              ),
+            _WelcomeStatusCard(
+              accentColor: color,
+              username: widget.controller.activeChildName,
+              avatar: avatar,
+              isOnline: widget.controller.isOnline,
+              planetName: planet.name,
+              stars: user.stars,
+              progress: progress,
+              remaining: remaining,
+              onPlanetTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        PlanetLadderScreen(controller: widget.controller),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+            const _SectionHeader(
+              title: 'Juegos divertidos',
+              subtitle: 'Escoge una aventura y suma estrellitas',
+            ),
+            const SizedBox(height: 10),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              childAspectRatio: 0.85,
+              children: [
+                _GameCard(
+                  title: descubreLabel.toUpperCase(),
+                  imagePath: 'assets/images/games/descubre_emocion1.png',
+                  onTap: () => _openGame(
+                    context,
+                    gameName: descubreLabel,
+                    gameKey: 'descubre_emocion',
+                  ),
+                  accentColor: color,
+                ),
+                _GameCard(
+                  title: conectaLabel.toUpperCase(),
+                  imagePath: 'assets/images/games/conecta_imagenes1.png',
+                  accentColor: color,
+                  onTap: () => _openGame(
+                    context,
+                    gameName: conectaLabel,
+                    gameKey: 'conecta_sonidos',
+                  ),
+                ),
+                _GameCard(
+                  title: diLabel.toUpperCase(),
+                  imagePath: 'assets/images/games/di_palabra1.png',
+                  accentColor: color,
+                  onTap: () => _openGame(
+                    context,
+                    gameName: diLabel,
+                    gameKey: 'di_palabra',
+                  ),
+                ),
+                _GameCard(
+                  title: exploraLabel.toUpperCase(),
+                  imagePath: 'assets/images/games/explora_aprende1.png',
+                  accentColor: color,
+                  onTap: () async {
+                    final allowed = await _guardGameAccess(
+                      context,
+                      gameKey: 'explora_aprende',
+                    );
+                    if (!context.mounted || !allowed) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ExploreLearnScreen(controller: widget.controller),
                       ),
-                      child: const Icon(Icons.settings_rounded),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = (constraints.maxWidth - 10) / 2;
+                final cardHeight = cardWidth / 1.04;
+                return Center(
+                  child: SizedBox(
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: _GameCard(
+                      title: miniLabel.toUpperCase(),
+                      imagePath: 'assets/images/games/minijuegos1.png',
+                      accentColor: color,
+                      onTap: () async {
+                        final allowed = await _guardGameAccess(
+                          context,
+                          gameKey: 'minijuegos',
+                        );
+                        if (!context.mounted || !allowed) return;
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                MinigamesScreen(controller: widget.controller),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _WelcomeStatusCard(
-                accentColor: controller.accentButtonColor,
-                username: user.username,
-                avatar: avatar,
-                isOnline: controller.isOnline,
-                planetName: planet.name,
-                stars: user.stars,
-                progress: progress,
-                remaining: remaining,
-                onPlanetTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PlanetLadderScreen(controller: controller),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
-              const _SectionHeader(
-                title: 'Juegos divertidos',
-                subtitle: 'Escoge una aventura y suma estrellitas',
-              ),
-              const SizedBox(height: 10),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 0.85,
-                children: [
-                  _GameCard(
-                    title: 'DESCUBRE',
-                    
-                    imagePath: 'assets/images/games/descubre_emocion1.png',
-                    onTap: () => _openGame(context, gameName: 'Descubre la emocion'),
-                    accentColor: controller.accentButtonColor,
-                  ),
-                  _GameCard(
-                    title: 'CONECTA',
-                    imagePath: 'assets/images/games/conecta_imagenes1.png',
-                    accentColor: controller.accentButtonColor,
-                    onTap: () => _openGame(context, gameName: 'Conecta las imagenes'),
-                  ),
-                  _GameCard(
-                    title: 'DILO',
-                    imagePath: 'assets/images/games/di_palabra1.png',
-                    accentColor: controller.accentButtonColor,
-                    onTap: () => _openGame(context, gameName: 'Di la palabra'),
-                  ),
-                  _GameCard(
-                    title: 'EXPLORA',
-                    imagePath: 'assets/images/games/explora_aprende1.png',
-                    accentColor: controller.accentButtonColor,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ExploreLearnScreen(controller: controller),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cardWidth = (constraints.maxWidth - 10) / 2;
-                  final cardHeight = cardWidth / 1.04;
-                  return Center(
-                    child: SizedBox(
-                      width: cardWidth,
-                      height: cardHeight,
-                      child: _GameCard(
-                        title: 'MINIJUEGOS',
-                        imagePath: 'assets/images/games/minijuegos1.png',
-                        accentColor: controller.accentButtonColor,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => MinigamesScreen(controller: controller),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+                );
+              },
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -297,8 +379,8 @@ class _WelcomeStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 0,   
-      color: accentColor,   
+      elevation: 0,
+      color: accentColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
@@ -360,7 +442,7 @@ class _WelcomeStatusCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         Text(
-                          '$stars ⭐',
+                          '$stars estrellas',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                           ),
@@ -379,7 +461,7 @@ class _WelcomeStatusCard extends StatelessWidget {
                     Text(
                       remaining > 0
                           ? 'Faltan $remaining estrellas.'
-                          : 'Rango máximo alcanzado.',
+                          : 'Rango maximo alcanzado.',
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
@@ -392,6 +474,7 @@ class _WelcomeStatusCard extends StatelessWidget {
     );
   }
 }
+
 class _GameCard extends StatelessWidget {
   const _GameCard({
     required this.title,
@@ -409,7 +492,7 @@ class _GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       borderRadius: BorderRadius.circular(22),
-      color: accentColor, // <- tu morado
+      color: accentColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,

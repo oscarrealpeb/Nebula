@@ -84,14 +84,18 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Personalización'),
+        title: const Text('Personalizacion de contenido'),
       ),
       body: CosmicBackground(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             const Text(
-              'Personaliza animales y objetos. Puedes usar fotos propias o dejar la imagen predeterminada.',
+              'Aqui el cuidador edita imagenes de animales y objetos para los ninos vinculados a esta cuenta.',
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Puedes usar fotos propias o dejar las imagenes predeterminadas.',
             ),
             const SizedBox(height: 12),
             ..._targets.map((target) {
@@ -124,7 +128,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                             children: [
                               Text(
                                 target.toUpperCase(),
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
                               ),
                               Text(
                                 imagePath == null
@@ -136,13 +141,15 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                           ),
                         ),
                         IconButton(
-                          onPressed:
-                              _busyKey == target ? null : () => _openSourceSheet(target),
+                          onPressed: _busyKey == target
+                              ? null
+                              : () => _openSourceSheet(target),
                           icon: _busyKey == target
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.edit_outlined),
                         ),

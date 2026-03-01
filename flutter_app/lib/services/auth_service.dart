@@ -6,7 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/admin_dashboard_models.dart';
+import '../models/app_admin_config.dart';
+import '../models/game_content_config.dart';
 import '../models/nebula_user.dart';
+import '../models/portal_role.dart';
 import 'local_store.dart';
 
 class ServiceResult<T> {
@@ -19,6 +23,36 @@ class ServiceResult<T> {
   final bool ok;
   final String message;
   final T? data;
+}
+
+class _DashboardSessionSnapshot {
+  const _DashboardSessionSnapshot({
+    required this.gameKey,
+    required this.startedAtMillis,
+    required this.durationSeconds,
+    required this.correctAnswers,
+    required this.totalAttempts,
+  });
+
+  final String gameKey;
+  final int startedAtMillis;
+  final int durationSeconds;
+  final int correctAnswers;
+  final int totalAttempts;
+}
+
+class _DashboardUserSnapshot {
+  const _DashboardUserSnapshot({
+    required this.role,
+    required this.hasChildProfile,
+    required this.childProfileActive,
+    required this.sessions,
+  });
+
+  final String role;
+  final bool hasChildProfile;
+  final bool childProfileActive;
+  final List<_DashboardSessionSnapshot> sessions;
 }
 
 class AuthService {
@@ -38,6 +72,7 @@ class AuthService {
   final _uuid = const Uuid();
 
   NebulaUser? _currentUser;
+  PortalRole _activePortalRole = PortalRole.caregiver;
   NebulaUser? _pendingGoogleUserForLink;
   NebulaUser? _pendingLocalUserForLink;
   String? _pendingGoogleAccessTokenForLink;
@@ -48,6 +83,7 @@ class AuthService {
   String? _pendingGoogleNameForConfirm;
 
   bool get _useFirebase => _firebaseAuth != null && _firestore != null;
+  PortalRole get activePortalRole => _activePortalRole;
 
   bool get isCurrentUserGoogleProvider {
     if (!_useFirebase) return false;
@@ -71,6 +107,7 @@ class AuthService {
     final sessionUserId = _store.readSessionUserId();
     if (sessionUserId == null) {
       _currentUser = null;
+      _activePortalRole = PortalRole.caregiver;
       return null;
     }
 
@@ -84,6 +121,7 @@ class AuthService {
     }
     if (sessionUser == null) {
       _currentUser = null;
+      _activePortalRole = PortalRole.caregiver;
       await _store.clearSession();
       return null;
     }
@@ -97,13 +135,320 @@ class AuthService {
         );
         if (!verificationGate.ok) {
           _currentUser = null;
+          _activePortalRole = PortalRole.caregiver;
           return null;
         }
       }
     }
 
+    final storedRole = PortalRoleLabel.fromStorageValue(
+      _store.readSessionPortalRole(),
+    );
+    _activePortalRole = _resolvePortalRoleForUser(
+      user: sessionUser,
+      requestedRole: storedRole,
+    );
     _currentUser = sessionUser;
     return sessionUser;
+  }
+
+  Future<ServiceResult<AppAdminConfig>> fetchAppAdminConfig() async {
+    final local = _store.readAdminConfig();
+    final localConfig =
+        local == null ? const AppAdminConfig() : AppAdminConfig.fromJson(local);
+
+    if (!_useFirebase) {
+      return ServiceResult(
+        ok: true,
+        message: 'Config admin local.',
+        data: localConfig,
+      );
+    }
+
+    try {
+      final snapshot =
+          await _firestore!.collection('app').doc('admin_config').get();
+      final cloud = snapshot.data();
+      if (cloud == null) {
+        return ServiceResult(
+          ok: true,
+          message: 'Config admin no definida en nube.',
+          data: localConfig,
+        );
+      }
+      final remoteConfig = AppAdminConfig.fromJson(
+        Map<String, dynamic>.from(cloud),
+      );
+      await _store.writeAdminConfig(remoteConfig.toJson());
+      return ServiceResult(
+        ok: true,
+        message: 'Config admin cargada.',
+        data: remoteConfig,
+      );
+    } catch (_) {
+      return ServiceResult(
+        ok: true,
+        message: 'Config admin local por fallback.',
+        data: localConfig,
+      );
+    }
+  }
+
+  Future<ServiceResult<AppAdminConfig>> saveAppAdminConfig(
+    AppAdminConfig config,
+  ) async {
+    final blocked = config.blockedGameKeys
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList();
+    final labels = <String, String>{};
+    config.gameLabels.forEach((key, value) {
+      final normalizedKey = key.trim().toLowerCase();
+      final normalizedValue = value.trim();
+      if (normalizedKey.isEmpty) return;
+      if (normalizedValue.isEmpty) return;
+      labels[normalizedKey] = normalizedValue;
+    });
+    final normalized = config.copyWith(
+      maintenanceMessage: config.maintenanceMessage.trim(),
+      minimumVersion: config.minimumVersion.trim(),
+      blockedGameKeys: blocked,
+      gameLabels: labels,
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    try {
+      await _store.writeAdminConfig(normalized.toJson());
+      if (_useFirebase) {
+        await _firestore!
+            .collection('app')
+            .doc('admin_config')
+            .set(normalized.toJson(), SetOptions(merge: true));
+      }
+      return ServiceResult(
+        ok: true,
+        message: 'Config admin guardada.',
+        data: normalized,
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos guardar la config admin: $e',
+        data: normalized,
+      );
+    }
+  }
+
+  Future<ServiceResult<GameContentConfig>> fetchGameContentConfig({
+    bool requireCloud = false,
+  }) async {
+    final local = _store.readGameContentConfig();
+    final localConfig = local == null
+        ? const GameContentConfig()
+        : GameContentConfig.fromJson(local);
+
+    if (!_useFirebase) {
+      if (requireCloud) {
+        return const ServiceResult(
+          ok: false,
+          message:
+              'La sincronizacion global requiere Firebase habilitado en esta app.',
+        );
+      }
+      return ServiceResult(
+        ok: true,
+        message: 'Contenido de juegos cargado desde local.',
+        data: localConfig,
+      );
+    }
+
+    try {
+      final snapshot =
+          await _firestore!.collection('app').doc('game_content_config').get();
+      final cloud = snapshot.data();
+      if (cloud == null) {
+        if (requireCloud) {
+          return const ServiceResult(
+            ok: false,
+            message: 'No hay contenido global publicado por administracion.',
+          );
+        }
+        return ServiceResult(
+          ok: true,
+          message: 'Contenido de juegos no definido en nube.',
+          data: localConfig,
+        );
+      }
+      final remoteConfig = GameContentConfig.fromJson(
+        Map<String, dynamic>.from(cloud),
+      );
+      await _store.writeGameContentConfig(remoteConfig.toJson());
+      return ServiceResult(
+        ok: true,
+        message: 'Contenido de juegos cargado.',
+        data: remoteConfig,
+      );
+    } catch (e) {
+      if (requireCloud) {
+        return ServiceResult(
+          ok: false,
+          message: 'No pudimos sincronizar el contenido global de juegos: $e',
+        );
+      }
+      return ServiceResult(
+        ok: true,
+        message: 'Contenido de juegos local por fallback.',
+        data: localConfig,
+      );
+    }
+  }
+
+  Future<ServiceResult<GameContentConfig>> saveGameContentConfig(
+    GameContentConfig config,
+  ) async {
+    final emotions = config.emotionItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty &&
+              item.imagePath.trim().isNotEmpty &&
+              item.correctEmotion.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            difficultyStars: item.difficultyStars.clamp(1, 3),
+            imagePath: item.imagePath.trim(),
+            correctEmotion: item.correctEmotion.trim(),
+          ),
+        )
+        .toList();
+    final sounds = config.soundItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty &&
+              item.soundAsset.trim().isNotEmpty &&
+              item.correctImage.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            difficultyStars: item.difficultyStars.clamp(1, 3),
+            soundAsset: item.soundAsset.trim(),
+            correctImage: item.correctImage.trim(),
+            category: item.category.trim(),
+          ),
+        )
+        .toList();
+    final normalized = GameContentConfig(
+      emotionItems: emotions,
+      soundItems: sounds,
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    try {
+      await _store.writeGameContentConfig(normalized.toJson());
+      if (_useFirebase) {
+        await _firestore!
+            .collection('app')
+            .doc('game_content_config')
+            .set(normalized.toJson(), SetOptions(merge: true));
+      }
+      return ServiceResult(
+        ok: true,
+        message: 'Contenido de juegos guardado.',
+        data: normalized,
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos guardar el contenido de juegos: $e',
+        data: normalized,
+      );
+    }
+  }
+
+  Future<ServiceResult<AdminDashboardStats>> fetchAdminDashboardStats() async {
+    final localUsers = await _store.readUsers();
+    final localDeleted = await _readLocalDeletedAccountRecords();
+
+    var source = 'local';
+    var dashboardUsers = _buildDashboardUsersFromLocal(localUsers);
+    var deletedAccounts = localDeleted;
+
+    if (_useFirebase) {
+      try {
+        final usersSnapshot = await _firestore!.collection('users').get();
+        dashboardUsers = _buildDashboardUsersFromCloud(usersSnapshot.docs);
+        source = 'cloud';
+      } catch (_) {}
+
+      try {
+        final deletedSnapshot =
+            await _firestore!.collection('admin_deleted_accounts').get();
+        final cloudDeleted = deletedSnapshot.docs.map((doc) {
+          final json = Map<String, dynamic>.from(doc.data());
+          if ((json['id'] as String?)?.trim().isEmpty ?? true) {
+            json['id'] = doc.id;
+          }
+          return DeletedAccountRecord.fromJson(json);
+        }).toList();
+        if (cloudDeleted.isNotEmpty) {
+          deletedAccounts = _mergeDeletedRecords(localDeleted, cloudDeleted);
+          source = source == 'cloud' ? 'cloud' : 'mixed';
+        }
+      } catch (_) {}
+    }
+
+    final stats = _buildDashboardStats(
+      users: dashboardUsers,
+      deletedAccounts: deletedAccounts,
+      source: source,
+    );
+
+    return ServiceResult(
+      ok: true,
+      message: 'Dashboard admin cargado.',
+      data: stats,
+    );
+  }
+
+  Future<ServiceResult<List<DeletedAccountRecord>>> fetchDeletedAccounts({
+    int limit = 80,
+  }) async {
+    final safeLimit = limit.clamp(1, 500);
+    final localRecords = await _readLocalDeletedAccountRecords();
+    var merged = localRecords;
+    var source = 'local';
+
+    if (_useFirebase) {
+      try {
+        final snapshot = await _firestore!
+            .collection('admin_deleted_accounts')
+            .limit(1000)
+            .get();
+        final cloudRecords = snapshot.docs.map((doc) {
+          final json = Map<String, dynamic>.from(doc.data());
+          if ((json['id'] as String?)?.trim().isEmpty ?? true) {
+            json['id'] = doc.id;
+          }
+          return DeletedAccountRecord.fromJson(json);
+        }).toList();
+        if (cloudRecords.isNotEmpty) {
+          merged = _mergeDeletedRecords(localRecords, cloudRecords);
+          source = 'cloud';
+          await _writeLocalDeletedAccountRecords(merged);
+        }
+      } catch (_) {}
+    }
+
+    final sorted = [...merged]
+      ..sort((a, b) => b.deletedAtMillis.compareTo(a.deletedAtMillis));
+    return ServiceResult(
+      ok: true,
+      message: source == 'cloud'
+          ? 'Cuentas eliminadas cargadas desde nube.'
+          : 'Cuentas eliminadas cargadas desde local.',
+      data: sorted.take(safeLimit).toList(),
+    );
   }
 
   bool isValidUsernameFormat(String username) {
@@ -126,10 +471,14 @@ class AuthService {
     final normalized = trimmed.toLowerCase();
 
     final users = await _store.readUsers();
-    final localTaken = users.any(
-      (user) =>
-          user.id != excludeUserId && user.username.toLowerCase() == normalized,
-    );
+    final localTaken = users.any((user) {
+      if (user.id == excludeUserId) return false;
+      if (user.username.toLowerCase() == normalized) return true;
+      final childUsername =
+          user.childProfile?.loginUsername.trim().toLowerCase() ?? '';
+      if (childUsername.isEmpty) return false;
+      return childUsername == normalized;
+    });
     if (localTaken) return false;
 
     final cloudTaken = await _isUsernameTakenInCloud(
@@ -137,6 +486,48 @@ class AuthService {
       excludeUserId: excludeUserId,
     );
     if (cloudTaken == true) return false;
+
+    final childCloudTaken = await _isChildLoginUsernameTakenInCloud(
+      normalized,
+      excludeCaregiverUserId: excludeUserId,
+    );
+    if (childCloudTaken == true) return false;
+
+    return true;
+  }
+
+  Future<bool> checkChildLoginUsernameAvailable(
+    String username, {
+    String excludeCaregiverUserId = '',
+  }) async {
+    final trimmed = username.trim().toLowerCase();
+    if (!isValidUsernameFormat(trimmed)) return false;
+
+    final users = await _store.readUsers();
+    final localTaken = users.any((user) {
+      if (user.username.toLowerCase() == trimmed) return true;
+      if (excludeCaregiverUserId.isNotEmpty &&
+          user.id == excludeCaregiverUserId) {
+        return false;
+      }
+      final childUsername =
+          user.childProfile?.loginUsername.trim().toLowerCase() ?? '';
+      if (childUsername.isEmpty) return false;
+      return childUsername == trimmed;
+    });
+    if (localTaken) return false;
+
+    final cloudUsernameTaken = await _isUsernameTakenInCloud(
+      trimmed,
+      excludeUserId: '',
+    );
+    if (cloudUsernameTaken == true) return false;
+
+    final childCloudTaken = await _isChildLoginUsernameTakenInCloud(
+      trimmed,
+      excludeCaregiverUserId: excludeCaregiverUserId,
+    );
+    if (childCloudTaken == true) return false;
 
     return true;
   }
@@ -375,6 +766,7 @@ class AuthService {
       accentHue: 190,
       accentIntensity: 0.55,
       customImages: const {},
+      role: UserRole.caregiver,
     );
 
     if (_useFirebase) {
@@ -387,6 +779,7 @@ class AuthService {
         await _firebaseAuth?.signOut();
         await _store.clearSession();
         _currentUser = null;
+        _activePortalRole = PortalRole.caregiver;
         return const ServiceResult(
           ok: true,
           message:
@@ -400,6 +793,7 @@ class AuthService {
           await _firebaseAuth?.signOut();
         } catch (_) {}
         _currentUser = null;
+        _activePortalRole = PortalRole.caregiver;
         await _store.clearSession();
         return ServiceResult(
           ok: false,
@@ -409,13 +803,89 @@ class AuthService {
     }
 
     await _upsertLocal(newUser);
-    await _store.saveSessionUserId(newUser.id);
+    await _persistSessionState(newUser, requestedRole: PortalRole.caregiver);
     _currentUser = newUser;
 
     return ServiceResult(
       ok: true,
       message: 'Cuenta creada. Bienvenido a Nebula.',
       data: newUser,
+    );
+  }
+
+  Future<ServiceResult<NebulaUser>> registerCaregiver({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final preferredUsername = _sanitizeUsernameSeed(name.trim().toLowerCase());
+    final resolvedUsername = await _resolveAvailableUsername(
+      email: normalizedEmail,
+      preferredUsername: preferredUsername,
+    );
+    return register(
+      name: name,
+      username: resolvedUsername,
+      email: normalizedEmail,
+      password: password,
+    );
+  }
+
+  Future<ServiceResult<NebulaUser>> ensureHiddenAdminAccount({
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final trimmedPassword = password.trim();
+    if (!isValidEmailFormat(normalizedEmail) || trimmedPassword.length < 6) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Configuracion admin invalida.',
+      );
+    }
+
+    final users = await _store.readUsers();
+    for (final user in users) {
+      if (user.role == UserRole.admin) {
+        return ServiceResult(
+          ok: true,
+          message: 'Cuenta admin ya existente.',
+          data: user,
+        );
+      }
+    }
+
+    var usernameBase = 'admin_nebula';
+    var candidate = usernameBase;
+    var i = 1;
+    while (users.any((u) => u.username.toLowerCase() == candidate)) {
+      candidate = '${usernameBase}_$i';
+      i++;
+    }
+
+    final newAdmin = NebulaUser(
+      id: _uuid.v4(),
+      name: 'Administrador Nebula',
+      username: candidate,
+      email: normalizedEmail,
+      password: _hashPassword(trimmedPassword),
+      parentalPinHash: '',
+      stars: 0,
+      avatarIndex: 0,
+      selectedNarratorId: 'narrator_1',
+      soundEffectsEnabled: true,
+      accentHue: 190,
+      accentIntensity: 0.55,
+      customImages: const {},
+      role: UserRole.admin,
+    );
+
+    await _upsertLocal(newAdmin);
+    return ServiceResult(
+      ok: true,
+      message: 'Cuenta admin creada.',
+      data: newAdmin,
     );
   }
 
@@ -490,7 +960,7 @@ class AuthService {
         );
         if (firebaseSync.ok && firebaseSync.data != null) {
           match = firebaseSync.data!;
-          await _store.saveSessionUserId(match.id);
+          await _persistSessionState(match);
           _currentUser = match;
           return ServiceResult(
             ok: true,
@@ -511,7 +981,7 @@ class AuthService {
       match = migrated;
     }
 
-    if (_useFirebase) {
+    if (_useFirebase && match.role != UserRole.admin) {
       final firebaseSync = await _ensureFirebaseUserForPasswordLogin(
         localUser: match,
         plainPassword: secret,
@@ -522,10 +992,74 @@ class AuthService {
       match = firebaseSync.data!;
     }
 
-    await _store.saveSessionUserId(match.id);
+    await _persistSessionState(match);
     _currentUser = match;
     return ServiceResult(
         ok: true, message: 'Listo, ya estas dentro.', data: match);
+  }
+
+  Future<ServiceResult<NebulaUser>> loginChild({
+    required String username,
+    required String password,
+  }) async {
+    final normalizedUsername = username.trim().toLowerCase();
+    final trimmedPassword = password.trim();
+    if (normalizedUsername.isEmpty || trimmedPassword.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Escribe usuario y contrase\u00f1a para continuar.',
+      );
+    }
+    if (!isValidUsernameFormat(normalizedUsername)) {
+      return const ServiceResult(
+        ok: false,
+        message: 'El usuario del ni\u00f1o no es valido.',
+      );
+    }
+    if (!isValidChildLoginPinFormat(trimmedPassword)) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
+      );
+    }
+
+    final users = await _store.readUsers();
+    NebulaUser? match;
+    for (final user in users) {
+      final child = user.childProfile;
+      if (child == null) continue;
+      final childUsername = child.loginUsername.trim().toLowerCase();
+      if (childUsername == normalizedUsername) {
+        match = user;
+        break;
+      }
+    }
+
+    if (match == null) {
+      return const ServiceResult(
+        ok: false,
+        message:
+            'No encontramos ese perfil de ni\u00f1o en este dispositivo. Pide a un cuidador iniciar sesion aqui primero.',
+      );
+    }
+
+    final expectedHash = match.childProfile?.loginPinHash.trim() ?? '';
+    if (expectedHash.isEmpty ||
+        expectedHash != _hashParentalPin(trimmedPassword)) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Usuario o contrase\u00f1a incorrecta.',
+      );
+    }
+
+    await _persistSessionState(match, requestedRole: PortalRole.child);
+    _currentUser = match;
+    return ServiceResult(
+      ok: true,
+      message: 'Bienvenido, a jugar.',
+      data: match,
+    );
   }
 
   Future<void> logout() async {
@@ -542,13 +1076,14 @@ class AuthService {
       await _googleSignIn.disconnect();
     } catch (_) {}
     _currentUser = null;
+    _activePortalRole = PortalRole.caregiver;
     _clearPendingGoogleLink();
     _clearPendingGoogleConfirmation();
   }
 
   Future<ServiceResult<NebulaUser>> updateUser(NebulaUser nextUser) async {
     await _upsertLocal(nextUser);
-    await _store.saveSessionUserId(nextUser.id);
+    await _persistSessionState(nextUser, requestedRole: _activePortalRole);
     _currentUser = nextUser;
     return ServiceResult(
       ok: true,
@@ -1053,6 +1588,10 @@ class AuthService {
           accentHue: localUser.accentHue,
           accentIntensity: localUser.accentIntensity,
           customImages: localUser.customImages,
+          role: localUser.role,
+          childProfile: localUser.childProfile,
+          gameSessions: localUser.gameSessions,
+          parentalControl: localUser.parentalControl,
         );
 
         final nextUsers = users
@@ -1226,12 +1765,36 @@ class AuthService {
           customImages: Map<String, String>.from(
             cloud?['customImages'] as Map? ?? const {},
           ),
+          role: (cloud?['role'] as String?) ?? UserRole.caregiver,
+          childProfile: cloud?['childProfile'] is Map
+              ? ChildProfile.fromJson(
+                  Map<String, dynamic>.from(cloud!['childProfile'] as Map),
+                )
+              : null,
+          gameSessions: (cloud?['gameSessions'] as List? ?? const [])
+              .whereType<Map>()
+              .map(
+                (item) => GameSessionRecord.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList(),
+          parentalControl: cloud?['parentalControl'] is Map
+              ? ParentalControl.fromJson(
+                  Map<String, dynamic>.from(cloud!['parentalControl'] as Map),
+                )
+              : const ParentalControl(),
         );
         await _upsertLocal(newUser);
         signedUser = newUser;
       }
 
-      await _store.saveSessionUserId(signedUser.id);
+      await _persistSessionState(
+        signedUser,
+        requestedRole: signedUser.role == UserRole.admin
+            ? PortalRole.admin
+            : PortalRole.caregiver,
+      );
       _currentUser = signedUser;
       await _syncCloudUserBestEffort(signedUser);
       _clearPendingGoogleLink();
@@ -1280,13 +1843,6 @@ class AuthService {
       return const ServiceResult(
         ok: false,
         message: 'La contraseña debe tener al menos 6 caracteres.',
-      );
-    }
-
-    if (_requiresParentalPin() && !_isValidCurrentParentalPin(parentalPin)) {
-      return const ServiceResult(
-        ok: false,
-        message: 'PIN parental incorrecto.',
       );
     }
 
@@ -1485,12 +2041,17 @@ class AuthService {
           }
         }
         if (user == null) {
-          return const ServiceResult(
-            ok: false,
-            message: 'Usuario no encontrado.',
-          );
+          final cloudEmail = await _lookupEmailByUsernameFromCloud(needle);
+          if (cloudEmail == null || cloudEmail.trim().isEmpty) {
+            return const ServiceResult(
+              ok: false,
+              message: 'Usuario no encontrado.',
+            );
+          }
+          emailToReset = cloudEmail;
+        } else {
+          emailToReset = user.email;
         }
-        emailToReset = user.email;
       }
 
       await firebaseAuth.setLanguageCode('es');
@@ -1519,6 +2080,20 @@ class AuthService {
 
   bool isValidParentalPinFormat(String value) {
     return RegExp(r'^\d{4,6}$').hasMatch(value.trim());
+  }
+
+  bool isValidChildLoginPinFormat(String value) {
+    final trimmed = value.trim();
+    return trimmed.length >= 6 && trimmed.length <= 32;
+  }
+
+  String hashChildLoginPin(String value) {
+    return _hashParentalPin(value.trim());
+  }
+
+  bool verifyCurrentParentalPin(String pin) {
+    if (_currentUser == null) return false;
+    return _isValidCurrentParentalPin(pin.trim());
   }
 
   Future<ServiceResult<NebulaUser>> setParentalPin({
@@ -1835,21 +2410,15 @@ class AuthService {
     String parentalPin = '',
     String password = '',
   }) async {
-    if (_currentUser == null) {
+    final deletingUser = _currentUser;
+    if (deletingUser == null) {
       return const ServiceResult(
         ok: false,
         message: 'No hay usuario actual.',
       );
     }
 
-    if (_requiresParentalPin() && !_isValidCurrentParentalPin(parentalPin)) {
-      return const ServiceResult(
-        ok: false,
-        message: 'PIN incorrecto.',
-      );
-    }
-
-    if (_currentUser!.password.trim().isEmpty) {
+    if (deletingUser.password.trim().isEmpty) {
       return const ServiceResult(
         ok: false,
         message:
@@ -1857,15 +2426,15 @@ class AuthService {
       );
     }
 
-    if (_currentUser!.password.trim().isNotEmpty && password.trim().isEmpty) {
+    if (deletingUser.password.trim().isNotEmpty && password.trim().isEmpty) {
       return const ServiceResult(
         ok: false,
         message: 'Escribe tu contraseña actual para borrar la cuenta.',
       );
     }
-    if (_currentUser!.password.trim().isNotEmpty &&
+    if (deletingUser.password.trim().isNotEmpty &&
         !_passwordMatches(
-          stored: _currentUser!.password,
+          stored: deletingUser.password,
           input: password.trim(),
         )) {
       return const ServiceResult(
@@ -1875,18 +2444,33 @@ class AuthService {
     }
 
     try {
-      final userId = _currentUser!.id;
-      final users = await _store.readUsers();
-      final filtered = users.where((u) => u.id != _currentUser!.id).toList();
-      await _store.writeUsers(filtered);
-      await _store.clearSession();
-      await _deleteCloudUserBestEffort(userId);
-
+      final userId = deletingUser.id;
       if (_useFirebase) {
         await _firebaseAuth!.currentUser?.delete();
       }
 
+      final users = await _store.readUsers();
+      final filtered = users.where((u) => u.id != deletingUser.id).toList();
+      await _store.writeUsers(filtered);
+      await _store.clearSession();
+      await _deleteCloudUserBestEffort(userId);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await _recordDeletedAccountBestEffort(
+        DeletedAccountRecord(
+          id: 'del_${userId}_$now',
+          userId: userId,
+          email: deletingUser.email,
+          username: deletingUser.username,
+          role: deletingUser.role,
+          deletedAtMillis: now,
+          reason: 'self_delete',
+          hadChildProfile: deletingUser.childProfile != null,
+          sessionCount: deletingUser.gameSessions.length,
+        ),
+      );
+
       _currentUser = null;
+      _activePortalRole = PortalRole.caregiver;
       return const ServiceResult(
         ok: true,
         message: 'Cuenta eliminada.',
@@ -1986,6 +2570,10 @@ class AuthService {
         accentHue: localUser.accentHue,
         accentIntensity: localUser.accentIntensity,
         customImages: localUser.customImages,
+        role: localUser.role,
+        childProfile: localUser.childProfile,
+        gameSessions: localUser.gameSessions,
+        parentalControl: localUser.parentalControl,
       );
 
       final nextUsers = users
@@ -1996,7 +2584,12 @@ class AuthService {
       nextUsers.add(merged);
 
       await _store.writeUsers(nextUsers);
-      await _store.saveSessionUserId(merged.id);
+      await _persistSessionState(
+        merged,
+        requestedRole: merged.role == UserRole.admin
+            ? PortalRole.admin
+            : PortalRole.caregiver,
+      );
       _currentUser = merged;
       await _syncCloudUserBestEffort(merged);
       _clearPendingGoogleLink();
@@ -2032,6 +2625,34 @@ class AuthService {
         final docId = doc.id.trim();
         final matchesExcluded = excludeUserId.isNotEmpty &&
             (docId == excludeUserId || idFromField == excludeUserId);
+        if (!matchesExcluded) return true;
+      }
+      return false;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool?> _isChildLoginUsernameTakenInCloud(
+    String normalizedUsername, {
+    String excludeCaregiverUserId = '',
+  }) async {
+    if (!_useFirebase) return false;
+    if (normalizedUsername.trim().isEmpty) return false;
+    try {
+      final query = await _firestore!
+          .collection('users')
+          .where('childProfile.loginUsernameLower',
+              isEqualTo: normalizedUsername.trim().toLowerCase())
+          .limit(5)
+          .get();
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final idFromField = (data['id'] as String?)?.trim() ?? '';
+        final docId = doc.id.trim();
+        final matchesExcluded = excludeCaregiverUserId.isNotEmpty &&
+            (docId == excludeCaregiverUserId ||
+                idFromField == excludeCaregiverUserId);
         if (!matchesExcluded) return true;
       }
       return false;
@@ -2127,10 +2748,34 @@ class AuthService {
         customImages: Map<String, String>.from(
           cloud?['customImages'] as Map? ?? const {},
         ),
+        role: (cloud?['role'] as String?) ?? UserRole.caregiver,
+        childProfile: cloud?['childProfile'] is Map
+            ? ChildProfile.fromJson(
+                Map<String, dynamic>.from(cloud!['childProfile'] as Map),
+              )
+            : null,
+        gameSessions: (cloud?['gameSessions'] as List? ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => GameSessionRecord.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .toList(),
+        parentalControl: cloud?['parentalControl'] is Map
+            ? ParentalControl.fromJson(
+                Map<String, dynamic>.from(cloud!['parentalControl'] as Map),
+              )
+            : const ParentalControl(),
       );
 
       await _upsertLocal(restored);
-      await _store.saveSessionUserId(restored.id);
+      await _persistSessionState(
+        restored,
+        requestedRole: restored.role == UserRole.admin
+            ? PortalRole.admin
+            : PortalRole.caregiver,
+      );
       _currentUser = restored;
       return ServiceResult(
         ok: true,
@@ -2321,6 +2966,7 @@ class AuthService {
         await _firebaseAuth?.signOut();
       } catch (_) {}
       _currentUser = null;
+      _activePortalRole = PortalRole.caregiver;
       await _store.clearSession();
       return ServiceResult(
         ok: false,
@@ -2337,6 +2983,7 @@ class AuthService {
       await _firebaseAuth?.signOut();
     } catch (_) {}
     _currentUser = null;
+    _activePortalRole = PortalRole.caregiver;
     await _store.clearSession();
     return const ServiceResult(
       ok: false,
@@ -2352,6 +2999,7 @@ class AuthService {
     final uid = firebaseUser.uid;
     final emailToClean =
         (firebaseUser.email ?? fallbackEmail).trim().toLowerCase();
+    NebulaUser? removedUser;
 
     try {
       await _deleteCloudUserBestEffort(uid);
@@ -2359,6 +3007,24 @@ class AuthService {
 
     try {
       final users = await _store.readUsers();
+      removedUser = users.firstWhere(
+        (u) => u.id == uid || u.email.toLowerCase() == emailToClean,
+        orElse: () => const NebulaUser(
+          id: '',
+          name: '',
+          username: '',
+          email: '',
+          password: '',
+          parentalPinHash: '',
+          stars: 0,
+          avatarIndex: 0,
+          selectedNarratorId: 'narrator_1',
+          soundEffectsEnabled: true,
+          accentHue: 190,
+          accentIntensity: 0.55,
+          customImages: <String, String>{},
+        ),
+      );
       final filtered = users
           .where(
             (u) => u.id != uid && u.email.toLowerCase() != emailToClean,
@@ -2374,8 +3040,238 @@ class AuthService {
       await _firebaseAuth?.signOut();
     } catch (_) {}
     _currentUser = null;
+    _activePortalRole = PortalRole.caregiver;
     try {
       await _store.clearSession();
+    } catch (_) {}
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _recordDeletedAccountBestEffort(
+      DeletedAccountRecord(
+        id: 'del_${uid}_$now',
+        userId: uid,
+        email: emailToClean,
+        username: removedUser?.username ?? '',
+        role: (removedUser?.role.trim().isNotEmpty ?? false)
+            ? removedUser!.role
+            : UserRole.caregiver,
+        deletedAtMillis: now,
+        reason: 'unverified_email_ttl',
+        hadChildProfile: removedUser?.childProfile != null,
+        sessionCount: removedUser?.gameSessions.length ?? 0,
+      ),
+    );
+  }
+
+  List<_DashboardUserSnapshot> _buildDashboardUsersFromLocal(
+    List<NebulaUser> users,
+  ) {
+    return users
+        .map(
+          (user) => _DashboardUserSnapshot(
+            role: user.role,
+            hasChildProfile: user.childProfile != null,
+            childProfileActive: user.childProfile?.active ?? false,
+            sessions: user.gameSessions
+                .map(
+                  (session) => _DashboardSessionSnapshot(
+                    gameKey: session.gameKey,
+                    startedAtMillis: session.startedAtMillis,
+                    durationSeconds: session.durationSeconds,
+                    correctAnswers: session.correctAnswers,
+                    totalAttempts: session.totalAttempts,
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+  }
+
+  List<_DashboardUserSnapshot> _buildDashboardUsersFromCloud(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final users = <_DashboardUserSnapshot>[];
+    for (final doc in docs) {
+      final data = doc.data();
+      final role = (data['role'] as String?) ?? UserRole.caregiver;
+      final childRaw = data['childProfile'];
+      final hasChildProfile = childRaw is Map;
+      final childActive =
+          childRaw is Map ? ((childRaw['active'] as bool?) ?? false) : false;
+
+      final sessions = <_DashboardSessionSnapshot>[];
+      final sessionsRaw = data['gameSessions'];
+      if (sessionsRaw is List) {
+        for (final raw in sessionsRaw.whereType<Map>()) {
+          final json = Map<String, dynamic>.from(raw);
+          sessions.add(
+            _DashboardSessionSnapshot(
+              gameKey: (json['gameKey'] as String?) ?? '',
+              startedAtMillis: (json['startedAtMillis'] as num?)?.toInt() ?? 0,
+              durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
+              correctAnswers: (json['correctAnswers'] as num?)?.toInt() ?? 0,
+              totalAttempts: (json['totalAttempts'] as num?)?.toInt() ?? 0,
+            ),
+          );
+        }
+      }
+
+      users.add(
+        _DashboardUserSnapshot(
+          role: role,
+          hasChildProfile: hasChildProfile,
+          childProfileActive: childActive,
+          sessions: sessions,
+        ),
+      );
+    }
+    return users;
+  }
+
+  AdminDashboardStats _buildDashboardStats({
+    required List<_DashboardUserSnapshot> users,
+    required List<DeletedAccountRecord> deletedAccounts,
+    required String source,
+  }) {
+    final now = DateTime.now();
+    final from7Days =
+        now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+    final from30Days =
+        now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+
+    var totalUsers = 0;
+    var caregiverUsers = 0;
+    var adminUsers = 0;
+    var usersWithChildProfile = 0;
+    var activeChildProfiles = 0;
+    var totalGameSessions = 0;
+    var sessionsLast7Days = 0;
+    var totalUsageSeconds = 0;
+    var usageSecondsLast7Days = 0;
+    var totalCorrectAnswers = 0;
+    var totalAttempts = 0;
+    final sessionsByGame = <String, int>{};
+
+    for (final user in users) {
+      totalUsers += 1;
+      final role = user.role.trim().toLowerCase();
+      if (role == UserRole.admin) {
+        adminUsers += 1;
+      } else {
+        caregiverUsers += 1;
+      }
+
+      if (user.hasChildProfile) {
+        usersWithChildProfile += 1;
+      }
+      if (user.childProfileActive) {
+        activeChildProfiles += 1;
+      }
+
+      for (final session in user.sessions) {
+        totalGameSessions += 1;
+        final duration = session.durationSeconds.clamp(0, 24 * 3600);
+        totalUsageSeconds += duration;
+        if (session.startedAtMillis >= from7Days) {
+          sessionsLast7Days += 1;
+          usageSecondsLast7Days += duration;
+        }
+        final attempts = session.totalAttempts.clamp(0, 10000);
+        if (attempts > 0) {
+          totalAttempts += attempts;
+          totalCorrectAnswers += session.correctAnswers.clamp(0, attempts);
+        }
+        final gameKey = session.gameKey.trim().toLowerCase();
+        if (gameKey.isNotEmpty) {
+          sessionsByGame[gameKey] = (sessionsByGame[gameKey] ?? 0) + 1;
+        }
+      }
+    }
+
+    final deletedLast30Days = deletedAccounts
+        .where((item) => item.deletedAtMillis >= from30Days)
+        .length;
+    final avgAccuracy = totalAttempts <= 0
+        ? 0.0
+        : ((totalCorrectAnswers * 100.0) / totalAttempts);
+
+    return AdminDashboardStats(
+      totalUsers: totalUsers,
+      caregiverUsers: caregiverUsers,
+      adminUsers: adminUsers,
+      usersWithChildProfile: usersWithChildProfile,
+      activeChildProfiles: activeChildProfiles,
+      totalGameSessions: totalGameSessions,
+      sessionsLast7Days: sessionsLast7Days,
+      totalUsageMinutes: totalUsageSeconds ~/ 60,
+      usageMinutesLast7Days: usageSecondsLast7Days ~/ 60,
+      averageAccuracyPercent: avgAccuracy,
+      deletedAccounts: deletedAccounts.length,
+      deletedAccountsLast30Days: deletedLast30Days,
+      sessionsByGame: sessionsByGame,
+      refreshedAtMillis: now.millisecondsSinceEpoch,
+      source: source,
+    );
+  }
+
+  Future<List<DeletedAccountRecord>> _readLocalDeletedAccountRecords() async {
+    final raw = await _store.readDeletedAccounts();
+    final records = <DeletedAccountRecord>[];
+    for (final json in raw) {
+      try {
+        records.add(DeletedAccountRecord.fromJson(json));
+      } catch (_) {}
+    }
+    records.sort((a, b) => b.deletedAtMillis.compareTo(a.deletedAtMillis));
+    return records;
+  }
+
+  Future<void> _writeLocalDeletedAccountRecords(
+    List<DeletedAccountRecord> records,
+  ) async {
+    final normalized = [...records]
+      ..sort((a, b) => b.deletedAtMillis.compareTo(a.deletedAtMillis));
+    if (normalized.length > 1000) {
+      normalized.removeRange(1000, normalized.length);
+    }
+    await _store.writeDeletedAccounts(
+      normalized.map((item) => item.toJson()).toList(),
+    );
+  }
+
+  List<DeletedAccountRecord> _mergeDeletedRecords(
+    List<DeletedAccountRecord> first,
+    List<DeletedAccountRecord> second,
+  ) {
+    final mergedById = <String, DeletedAccountRecord>{};
+    for (final item in [...first, ...second]) {
+      final key = item.id.trim().isEmpty
+          ? '${item.userId}_${item.deletedAtMillis}'
+          : item.id;
+      final existing = mergedById[key];
+      if (existing == null || item.deletedAtMillis > existing.deletedAtMillis) {
+        mergedById[key] = item;
+      }
+    }
+    final merged = mergedById.values.toList()
+      ..sort((a, b) => b.deletedAtMillis.compareTo(a.deletedAtMillis));
+    return merged;
+  }
+
+  Future<void> _recordDeletedAccountBestEffort(
+    DeletedAccountRecord record,
+  ) async {
+    try {
+      final current = await _readLocalDeletedAccountRecords();
+      final merged = _mergeDeletedRecords(current, [record]);
+      await _writeLocalDeletedAccountRecords(merged);
+    } catch (_) {}
+    if (!_useFirebase) return;
+    try {
+      await _firestore!
+          .collection('admin_deleted_accounts')
+          .doc(record.id)
+          .set(record.toJson(), SetOptions(merge: true));
     } catch (_) {}
   }
 
@@ -2394,6 +3290,10 @@ class AuthService {
       accentHue: user.accentHue,
       accentIntensity: user.accentIntensity,
       customImages: user.customImages,
+      role: user.role,
+      childProfile: user.childProfile,
+      gameSessions: user.gameSessions,
+      parentalControl: user.parentalControl,
     );
   }
 
@@ -2414,6 +3314,10 @@ class AuthService {
       'accentHue': user.accentHue,
       'accentIntensity': user.accentIntensity,
       'customImages': user.customImages,
+      'role': user.role,
+      'childProfile': user.childProfile?.toJson(),
+      'gameSessions': user.gameSessions.map((item) => item.toJson()).toList(),
+      'parentalControl': user.parentalControl.toJson(),
     };
   }
 
@@ -2447,6 +3351,35 @@ class AuthService {
     }
     await _store.writeUsers(updated);
     await _syncCloudUserBestEffort(user);
+  }
+
+  PortalRole _resolvePortalRoleForUser({
+    required NebulaUser user,
+    PortalRole? requestedRole,
+  }) {
+    if (user.role == UserRole.admin) {
+      return PortalRole.admin;
+    }
+    if (requestedRole == PortalRole.child && user.childProfile != null) {
+      return PortalRole.child;
+    }
+    if (requestedRole == PortalRole.admin) {
+      return PortalRole.admin;
+    }
+    return PortalRole.caregiver;
+  }
+
+  Future<void> _persistSessionState(
+    NebulaUser user, {
+    PortalRole? requestedRole,
+  }) async {
+    final resolved = _resolvePortalRoleForUser(
+      user: user,
+      requestedRole: requestedRole,
+    );
+    await _store.saveSessionUserId(user.id);
+    await _store.saveSessionPortalRole(resolved.storageValue);
+    _activePortalRole = resolved;
   }
 
   bool isValidEmailFormat(String email) {

@@ -6,6 +6,7 @@ import '../../controllers/app_controller.dart';
 import '../../core/data/avatar_catalog.dart';
 import '../../core/data/planet_ladder.dart';
 import '../../core/theme/color_utils.dart';
+import '../../models/portal_role.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
 import '../../widgets/nebula_snack.dart';
@@ -13,9 +14,14 @@ import '../../widgets/nebula_text_field.dart';
 import '../welcome_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.controller});
+  const ProfileScreen({
+    super.key,
+    required this.controller,
+    this.showSecurity = true,
+  });
 
   final AppController controller;
+  final bool showSecurity;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -30,13 +36,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _saving = false;
   bool _loggingOut = false;
   bool? _usernameValid = true;
+  bool get _isChildPortal =>
+      widget.controller.activePortalRole == PortalRole.child;
 
   @override
   void initState() {
     super.initState();
     final user = widget.controller.currentUser!;
-    _nameController = TextEditingController(text: user.name);
-    _usernameController = TextEditingController(text: user.username);
+    final child = widget.controller.childProfile;
+    final initialName =
+        _isChildPortal && child != null ? child.name : user.name;
+    final initialUsername =
+        _isChildPortal && child != null ? child.loginUsername : user.username;
+    _nameController = TextEditingController(text: initialName);
+    _usernameController = TextEditingController(text: initialUsername);
     _avatarIndex = user.avatarIndex;
     _remaining = widget.controller.profileResetRemaining();
     _usernameValid = true;
@@ -82,12 +95,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String get _usernameValidationMessage {
     if (_usernameController.text.trim().isEmpty) {
-      return 'Escribe un apodo.';
+      return _isChildPortal
+          ? 'Escribe el usuario del ni\u00f1o.'
+          : 'Escribe un apodo.';
     }
     if (!_usernameFormatValid) {
       return 'Usa 3 a 18 caracteres: letras, numeros, ., _, -.';
     }
-    return 'Ese apodo ya esta en uso.';
+    return _isChildPortal
+        ? 'Ese usuario de ni\u00f1o ya esta en uso.'
+        : 'Ese apodo ya esta en uso.';
   }
 
   Future<bool> _validateProfileUsername(String username) async {
@@ -103,7 +120,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final currentUser = widget.controller.currentUser;
     if (currentUser == null) return false;
-    if (currentUser.username.trim().toLowerCase() == normalizedTyped) {
+    final child = widget.controller.childProfile;
+    final currentUsername =
+        _isChildPortal ? (child?.loginUsername ?? '') : currentUser.username;
+    if (currentUsername.trim().toLowerCase() == normalizedTyped) {
       if (mounted &&
           _usernameController.text.trim().toLowerCase() == normalizedTyped) {
         setState(() => _usernameValid = true);
@@ -111,11 +131,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return true;
     }
 
-    final isAvailable =
-        await widget.controller.authService.checkUsernameAvailable(
-      typed,
-      excludeUserId: currentUser.id,
-    );
+    final isAvailable = _isChildPortal
+        ? await widget.controller.authService.checkChildLoginUsernameAvailable(
+            typed,
+            excludeCaregiverUserId: currentUser.id,
+          )
+        : await widget.controller.authService.checkUsernameAvailable(
+            typed,
+            excludeUserId: currentUser.id,
+          );
     if (!mounted) return isAvailable;
     if (_usernameController.text.trim().toLowerCase() != normalizedTyped) {
       return isAvailable;
@@ -138,14 +162,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     setState(() => _saving = true);
-    final result = await widget.controller.saveProfile(
-      name: _nameController.text,
-      username: _usernameController.text,
-      avatarIndex: _avatarIndex,
-    );
+    final result = _isChildPortal
+        ? await _saveChildProfile()
+        : await widget.controller.saveProfile(
+            name: _nameController.text,
+            username: _usernameController.text,
+            avatarIndex: _avatarIndex,
+          );
     if (!mounted) return;
     setState(() => _saving = false);
     _showSnack(result.message, ok: result.ok);
+  }
+
+  Future<ActionResult> _saveChildProfile() async {
+    final user = widget.controller.currentUser;
+    final child = widget.controller.childProfile;
+    if (user == null || child == null) {
+      return const ActionResult(
+        ok: false,
+        message: 'No hay perfil de ni\u00f1o activo.',
+      );
+    }
+
+    final childResult = await widget.controller.createOrUpdateChildProfile(
+      name: _nameController.text,
+      age: child.age,
+      languageLevel: child.languageLevel,
+      loginUsername: _usernameController.text,
+    );
+    if (!childResult.ok) return childResult;
+
+    if (user.avatarIndex == _avatarIndex) {
+      return childResult;
+    }
+
+    final avatarResult = await widget.controller.saveProfile(
+      name: user.name,
+      username: user.username,
+      avatarIndex: _avatarIndex,
+    );
+    if (!avatarResult.ok) return avatarResult;
+    return childResult;
   }
 
   Future<void> _resetPassword() async {
@@ -155,50 +212,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _showSnack(result.message, ok: result.ok);
     setState(() => _remaining = widget.controller.profileResetRemaining());
     _startTickIfNeeded();
-  }
-
-  Future<String?> _askParentalPinIfNeeded({
-    required String actionText,
-  }) async {
-    if (!widget.controller.parentalPinEnabled) return '';
-    final pinController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Zona de adulto'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Para $actionText, escribe el PIN de adulto.'),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: pinController,
-                label: 'PIN de adulto',
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                digitsOnly: true,
-                maxLength: 6,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Continuar'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return null;
-      return pinController.text.trim();
-    } finally {
-      pinController.dispose();
-    }
   }
 
   Future<String?> _askCurrentPasswordForDelete({
@@ -612,6 +625,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context, _) {
         final user = widget.controller.currentUser;
         if (user == null) return const SizedBox.shrink();
+        final child = widget.controller.childProfile;
+        final profileHeaderUsername = _isChildPortal && child != null
+            ? child.loginUsername
+            : user.username;
 
         final planet = planetForStars(user.stars);
         final progress = planetProgress(user.stars);
@@ -658,7 +675,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                user.username,
+                                profileHeaderUsername,
                                 style: const TextStyle(
                                   color: Color(0xFF22335D),
                                   fontWeight: FontWeight.w800,
@@ -692,39 +709,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                    child: Row(
-                      children: [
-                        Icon(
-                          widget.controller.isOnline
-                              ? Icons.wifi_rounded
-                              : Icons.wifi_off_rounded,
-                          color: widget.controller.isOnline
-                              ? NebulaSnack.successColor
-                              : NebulaSnack.errorColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
+                if (widget.showSecurity)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                      child: Row(
+                        children: [
+                          Icon(
                             widget.controller.isOnline
-                                ? 'Con internet: todo se sincroniza.'
-                                : 'Sin internet: jugando en modo local.',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                                ? Icons.wifi_rounded
+                                : Icons.wifi_off_rounded,
+                            color: widget.controller.isOnline
+                                ? NebulaSnack.successColor
+                                : NebulaSnack.errorColor,
                           ),
-                        ),
-                        IconButton(
-                          onPressed: widget.controller.refreshOnlineStatus,
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'Actualizar estado',
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.controller.isOnline
+                                  ? 'Con internet: todo se sincroniza.'
+                                  : 'Sin internet: jugando en modo local.',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: widget.controller.refreshOnlineStatus,
+                            icon: const Icon(Icons.refresh_rounded, size: 20),
+                            tooltip: 'Actualizar estado',
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 if (!widget.controller.isOnline)
                   const Padding(
                     padding: EdgeInsets.only(top: 6, bottom: 6),
@@ -747,7 +766,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 12),
                         NebulaTextField(
                           controller: _usernameController,
-                          label: 'Tu apodo genial',
+                          label: _isChildPortal
+                              ? 'Usuario del ni\u00f1o'
+                              : 'Tu apodo genial',
                           validator: _validateProfileUsername,
                           showValidationStatus: true,
                           validationMessage: _usernameValidationMessage,
@@ -830,63 +851,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Seguridad!',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Text('Tu correo actual: ${user.email}'),
-                        const SizedBox(height: 6),
-                        Text(
-                          widget.controller.parentalPinEnabled
-                              ? 'PIN de adulto: activo'
-                              : 'PIN de adulto: opcional',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        if (!widget.controller.parentalPinEnabled)
-                          TextButton.icon(
-                            onPressed: _activateParentalPin,
-                            icon: const Icon(Icons.lock_person_outlined),
-                            label: const Text('Activar PIN de adulto'),
+                if (widget.showSecurity) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Seguridad!',
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                        if (widget.controller.parentalPinEnabled) ...[
-                          TextButton.icon(
-                            onPressed: _changeParentalPin,
-                            icon: const Icon(Icons.pin_outlined),
-                            label: const Text('Cambiar PIN de adulto'),
+                          const SizedBox(height: 8),
+                          Text('Tu correo actual: ${user.email}'),
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.controller.parentalPinEnabled
+                                ? 'PIN de adulto: activo'
+                                : 'PIN de adulto: opcional',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
+                          const SizedBox(height: 8),
+                          if (!widget.controller.parentalPinEnabled)
+                            TextButton.icon(
+                              onPressed: _activateParentalPin,
+                              icon: const Icon(Icons.lock_person_outlined),
+                              label: const Text('Activar PIN de adulto'),
+                            ),
+                          if (widget.controller.parentalPinEnabled) ...[
+                            TextButton.icon(
+                              onPressed: _changeParentalPin,
+                              icon: const Icon(Icons.pin_outlined),
+                              label: const Text('Cambiar PIN de adulto'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _deactivateParentalPin,
+                              icon: const Icon(Icons.lock_open_rounded),
+                              label: const Text('Desactivar PIN de adulto'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _recoverForgottenParentalPin,
+                              icon: const Icon(Icons.mail_outline_rounded),
+                              label: const Text('Olvide mi PIN de adulto'),
+                            ),
+                          ],
                           TextButton.icon(
-                            onPressed: _deactivateParentalPin,
-                            icon: const Icon(Icons.lock_open_rounded),
-                            label: const Text('Desactivar PIN de adulto'),
-                          ),
-                          TextButton.icon(
-                            onPressed: _recoverForgottenParentalPin,
-                            icon: const Icon(Icons.mail_outline_rounded),
-                            label: const Text('Olvide mi PIN de adulto'),
+                            onPressed: _remaining > 0 ? null : _resetPassword,
+                            icon: const Icon(Icons.password_rounded),
+                            label: Text(
+                              _remaining > 0
+                                  ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
+                                  : 'Restablecer contraseña por correo',
+                            ),
                           ),
                         ],
-                        TextButton.icon(
-                          onPressed: _remaining > 0 ? null : _resetPassword,
-                          icon: const Icon(Icons.password_rounded),
-                          label: Text(
-                            _remaining > 0
-                                ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
-                                : 'Restablecer contraseña por correo',
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 12),
                 NebulaPrimaryButton(
                   text: _saving ? 'Guardando...' : 'Guardar cambios!',
@@ -915,84 +938,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                 ),
                 const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () async {
-                    final parentalPin = await _askParentalPinIfNeeded(
-                      actionText: 'borrar la cuenta',
-                    );
-                    if (!context.mounted || parentalPin == null) return;
-
-                    var hasLocalPassword = (widget
-                            .controller.currentUser?.password
-                            .trim()
-                            .isNotEmpty ??
-                        false);
-                    if (!hasLocalPassword &&
-                        widget.controller.isGoogleOnlyAccount) {
-                      final setupOk = await _setupGoogleRecoveryPasswordOnce();
-                      if (!context.mounted || !setupOk) return;
-                      hasLocalPassword = (widget
+                if (widget.showSecurity)
+                  TextButton(
+                    onPressed: () async {
+                      var hasLocalPassword = (widget
                               .controller.currentUser?.password
                               .trim()
                               .isNotEmpty ??
                           false);
-                    }
-                    if (!hasLocalPassword) {
-                      _showSnack(
-                        'Primero crea una contraseña en tu perfil para continuar.',
-                        ok: false,
+                      if (!hasLocalPassword &&
+                          widget.controller.isGoogleOnlyAccount) {
+                        final setupOk =
+                            await _setupGoogleRecoveryPasswordOnce();
+                        if (!context.mounted || !setupOk) return;
+                        hasLocalPassword = (widget
+                                .controller.currentUser?.password
+                                .trim()
+                                .isNotEmpty ??
+                            false);
+                      }
+                      if (!hasLocalPassword) {
+                        _showSnack(
+                          'Primero crea una contraseña en tu perfil para continuar.',
+                          ok: false,
+                        );
+                        return;
+                      }
+
+                      // Valida PIN primero; solo si pasa, pedimos contraseña.
+                      final password = await _askCurrentPasswordForDelete(
+                        requirePassword: true,
                       );
-                      return;
-                    }
+                      if (!context.mounted || password == null) return;
 
-                    // Valida PIN primero; solo si pasa, pedimos contraseña.
-                    final precheck =
-                        await widget.controller.requestDeleteAccount(
-                      parentalPin: parentalPin,
-                      password: '',
-                    );
-                    const needsPasswordMessage =
-                        'Escribe tu contraseña actual para borrar la cuenta.';
-                    if (!context.mounted) return;
-                    if (!precheck.ok &&
-                        precheck.message != needsPasswordMessage) {
-                      _showSnack(precheck.message, ok: false);
-                      return;
-                    }
-
-                    final password = await _askCurrentPasswordForDelete(
-                      requirePassword: true,
-                    );
-                    if (!context.mounted || password == null) return;
-
-                    final result = await widget.controller.requestDeleteAccount(
-                      parentalPin: parentalPin,
-                      password: password,
-                    );
-                    if (!context.mounted) return;
-                    if (!result.ok) {
-                      _showSnack(result.message, ok: false);
-                      return;
-                    }
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final result =
+                          await widget.controller.requestDeleteAccount(
+                        password: password,
+                      );
                       if (!context.mounted) return;
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (_) => WelcomeScreen(
-                            controller: widget.controller,
-                            flashMessage: 'Cuenta eliminada correctamente.',
-                            flashOk: true,
+                      if (!result.ok) {
+                        _showSnack(result.message, ok: false);
+                        return;
+                      }
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!context.mounted) return;
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) => WelcomeScreen(
+                              controller: widget.controller,
+                              flashMessage: 'Cuenta eliminada correctamente.',
+                              flashOk: true,
+                            ),
                           ),
-                        ),
-                        (_) => false,
-                      );
-                    });
-                  },
-                  child: const Text(
-                    'Borrar cuenta',
-                    style: TextStyle(color: NebulaSnack.errorColor),
+                          (_) => false,
+                        );
+                      });
+                    },
+                    child: const Text(
+                      'Borrar cuenta',
+                      style: TextStyle(color: NebulaSnack.errorColor),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

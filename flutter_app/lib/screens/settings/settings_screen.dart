@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../controllers/app_controller.dart';
@@ -6,12 +6,18 @@ import 'personalization_screen.dart';
 import 'preferences_screen.dart';
 import 'profile_screen.dart';
 
-const Color settingsLilac = Color.fromARGB(255, 143, 115, 198); // 👈 cambia este y cambian los 3 botones
+const Color settingsLilac = Color.fromARGB(
+    255, 143, 115, 198); // 👈 cambia este y cambian los 3 botones
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.controller});
+  const SettingsScreen({
+    super.key,
+    required this.controller,
+    this.allowPersonalization = true,
+  });
 
   final AppController controller;
+  final bool allowPersonalization;
 
   @override
   Widget build(BuildContext context) {
@@ -35,29 +41,33 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Ajusta perfil, sonidos y colores para jugar a tu manera.',
+                  allowPersonalization
+                      ? 'Ajusta perfil, sonidos y colores para jugar a tu manera.'
+                      : 'Ajusta perfil, sonidos y color para jugar a tu manera.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: const Color(0xFF4F628A),
                       ),
                 ),
                 const SizedBox(height: 18),
-
                 _SettingsTile(
                   title: 'Perfil',
-                  subtitle: 'Tu nombre, avatar, correo y seguridad.',
+                  subtitle: allowPersonalization
+                      ? 'Tu nombre, avatar, correo y seguridad.'
+                      : 'Tu nombre y avatar para jugar.',
                   icon: Icons.badge_outlined,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => ProfileScreen(controller: controller),
+                        builder: (_) => ProfileScreen(
+                          controller: controller,
+                          showSecurity: allowPersonalization,
+                        ),
                       ),
                     );
                   },
                   tileColor: controller.accentColor, // <- aquí
                 ),
-
                 const SizedBox(height: 14),
-
                 _SettingsTile(
                   title: 'Preferencias',
                   subtitle: 'Voces, sonidos y color en tiempo real.',
@@ -65,29 +75,29 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => PreferencesScreen(controller: controller),
-                      ),
-                    );
-                  },
-                  tileColor: controller.accentColor, // <- aquí
-                ),
-
-                const SizedBox(height: 14),
-
-                _SettingsTile(
-                  title: 'Personalización',
-                  subtitle: 'Sube fotos divertidas para animales y objetos.',
-                  icon: Icons.auto_awesome_outlined,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
                         builder: (_) =>
-                            PersonalizationScreen(controller: controller),
+                            PreferencesScreen(controller: controller),
                       ),
                     );
                   },
                   tileColor: controller.accentColor, // <- aquí
                 ),
+                const SizedBox(height: 14),
+                if (allowPersonalization)
+                  _SettingsTile(
+                    title: 'Personalización',
+                    subtitle: 'Sube fotos divertidas para animales y objetos.',
+                    icon: Icons.auto_awesome_outlined,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PersonalizationScreen(controller: controller),
+                        ),
+                      );
+                    },
+                    tileColor: controller.accentColor, // <- aquí
+                  ),
               ],
             ),
 
@@ -119,7 +129,6 @@ class _SettingsTile extends StatelessWidget {
     required this.icon,
     required this.onTap,
     required this.tileColor, // <- nuevo
-
   });
 
   final String title;
@@ -127,7 +136,6 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final Color tileColor; // <- nuevo
-
 
   @override
   Widget build(BuildContext context) {

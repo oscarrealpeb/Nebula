@@ -4,7 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../models/admin_dashboard_models.dart';
+import '../core/data/skill_catalog.dart';
+import '../models/app_admin_config.dart';
+import '../models/game_content_config.dart';
 import '../models/nebula_user.dart';
+import '../models/portal_role.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/cooldown_service.dart';
@@ -23,6 +28,9 @@ class ActionResult {
 }
 
 class AppController extends ChangeNotifier {
+  static const hiddenAdminEmail = 'admin@nebula.local';
+  static const hiddenAdminPassword = 'NebulaAdmin2026';
+
   AppController._(
     this._authService,
     this._cooldownService,
@@ -36,6 +44,11 @@ class AppController extends ChangeNotifier {
   final bool _firebaseEnabled;
 
   NebulaUser? _currentUser;
+  PortalRole _activePortalRole = PortalRole.caregiver;
+  AppAdminConfig _appAdminConfig = const AppAdminConfig();
+  GameContentConfig _gameContentConfig = const GameContentConfig();
+  AdminDashboardStats _adminDashboardStats = const AdminDashboardStats();
+  List<DeletedAccountRecord> _deletedAccounts = const [];
   bool _isOnline = true;
   StreamSubscription<bool>? _connectivitySub;
 
@@ -57,6 +70,15 @@ class AppController extends ChangeNotifier {
     );
 
     controller._currentUser = await authService.restoreSession();
+    controller._activePortalRole = authService.activePortalRole;
+    final configResult = await authService.fetchAppAdminConfig();
+    if (configResult.data != null) {
+      controller._appAdminConfig = configResult.data!;
+    }
+    final contentResult = await authService.fetchGameContentConfig();
+    if (contentResult.data != null) {
+      controller._gameContentConfig = contentResult.data!;
+    }
     await controller._runThemeMigrationIfNeeded();
     await controller.refreshOnlineStatus();
     controller._connectivitySub =
@@ -71,6 +93,14 @@ class AppController extends ChangeNotifier {
   }
 
   NebulaUser? get currentUser => _currentUser;
+  PortalRole get activePortalRole => _activePortalRole;
+  AppAdminConfig get appAdminConfig => _appAdminConfig;
+  GameContentConfig get gameContentConfig => _gameContentConfig;
+  AdminDashboardStats get adminDashboardStats => _adminDashboardStats;
+  List<DeletedAccountRecord> get deletedAccounts =>
+      List.unmodifiable(_deletedAccounts);
+  bool get appInMaintenance => _appAdminConfig.maintenanceMode;
+  String get appMaintenanceMessage => _appAdminConfig.maintenanceMessage;
   bool get isOnline => _isOnline;
   bool get firebaseEnabled => _firebaseEnabled;
   AuthService get authService => _authService;
@@ -81,6 +111,36 @@ class AppController extends ChangeNotifier {
   bool get isGoogleOnlyAccount => isGoogleAccount && !hasPasswordCredential;
   bool get parentalPinEnabled =>
       (_currentUser?.parentalPinHash.trim().isNotEmpty ?? false);
+  bool get isAdmin => (_currentUser?.role ?? '') == UserRole.admin;
+  ChildProfile? get childProfile => _currentUser?.childProfile;
+  bool get hasChildProfile => childProfile != null;
+  List<GameSessionRecord> get gameSessions => List.unmodifiable(
+      _currentUser?.gameSessions ?? const <GameSessionRecord>[]);
+  ParentalControl get parentalControl =>
+      _currentUser?.parentalControl ?? const ParentalControl();
+  String get activeChildName {
+    final name = childProfile?.name.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    return _currentUser?.username ?? 'Explorador';
+  }
+
+  Map<String, String> get effectiveGameLabels {
+    final labels = <String, String>{...gameLabelByKey};
+    _appAdminConfig.gameLabels.forEach((key, value) {
+      final normalizedKey = key.trim().toLowerCase();
+      final normalizedValue = value.trim();
+      if (normalizedKey.isEmpty || normalizedValue.isEmpty) return;
+      labels[normalizedKey] = normalizedValue;
+    });
+    return labels;
+  }
+
+  String gameLabelForKey(String gameKey) {
+    final key = gameKey.trim().toLowerCase();
+    final fromAdmin = _appAdminConfig.gameLabels[key]?.trim() ?? '';
+    if (fromAdmin.isNotEmpty) return fromAdmin;
+    return gameLabelByKey[key] ?? gameKey;
+  }
 
   Color get accentColor {
     final user = _currentUser;
@@ -113,6 +173,80 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
+      await reloadGameContentConfig(notify: false);
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> loginAsCaregiver(
+      String identifier, String password) async {
+    final result = await _authService.login(
+      identifier: identifier,
+      password: password,
+    );
+    if (!result.ok || result.data == null) {
+      return ActionResult(ok: result.ok, message: result.message);
+    }
+    if (result.data!.role == UserRole.admin) {
+      await _authService.logout();
+      _currentUser = null;
+      _activePortalRole = _authService.activePortalRole;
+      notifyListeners();
+      return const ActionResult(
+        ok: false,
+        message: 'Esa cuenta es de administrador. Usa acceso admin oculto.',
+      );
+    }
+    _currentUser = result.data;
+    _activePortalRole = _authService.activePortalRole;
+    await reloadAppAdminConfig(notify: false);
+    await reloadGameContentConfig(notify: false);
+    notifyListeners();
+    return ActionResult(ok: true, message: result.message);
+  }
+
+  Future<ActionResult> loginAsAdmin(String identifier, String password) async {
+    final result = await _authService.login(
+      identifier: identifier,
+      password: password,
+    );
+    if (!result.ok || result.data == null) {
+      return ActionResult(ok: result.ok, message: result.message);
+    }
+    if (result.data!.role != UserRole.admin) {
+      await _authService.logout();
+      _currentUser = null;
+      _activePortalRole = _authService.activePortalRole;
+      notifyListeners();
+      return const ActionResult(
+        ok: false,
+        message: 'Esta cuenta no tiene rol administrador.',
+      );
+    }
+    _currentUser = result.data;
+    _activePortalRole = _authService.activePortalRole;
+    await reloadAppAdminConfig(notify: false);
+    await reloadGameContentConfig(notify: false);
+    await reloadAdminDashboard(notify: false);
+    notifyListeners();
+    return ActionResult(ok: true, message: result.message);
+  }
+
+  Future<ActionResult> loginAsChild({
+    required String username,
+    required String password,
+  }) async {
+    final result = await _authService.loginChild(
+      username: username,
+      password: password,
+    );
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
+      await reloadAppAdminConfig(notify: false);
+      await reloadGameContentConfig(notify: false);
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -130,6 +264,9 @@ class AppController extends ChangeNotifier {
     final result = await _authService.loginWithGoogle();
     if (result.ok && result.data != null) {
       _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
+      await reloadAppAdminConfig(notify: false);
+      await reloadGameContentConfig(notify: false);
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -145,6 +282,7 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -168,9 +306,147 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> registerCaregiver({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final result = await _authService.registerCaregiver(
+      name: name,
+      email: email,
+      password: password,
+    );
+    if (result.ok && result.data != null) {
+      _currentUser = result.data;
+      _activePortalRole = _authService.activePortalRole;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> ensureHiddenAdminAccount() async {
+    final result = await _authService.ensureHiddenAdminAccount(
+      email: hiddenAdminEmail,
+      password: hiddenAdminPassword,
+    );
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> reloadAppAdminConfig({bool notify = true}) async {
+    final result = await _authService.fetchAppAdminConfig();
+    if (result.data != null) {
+      _appAdminConfig = result.data!;
+      if (notify) {
+        notifyListeners();
+      }
+      return const ActionResult(ok: true, message: 'Config admin cargada.');
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> saveAppAdminConfig(AppAdminConfig config) async {
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'Solo el admin puede modificar esta configuracion.',
+      );
+    }
+    final result = await _authService.saveAppAdminConfig(config);
+    if (result.ok && result.data != null) {
+      _appAdminConfig = result.data!;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> reloadGameContentConfig({bool notify = true}) async {
+    final result = await _authService.fetchGameContentConfig();
+    if (result.data != null) {
+      _gameContentConfig = result.data!;
+      if (notify) {
+        notifyListeners();
+      }
+      return const ActionResult(
+        ok: true,
+        message: 'Contenido de juegos cargado.',
+      );
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> syncGlobalGameContentForPlay({
+    bool notify = false,
+  }) async {
+    final result = await _authService.fetchGameContentConfig();
+    if (result.ok && result.data != null) {
+      _gameContentConfig = result.data!;
+      if (notify) notifyListeners();
+      return ActionResult(ok: true, message: result.message);
+    }
+    // No bloquea el juego por falta de config global. Se conserva contenido local.
+    return ActionResult(ok: true, message: result.message);
+  }
+
+  Future<ActionResult> saveGameContentConfig(GameContentConfig config) async {
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'Solo el admin puede editar contenido de juegos.',
+      );
+    }
+    final result = await _authService.saveGameContentConfig(config);
+    if (result.ok && result.data != null) {
+      _gameContentConfig = result.data!;
+      notifyListeners();
+    }
+    return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> reloadAdminDashboard({
+    int deletedLimit = 120,
+    bool notify = true,
+  }) async {
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'Solo el admin puede ver este dashboard.',
+      );
+    }
+
+    final statsResult = await _authService.fetchAdminDashboardStats();
+    final deletedResult =
+        await _authService.fetchDeletedAccounts(limit: deletedLimit);
+
+    var changed = false;
+    if (statsResult.data != null) {
+      _adminDashboardStats = statsResult.data!;
+      changed = true;
+    }
+    if (deletedResult.data != null) {
+      _deletedAccounts = deletedResult.data!;
+      changed = true;
+    }
+    if (notify && changed) {
+      notifyListeners();
+    }
+
+    final ok = statsResult.ok || deletedResult.ok;
+    if (ok) {
+      return ActionResult(
+        ok: true,
+        message: '${statsResult.message} ${deletedResult.message}',
+      );
+    }
+    return ActionResult(
+      ok: false,
+      message: statsResult.message,
+    );
   }
 
   Future<ActionResult> updateUsernameForCurrentUser(String newUsername) async {
@@ -241,6 +517,10 @@ class AppController extends ChangeNotifier {
   Future<void> logout() async {
     await _authService.logout();
     _currentUser = null;
+    _activePortalRole = _authService.activePortalRole;
+    _gameContentConfig = const GameContentConfig();
+    _adminDashboardStats = const AdminDashboardStats();
+    _deletedAccounts = const [];
     notifyListeners();
   }
 
@@ -345,12 +625,24 @@ class AppController extends ChangeNotifier {
       return ActionResult(ok: false, message: result.message);
     }
     _currentUser = null;
+    _activePortalRole = _authService.activePortalRole;
+    _gameContentConfig = const GameContentConfig();
+    _adminDashboardStats = const AdminDashboardStats();
+    _deletedAccounts = const [];
     notifyListeners();
     return ActionResult(ok: true, message: result.message);
   }
 
   bool isValidParentalPinFormat(String value) {
     return _authService.isValidParentalPinFormat(value);
+  }
+
+  bool isValidChildLoginPinFormat(String value) {
+    return _authService.isValidChildLoginPinFormat(value);
+  }
+
+  bool verifyCurrentParentalPin(String pin) {
+    return _authService.verifyCurrentParentalPin(pin);
   }
 
   Future<ActionResult> activateParentalPin(String pin) async {
@@ -555,6 +847,263 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<ActionResult> createOrUpdateChildProfile({
+    required String name,
+    required int age,
+    required String languageLevel,
+    required String loginUsername,
+    String loginPassword = '',
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Escribe el nombre del ni\u00f1o.',
+      );
+    }
+    final normalizedLoginUsername = loginUsername.trim().toLowerCase();
+    if (!_authService.isValidUsernameFormat(normalizedLoginUsername)) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'El usuario del ni\u00f1o debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+      );
+    }
+    final available = await _authService.checkChildLoginUsernameAvailable(
+      normalizedLoginUsername,
+      excludeCaregiverUserId: user.id,
+    );
+    if (!available) {
+      return const ActionResult(
+        ok: false,
+        message: 'Ese usuario de ni\u00f1o ya existe. Prueba otro.',
+      );
+    }
+    final trimmedPassword = loginPassword.trim();
+    if (trimmedPassword.isNotEmpty &&
+        !_authService.isValidChildLoginPinFormat(trimmedPassword)) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
+      );
+    }
+
+    final boundedAge = age.clamp(0, 18);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final existing = user.childProfile;
+    final nextPinHash = trimmedPassword.isNotEmpty
+        ? _authService.hashChildLoginPin(trimmedPassword)
+        : (existing?.loginPinHash ?? '');
+    if (nextPinHash.trim().isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'Define una contrase\u00f1a del ni\u00f1o para poder iniciar sesi\u00f3n.',
+      );
+    }
+    final child = (existing ??
+            ChildProfile(
+              id: 'child_${user.id}',
+              name: trimmedName,
+              createdAtMillis: now,
+            ))
+        .copyWith(
+      name: trimmedName,
+      age: boundedAge,
+      languageLevel: languageLevel.trim().isEmpty ? 'medio' : languageLevel,
+      active: true,
+      loginUsername: normalizedLoginUsername,
+      loginPinHash: nextPinHash,
+    );
+    final next = user.copyWith(childProfile: child);
+    final saved = await _authService.updateUser(next);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      notifyListeners();
+      return const ActionResult(
+        ok: true,
+        message: 'Perfil del ni\u00f1o guardado correctamente.',
+      );
+    }
+    return ActionResult(ok: false, message: saved.message);
+  }
+
+  Future<ActionResult> updateParentalControl(
+      ParentalControl nextControl) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    final normalized = nextControl.copyWith(
+      dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
+      blockedGameKeys: nextControl.blockedGameKeys
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(),
+    );
+    final next = user.copyWith(parentalControl: normalized);
+    final saved = await _authService.updateUser(next);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      notifyListeners();
+      return const ActionResult(
+          ok: true, message: 'Control parental guardado.');
+    }
+    return ActionResult(ok: false, message: saved.message);
+  }
+
+  Future<void> recordGameSession({
+    required String gameKey,
+    required DateTime startedAt,
+    required DateTime endedAt,
+    required int difficultyStars,
+    required int rounds,
+    required int mistakes,
+    required int pointsEarned,
+    int correctAnswers = 0,
+    int totalAttempts = 0,
+  }) async {
+    final user = _currentUser;
+    if (user == null) return;
+    final safeEnd = endedAt.isBefore(startedAt) ? startedAt : endedAt;
+    final duration =
+        safeEnd.difference(startedAt).inSeconds.clamp(0, 24 * 3600);
+    final session = GameSessionRecord(
+      id: 'sess_${DateTime.now().millisecondsSinceEpoch}',
+      gameKey: gameKey.trim().isEmpty ? 'unknown_game' : gameKey.trim(),
+      startedAtMillis: startedAt.millisecondsSinceEpoch,
+      endedAtMillis: safeEnd.millisecondsSinceEpoch,
+      durationSeconds: duration,
+      difficultyStars: difficultyStars.clamp(1, 3),
+      rounds: rounds.clamp(0, 500),
+      mistakes: mistakes.clamp(0, 500),
+      pointsEarned: pointsEarned.clamp(0, 1000000),
+      correctAnswers: correctAnswers.clamp(0, 500),
+      totalAttempts: totalAttempts.clamp(0, 1000),
+    );
+    final nextSessions = <GameSessionRecord>[
+      ...user.gameSessions,
+      session,
+    ];
+    if (nextSessions.length > 1500) {
+      nextSessions.removeRange(0, nextSessions.length - 1500);
+    }
+    final next = user.copyWith(gameSessions: nextSessions);
+    final saved = await _authService.updateUser(next);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      notifyListeners();
+    }
+  }
+
+  ActionResult canLaunchGame(String gameKey) {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    if (!isAdmin && _appAdminConfig.maintenanceMode) {
+      final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
+          ? 'La app esta en mantenimiento. Intenta mas tarde.'
+          : _appAdminConfig.maintenanceMessage;
+      return ActionResult(ok: false, message: message);
+    }
+
+    final control = user.parentalControl;
+    final normalizedKey = gameKey.trim().toLowerCase();
+    final globallyBlocked = _appAdminConfig.blockedGameKeys.any(
+      (item) => item.trim().toLowerCase() == normalizedKey,
+    );
+    if (!isAdmin && globallyBlocked) {
+      return const ActionResult(
+        ok: false,
+        message: 'Este juego esta deshabilitado por administracion.',
+      );
+    }
+    final blocked = control.blockedGameKeys.any(
+      (item) => item.trim().toLowerCase() == normalizedKey,
+    );
+    if (blocked) {
+      return const ActionResult(
+        ok: false,
+        message: 'Este juego esta bloqueado por control parental.',
+      );
+    }
+
+    if (control.hasSchedule) {
+      final hour = DateTime.now().hour;
+      final start = control.allowedStartHour;
+      final end = control.allowedEndHour;
+      final allowed = start < end
+          ? (hour >= start && hour < end)
+          : (hour >= start || hour < end);
+      if (!allowed) {
+        return ActionResult(
+          ok: false,
+          message:
+              'Fuera del horario permitido ($start:00 - $end:00). Pide ayuda a un adulto.',
+        );
+      }
+    }
+
+    if (control.dailyLimitMinutes > 0) {
+      final used = usedMinutesOn(DateTime.now());
+      if (used >= control.dailyLimitMinutes) {
+        return ActionResult(
+          ok: false,
+          message:
+              'Limite diario alcanzado (${control.dailyLimitMinutes} min). Vuelve ma\u00f1ana.',
+        );
+      }
+    }
+    return const ActionResult(ok: true, message: 'OK');
+  }
+
+  int usedMinutesOn(DateTime day) {
+    final sessions = _currentUser?.gameSessions ?? const <GameSessionRecord>[];
+    var total = 0;
+    for (final session in sessions) {
+      final started =
+          DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
+      if (_sameLocalDay(started, day)) {
+        total += session.durationSeconds;
+      }
+    }
+    return total ~/ 60;
+  }
+
+  List<GameSessionRecord> sessionsForLastDays(int days) {
+    final user = _currentUser;
+    if (user == null) return const <GameSessionRecord>[];
+    final safeDays = days.clamp(1, 365);
+    final from = DateTime.now().subtract(Duration(days: safeDays));
+    return user.gameSessions.where((session) {
+      final started =
+          DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
+      return started.isAfter(from);
+    }).toList();
+  }
+
+  Map<int, int> usageMinutesByHour({int days = 14}) {
+    final result = <int, int>{};
+    for (var h = 0; h < 24; h++) {
+      result[h] = 0;
+    }
+    final sessions = sessionsForLastDays(days);
+    for (final session in sessions) {
+      final started =
+          DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
+      final minutes = (session.durationSeconds / 60).round();
+      result[started.hour] = (result[started.hour] ?? 0) + minutes;
+    }
+    return result;
+  }
+
   // Usado solo por pruebas/manual.
   void setOnline(bool value) {
     _isOnline = value;
@@ -572,6 +1121,10 @@ class AppController extends ChangeNotifier {
     final rem = seconds % 60;
     final remText = rem.toString().padLeft(2, '0');
     return '$minutes:$remText';
+  }
+
+  bool _sameLocalDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Future<void> _runThemeMigrationIfNeeded() async {

@@ -1,9 +1,10 @@
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import 'home_screen.dart';
 import 'package:lottie/lottie.dart';
-
 
 enum GameDifficulty { easy, medium, hard }
 
@@ -30,8 +31,7 @@ class ConnectSoundGameScreen extends StatefulWidget {
   final GameDifficulty difficulty;
 
   @override
-  State<ConnectSoundGameScreen> createState() =>
-      _ConnectSoundGameScreenState();
+  State<ConnectSoundGameScreen> createState() => _ConnectSoundGameScreenState();
 }
 
 class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
@@ -59,8 +59,9 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   bool _isFinishing = false;
 
   int _totalMistakes = 0;
+  final DateTime _startedAt = DateTime.now();
 
-  final List<String> _allImages = [
+  static const List<String> _defaultImages = [
     'assets/images/conecta/arpa.jpg',
     'assets/images/conecta/ballena.jpg',
     'assets/images/conecta/buho.jpg',
@@ -89,7 +90,6 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     'assets/images/conecta/niños.jpg',
     'assets/images/conecta/tormenta.jpg',
     'assets/images/conecta/coro.jpg',
-
   ];
 
   @override
@@ -164,11 +164,9 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
               soundAsset: 'sounds/vaca.mp3',
               correctImage: 'assets/images/conecta/vaca.jpg'),
           SoundItem(
-          category: 'animales',
-          soundAsset: 'sounds/violin.mp3',
-          correctImage: 'assets/images/conecta/violin.jpg'),
-              
-
+              category: 'animales',
+              soundAsset: 'sounds/violin.mp3',
+              correctImage: 'assets/images/conecta/violin.jpg'),
         ];
       case GameDifficulty.medium:
         return [
@@ -228,7 +226,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   }
 
   List<SoundItem> _buildActiveItems(GameDifficulty difficulty) {
-    final baseItems = [..._loadCategorizedSoundItems(difficulty)];
+    final baseItems = _itemsForDifficulty(difficulty);
     final reviewPool = _reviewPoolByDifficulty[difficulty]!;
 
     if (reviewPool.isNotEmpty) {
@@ -258,7 +256,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     _currentItem = _activeItems[_currentRound % _activeItems.length];
 
     final options = <String>[_currentItem!.correctImage];
-    final distractors = _allImages
+    final distractors = _imagePoolForOptions()
         .where((img) => img != _currentItem!.correctImage)
         .toList()
       ..shuffle();
@@ -276,17 +274,104 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   }
 
   Future<void> _playSound() async {
-  if (_currentItem == null) return;
+    if (_currentItem == null) return;
 
-  try {
-    await _player.stop();
-    await _player.play(
-      AssetSource(_currentItem!.soundAsset),
-      volume: 1.0,
-    );
-  } catch (e) {
-    debugPrint("Error reproduciendo sonido: $e");
+    try {
+      await _player.stop();
+      await _player.play(
+        _audioSourceFor(_currentItem!.soundAsset),
+        volume: 1.0,
+      );
+    } catch (e) {
+      debugPrint("Error reproduciendo sonido: $e");
+    }
   }
+
+  int _difficultyStars(GameDifficulty difficulty) {
+    return switch (difficulty) {
+      GameDifficulty.easy => 1,
+      GameDifficulty.medium => 2,
+      GameDifficulty.hard => 3,
+    };
+  }
+
+  List<SoundItem> _customSoundItemsForDifficulty(GameDifficulty difficulty) {
+    final stars = _difficultyStars(difficulty);
+    return widget.controller.gameContentConfig.soundItems
+        .where(
+          (item) =>
+              item.enabled &&
+              item.difficultyStars == stars &&
+              item.soundAsset.trim().isNotEmpty &&
+              item.correctImage.trim().isNotEmpty,
+        )
+        .map(
+          (item) => SoundItem(
+            category: item.category.trim().isEmpty
+                ? 'personalizado'
+                : item.category.trim(),
+            soundAsset: item.soundAsset.trim(),
+            correctImage: item.correctImage.trim(),
+          ),
+        )
+        .toList();
+  }
+
+  List<SoundItem> _itemsForDifficulty(GameDifficulty difficulty) {
+    final defaults = _loadCategorizedSoundItems(difficulty);
+    final custom = _customSoundItemsForDifficulty(difficulty);
+    if (custom.isEmpty) return [...defaults];
+
+    final merged = <SoundItem>[...custom];
+    for (final item in defaults) {
+      final exists = merged.any(
+        (candidate) =>
+            candidate.soundAsset == item.soundAsset &&
+            candidate.correctImage == item.correctImage,
+      );
+      if (!exists) {
+        merged.add(item);
+      }
+    }
+    return merged;
+  }
+
+  List<String> _imagePoolForOptions() {
+    final pool = <String>{
+      ..._defaultImages,
+      ..._activeItems.map((item) => item.correctImage.trim()),
+    }.where((item) => item.isNotEmpty).toList();
+    return pool;
+  }
+
+  Source _audioSourceFor(String rawPath) {
+    final path = rawPath.trim();
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return UrlSource(path);
+    }
+    final looksAbsoluteWindows = RegExp(r'^[a-zA-Z]:\\').hasMatch(path);
+    final looksAbsoluteUnix = path.startsWith('/');
+    final looksUnc = path.startsWith(r'\\');
+    if (looksAbsoluteWindows || looksAbsoluteUnix || looksUnc) {
+      return DeviceFileSource(path);
+    }
+    final normalizedAsset =
+        path.startsWith('assets/') ? path.substring('assets/'.length) : path;
+    return AssetSource(normalizedAsset);
+  }
+
+  ImageProvider _imageProviderFor(String path) {
+    final normalized = path.trim();
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return NetworkImage(normalized);
+    }
+    if (normalized.startsWith('assets/')) {
+      return AssetImage(normalized);
+    }
+    if (normalized.isNotEmpty && File(normalized).existsSync()) {
+      return FileImage(File(normalized));
+    }
+    return AssetImage(normalized);
   }
 
   void _confirmSelection() async {
@@ -353,7 +438,25 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     final total = baseStars + difficultyBonus;
 
     try {
-      await widget.controller.addStars(total).timeout(const Duration(seconds: 2));
+      await widget.controller
+          .addStars(total)
+          .timeout(const Duration(seconds: 2));
+      final difficultyStars = switch (widget.difficulty) {
+        GameDifficulty.easy => 1,
+        GameDifficulty.medium => 2,
+        GameDifficulty.hard => 3,
+      };
+      await widget.controller.recordGameSession(
+        gameKey: 'conecta_sonidos',
+        startedAt: _startedAt,
+        endedAt: DateTime.now(),
+        difficultyStars: difficultyStars,
+        rounds: totalRounds,
+        mistakes: _totalMistakes,
+        pointsEarned: total,
+        correctAnswers: totalRounds,
+        totalAttempts: totalRounds + _totalMistakes,
+      );
     } catch (_) {}
 
     await _player.stop();
@@ -361,44 +464,43 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     if (!mounted) return;
 
     showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => Dialog(
-      backgroundColor: const Color.fromARGB(255, 211, 237, 213),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "Ganaste $baseStars estrellas ⭐",
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Ganaste $total estrellas ⭐",
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
 
-            const SizedBox(height: 18),
+              const SizedBox(height: 18),
 
-            /// ✨ ANIMACIÓN ESTRELLAS
-            SizedBox(
-              height: 140,
-              child: Lottie.asset(
-                'assets/animations/estrellas.json',
-                repeat: true,
-                fit: BoxFit.contain,
+              /// ✨ ANIMACIÓN ESTRELLAS
+              SizedBox(
+                height: 140,
+                child: Lottie.asset(
+                  'assets/animations/estrellas.json',
+                  repeat: true,
+                  fit: BoxFit.contain,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-
+    );
 
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
@@ -417,244 +519,239 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     super.dispose();
   }
 
-
   Future<bool> _onWillPop() async {
-  if (_isFinishing) return false;
+    if (_isFinishing) return false;
 
-  final shouldExit = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      title: const Text(
-        "¿Salir del juego?",
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      content: const Text(
-        "Si sales ahora, perderás el progreso de esta partida.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text("Cancelar"),
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red.shade300,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          onPressed: () async {
-            await _player.stop(); // 🔊 detenemos audio
-            if (context.mounted) {
-              Navigator.of(context).pop(true);
-            }
-          },
-          child: const Text(
-            "Salir",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+        title: const Text(
+          "¿Salir del juego?",
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-      ],
-    ),
-  );
-
-  return shouldExit ?? false;
-}
-  
-
-
-  @override
-Widget build(BuildContext context) {
-  final options = _currentOptions;
-
-  return WillPopScope(
-  onWillPop: _onWillPop,
-  child: Scaffold(
-    appBar: AppBar(
-      title: const Text('Conecta el sonido'),
-    ),
-    body: Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-
-          /// 🔹 TÍTULO SUPERIOR
-          const Text(
-            "Escucha el sonido",
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
+        content: const Text(
+          "Si sales ahora, perderás el progreso de esta partida.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancelar"),
           ),
-
-          const SizedBox(height: 16),
-
-          /// 🔊 BOTÓN DE AUDIO MÁS PEQUEÑO
-          Center(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: _playSound,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: widget.controller.accentColor
-                      .withAlpha((0.15 * 255).toInt()),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: widget.controller.accentColor,
-                    width: 2,
-                  ),
-                ),
-                child: Icon(
-                  Icons.volume_up_rounded,
-                  size: 55,
-                  color: widget.controller.accentColor,
-                ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade300,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-          ),
-
-          const SizedBox(height: 20),
-
-          /// 🔹 PREGUNTA
-          const Text(
-            "¿A quién pertenece este sonido?",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 12),
-
-          /// 🔹 FEEDBACK (ESPACIO RESERVADO)
-          SizedBox(
-            height: 40,
-            child: _showFeedback
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 6, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: _isCorrectFeedback
-                          ? Colors.green.shade100
-                          : Colors.red.shade100,
-                      borderRadius:
-                          BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _isCorrectFeedback
-                            ? "¡Muy bien!"
-                            : "¡Casi, prueba de nuevo!",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _isCorrectFeedback
-                              ? Colors.green
-                              : Colors.red,
-                        ),
-                      ),
-                    ),
-                  )
-                : const SizedBox(),
-          ),
-
-          const SizedBox(height: 10),
-
-          /// 🔹 GRID 2x2 (NO TOCADO)
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1,
-              children: List.generate(
-                options.length,
-                (index) {
-                  final isDisabled =
-                      _disabledIndexes.contains(index);
-                  final isSelected =
-                      _selectedIndex == index;
-
-                  return Material(
-                    color: isDisabled
-                        ? Colors.grey.shade300
-                        : isSelected
-                            ? widget.controller.accentColor
-                            : widget.controller.accentColor
-                                .withAlpha(
-                                    (0.55 * 255).toInt()),
-                    borderRadius:
-                        BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius:
-                          BorderRadius.circular(14),
-                      onTap: isDisabled
-                          ? null
-                          : () {
-                              setState(() {
-                                _selectedIndex = index;
-                              });
-                            },
-                      child: Padding(
-                        padding:
-                            const EdgeInsets.all(12),
-                        child: ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(10),
-                          child: Image.asset(
-                            options[index],
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          /// 🔹 BOTÓN CONFIRMAR
-          SizedBox(
-            width: 220,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    widget.controller.accentColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(14),
-                ),
-              ),
-              onPressed:
-                  _selectedIndex == null || _isFinishing ? null : _confirmSelection,
-              child: const Text(
-                'Confirmar',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+            onPressed: () async {
+              await _player.stop(); // 🔊 detenemos audio
+              if (context.mounted) {
+                Navigator.of(context).pop(true);
+              }
+            },
+            child: const Text(
+              "Salir",
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ],
       ),
-    ),
-    ),
-  );
-}
-}
+    );
 
+    return shouldExit ?? false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = _currentOptions;
+
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldExit = await _onWillPop();
+        if (!mounted || !shouldExit) return;
+        Navigator.of(this.context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Conecta el sonido'),
+        ),
+        body: Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              /// 🔹 TÍTULO SUPERIOR
+              const Text(
+                "Escucha el sonido",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 16),
+
+              /// 🔊 BOTÓN DE AUDIO MÁS PEQUEÑO
+              Center(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: _playSound,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: widget.controller.accentColor
+                          .withAlpha((0.15 * 255).toInt()),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: widget.controller.accentColor,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.volume_up_rounded,
+                      size: 55,
+                      color: widget.controller.accentColor,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              /// 🔹 PREGUNTA
+              const Text(
+                "¿A quién pertenece este sonido?",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 12),
+
+              /// 🔹 FEEDBACK (ESPACIO RESERVADO)
+              SizedBox(
+                height: 40,
+                child: _showFeedback
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 6, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: _isCorrectFeedback
+                              ? Colors.green.shade100
+                              : Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _isCorrectFeedback
+                                ? "¡Muy bien!"
+                                : "¡Casi, prueba de nuevo!",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _isCorrectFeedback
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox(),
+              ),
+
+              const SizedBox(height: 10),
+
+              /// 🔹 GRID 2x2 (NO TOCADO)
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1,
+                  children: List.generate(
+                    options.length,
+                    (index) {
+                      final isDisabled = _disabledIndexes.contains(index);
+                      final isSelected = _selectedIndex == index;
+
+                      return Material(
+                        color: isDisabled
+                            ? Colors.grey.shade300
+                            : isSelected
+                                ? widget.controller.accentColor
+                                : widget.controller.accentColor
+                                    .withAlpha((0.55 * 255).toInt()),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: isDisabled
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedIndex = index;
+                                  });
+                                },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image(
+                                image: _imageProviderFor(options[index]),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.broken_image_outlined),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// 🔹 BOTÓN CONFIRMAR
+              SizedBox(
+                width: 220,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.controller.accentColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: _selectedIndex == null || _isFinishing
+                      ? null
+                      : _confirmSelection,
+                  child: const Text(
+                    'Confirmar',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

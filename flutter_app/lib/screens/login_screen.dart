@@ -3,21 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
+import '../models/portal_role.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
+import 'caregiver/caregiver_panel_screen.dart';
 import 'home_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
     required this.controller,
     this.initialIdentifier = '',
+    this.initialRole = PortalRole.caregiver,
   });
 
   final AppController controller;
   final String initialIdentifier;
+  final PortalRole initialRole;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -31,10 +36,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _googleSubmitting = false;
   int _remaining = 0;
   Timer? _timer;
+  late PortalRole _role;
 
   @override
   void initState() {
     super.initState();
+    _role = widget.initialRole == PortalRole.child
+        ? PortalRole.child
+        : PortalRole.caregiver;
     final initial = widget.initialIdentifier.trim();
     if (initial.isNotEmpty) {
       _identifierController.text = initial;
@@ -50,108 +59,50 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    setState(() => _submitting = true);
-    final result = await widget.controller.login(
-      _identifierController.text,
-      _passwordController.text,
-    );
-    if (!mounted) return;
-    setState(() => _submitting = false);
-    _showSnack(result.message, ok: result.ok);
-    if (!result.ok && _isVerificationPendingMessage(result.message)) {
-      await _showVerificationRequiredNotice(fromMessage: result.message);
+    final identifier = _identifierController.text.trim();
+    final secret = _passwordController.text.trim();
+    if (identifier.isEmpty || secret.isEmpty) {
+      _showSnack('Completa los campos para continuar.', ok: false);
       return;
     }
-    if (result.ok) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-            builder: (_) => HomeScreen(controller: widget.controller)),
-        (_) => false,
-      );
+    if (_role == PortalRole.caregiver && !identifier.contains('@')) {
+      _showSnack('Ingresa el correo del cuidador.', ok: false);
+      return;
     }
-  }
+    if (_role == PortalRole.child &&
+        !widget.controller.isValidChildLoginPinFormat(secret)) {
+      _showSnack(
+        'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
+        ok: false,
+      );
+      return;
+    }
 
-  bool _isVerificationPendingMessage(String message) {
-    final text = message.toLowerCase();
-    return text.contains('correo no esta verificado') ||
-        text.contains('correo de verificacion') ||
-        text.contains('verifica tu cuenta');
-  }
-
-  Future<void> _showVerificationRequiredNotice({String? fromMessage}) async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.92, end: 1),
-          duration: const Duration(milliseconds: 520),
-          curve: Curves.easeOutBack,
-          builder: (context, value, child) => Transform.scale(
-            scale: value,
-            child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFFE7F4FF),
-                  ),
-                  child: const Icon(
-                    Icons.mark_email_unread_rounded,
-                    size: 36,
-                    color: Color(0xFF1F86E6),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Verifica tu correo',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Tu cuenta aun no esta verificada. Abre el correo que te enviamos y confirma el enlace.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Recuerda: solo tienes 1 hora desde el registro. Luego la cuenta se elimina por seguridad.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFFE76F51),
-                  ),
-                ),
-                if (fromMessage != null && fromMessage.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    fromMessage,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: 14),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Entendido'),
-                ),
-              ],
-            ),
-          ),
+    setState(() => _submitting = true);
+    final result = switch (_role) {
+      PortalRole.child => widget.controller.loginAsChild(
+          username: identifier,
+          password: secret,
         ),
-      ),
-    );
+      PortalRole.caregiver => widget.controller.loginAsCaregiver(
+          identifier,
+          secret,
+        ),
+      PortalRole.admin => widget.controller.loginAsAdmin(
+          identifier,
+          secret,
+        ),
+    };
+    final resolved = await result;
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    _showSnack(resolved.message, ok: resolved.ok);
+    if (!resolved.ok) return;
+    _openPostLoginScreen();
   }
 
   Future<void> _loginWithGoogle() async {
+    if (_role != PortalRole.caregiver) return;
     FocusScope.of(context).unfocus();
     setState(() => _googleSubmitting = true);
     final result = await widget.controller.loginWithGoogle();
@@ -159,8 +110,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _googleSubmitting = false);
 
     if (_isGoogleConfirmRequired(result.message)) {
-      final email = _extractGoogleConfirmEmail(result.message);
-      final confirmed = await _confirmGoogleSelection(email);
+      final confirmed = await _confirmGoogleSelection(
+        _extractGoogleConfirmEmail(result.message),
+      );
       if (!mounted) return;
       if (!confirmed) {
         await widget.controller.cancelPendingGoogleLogin();
@@ -169,59 +121,47 @@ class _LoginScreenState extends State<LoginScreen> {
 
       var preferredUsernameForNewAccount = '';
       var preferredPasswordForNewAccount = '';
+
       if (_isGoogleConfirmWithUsername(result.message)) {
-        final suggested =
-            _extractGoogleConfirmSuggestedUsername(result.message);
-        final chosen = await _askGoogleUsernameForGoogle(
-          email: email,
-          suggested: suggested,
+        final data = await _askGooglePasswordForFirstLogin(
+          email: _extractGoogleConfirmEmail(result.message),
         );
         if (!mounted) return;
-        if (chosen == null) {
+        if (data == null) {
           await widget.controller.cancelPendingGoogleLogin();
           return;
         }
-        preferredUsernameForNewAccount = chosen['username'] ?? '';
-        preferredPasswordForNewAccount = chosen['password'] ?? '';
+        preferredUsernameForNewAccount = data.$1;
+        preferredPasswordForNewAccount = data.$2;
       }
 
       setState(() => _googleSubmitting = true);
-      final confirmedResult = await widget.controller.confirmPendingGoogleLogin(
+      final confirmResult = await widget.controller.confirmPendingGoogleLogin(
         preferredUsernameForNewAccount: preferredUsernameForNewAccount,
         preferredPasswordForNewAccount: preferredPasswordForNewAccount,
       );
       if (!mounted) return;
       setState(() => _googleSubmitting = false);
-
-      if (confirmedResult.message == 'EMAIL_EXISTS_NEED_LINK') {
-        await _handleGoogleLinkFlow();
-        return;
-      }
-
-      _showSnack(confirmedResult.message, ok: confirmedResult.ok);
-      if (confirmedResult.ok) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-              builder: (_) => HomeScreen(controller: widget.controller)),
-          (_) => false,
-        );
-      }
-      return;
-    }
-
-    if (result.message == 'EMAIL_EXISTS_NEED_LINK') {
-      await _handleGoogleLinkFlow();
+      _showSnack(confirmResult.message, ok: confirmResult.ok);
+      if (!confirmResult.ok) return;
+      _openPostLoginScreen();
       return;
     }
 
     _showSnack(result.message, ok: result.ok);
-    if (result.ok) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-            builder: (_) => HomeScreen(controller: widget.controller)),
-        (_) => false,
-      );
-    }
+    if (!result.ok) return;
+    _openPostLoginScreen();
+  }
+
+  void _openPostLoginScreen() {
+    final role = widget.controller.activePortalRole;
+    final Widget destination = role == PortalRole.child
+        ? HomeScreen(controller: widget.controller)
+        : CaregiverPanelScreen(controller: widget.controller);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => destination),
+      (_) => false,
+    );
   }
 
   bool _isGoogleConfirmRequired(String message) {
@@ -229,179 +169,62 @@ class _LoginScreenState extends State<LoginScreen> {
         message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
-  String _extractGoogleConfirmEmail(String message) {
-    const prefixWithUsername = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
-    if (message.startsWith(prefixWithUsername)) {
-      final payload = message.substring(prefixWithUsername.length);
-      return payload.split('|').first.trim();
-    }
-    const prefix = 'GOOGLE_CONFIRM_REQUIRED:';
-    if (!message.startsWith(prefix)) return '';
-    return message.substring(prefix.length).trim();
-  }
-
   bool _isGoogleConfirmWithUsername(String message) {
     return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
-  String _extractGoogleConfirmSuggestedUsername(String message) {
-    const prefix = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
-    if (!message.startsWith(prefix)) return '';
-    final payload = message.substring(prefix.length);
-    final parts = payload.split('|');
-    if (parts.length < 2) return '';
-    return parts[1].trim();
+  String _extractGoogleConfirmEmail(String message) {
+    const withUsername = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
+    if (message.startsWith(withUsername)) {
+      final payload = message.substring(withUsername.length);
+      return payload.split('|').first.trim();
+    }
+    const simple = 'GOOGLE_CONFIRM_REQUIRED:';
+    if (!message.startsWith(simple)) return '';
+    return message.substring(simple.length).trim();
   }
 
-  Future<Map<String, String>?> _askGoogleUsernameForGoogle({
+  Future<(String, String)?> _askGooglePasswordForFirstLogin({
     required String email,
-    required String suggested,
   }) async {
-    final usernameController = TextEditingController(
-      text: suggested.trim().isNotEmpty
-          ? suggested.trim()
-          : widget.controller.authService.generateSuggestedUsername(email),
-    );
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
-    bool? usernameValid;
-
-    bool usernameFormatValid(String value) {
-      return widget.controller.authService.isValidUsernameFormat(value);
-    }
-
-    bool passwordValid() => passwordController.text.trim().length >= 6;
-
-    bool passwordsMatch() =>
-        confirmController.text == passwordController.text &&
-        confirmController.text.isNotEmpty;
-
-    bool canContinue() {
-      return usernameFormatValid(usernameController.text) &&
-          usernameValid == true &&
-          passwordValid() &&
-          passwordsMatch();
-    }
-
-    String validationMessage() {
-      if (usernameController.text.trim().isEmpty) {
-        return 'Escribe un nombre de usuario.';
-      }
-      if (!usernameFormatValid(usernameController.text)) {
-        return 'Usa 3 a 18 caracteres: letras, numeros, ., _, -.';
-      }
-      return 'Ese nombre de usuario ya esta en uso.';
-    }
-
-    Future<bool> validateUsername(String username) async {
-      final typed = username.trim();
-      final normalizedTyped = typed.toLowerCase();
-      if (!usernameFormatValid(typed)) {
-        if (usernameController.text.trim().toLowerCase() == normalizedTyped) {
-          usernameValid = false;
-        }
-        return false;
-      }
-      final available =
-          await widget.controller.authService.checkUsernameAvailable(typed);
-      if (usernameController.text.trim().toLowerCase() != normalizedTyped) {
-        return available;
-      }
-      usernameValid = available;
-      return available;
-    }
-
-    final initialTyped = usernameController.text.trim();
-    if (usernameFormatValid(initialTyped)) {
-      usernameValid =
-          await widget.controller.authService.checkUsernameAvailable(
-        initialTyped,
-      );
-    }
-    if (!mounted) {
-      usernameController.dispose();
-      return null;
-    }
-
     try {
-      final selectedData = await showDialog<Map<String, String>>(
+      final result = await showDialog<(String, String)>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
           return StatefulBuilder(
-            builder: (context, setLocal) {
+            builder: (context, setLocalState) {
+              final pass = passwordController.text.trim();
+              final confirm = confirmController.text.trim();
+              final ok = pass.length >= 6 && pass == confirm;
+              final username =
+                  widget.controller.authService.generateSuggestedUsername(
+                email,
+              );
               return AlertDialog(
-                title: const Text('Elige tu nombre de usuario'),
-                scrollable: true,
+                title: const Text('Completa tu cuenta'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Estas entrando con $email. Elige tu apodo y crea una contraseña para entrar luego con Google o con correo y contraseña.',
-                    ),
-                    const SizedBox(height: 10),
-                    NebulaTextField(
-                      controller: usernameController,
-                      label: 'Nombre de usuario',
-                      validator: (value) async {
-                        final result = await validateUsername(value);
-                        if (!mounted) return result;
-                        setLocal(() {});
-                        return result;
-                      },
-                      showValidationStatus: true,
-                      validationMessage: validationMessage(),
-                      onChanged: (_) {
-                        setLocal(() {
-                          usernameValid =
-                              usernameFormatValid(usernameController.text)
-                                  ? null
-                                  : false;
-                        });
-                      },
-                    ),
+                    Text('Cuenta Google: $email'),
+                    const SizedBox(height: 8),
+                    Text('Usuario interno: $username'),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: passwordController,
-                      label: 'contraseña (minimo 6)',
+                      label: 'Contrase\u00f1a de respaldo (minimo 6)',
                       obscureText: true,
-                      onChanged: (_) => setLocal(() {}),
+                      onChanged: (_) => setLocalState(() {}),
                     ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
-                      label: 'Repite la contraseña',
+                      label: 'Confirmar contrase\u00f1a',
                       obscureText: true,
-                      onChanged: (_) => setLocal(() {}),
+                      onChanged: (_) => setLocalState(() {}),
                     ),
-                    if (passwordController.text.isNotEmpty &&
-                        !passwordValid()) ...[
-                      const SizedBox(height: 6),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'La contraseña debe tener al menos 6 caracteres.',
-                          style: TextStyle(
-                            color: Color(0xFFFF6E7A),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (confirmController.text.isNotEmpty &&
-                        !passwordsMatch()) ...[
-                      const SizedBox(height: 6),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Las contraseñas no coinciden.',
-                          style: TextStyle(
-                            color: Color(0xFFFF6E7A),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 actions: [
@@ -410,11 +233,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: const Text('Cancelar'),
                   ),
                   FilledButton(
-                    onPressed: canContinue()
-                        ? () => Navigator.of(context).pop(<String, String>{
-                              'username': usernameController.text.trim(),
-                              'password': passwordController.text.trim(),
-                            })
+                    onPressed: ok
+                        ? () => Navigator.of(context).pop((username, pass))
                         : null,
                     child: const Text('Continuar'),
                   ),
@@ -424,9 +244,8 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         },
       );
-      return selectedData;
+      return result;
     } finally {
-      usernameController.dispose();
       passwordController.dispose();
       confirmController.dispose();
     }
@@ -438,9 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Confirmar cuenta Google'),
-        content: Text(
-          'Vas a entrar con $selected. ¿Deseas continuar?',
-        ),
+        content: Text('Vas a entrar con $selected. Deseas continuar?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -456,58 +273,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return confirmed == true;
   }
 
-  Future<void> _handleGoogleLinkFlow() async {
-    final passwordController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Vincular cuenta'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Ya existe una cuenta con ese correo. Escribe tu contraseña actual para vincular Google.',
-              ),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: passwordController,
-                label: 'contraseña actual',
-                obscureText: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Vincular'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || confirmed != true) return;
-
-      final linkResult = await widget.controller.linkGoogleToExistingAccount(
-        currentPassword: passwordController.text,
-      );
-      if (!mounted) return;
-      _showSnack(linkResult.message, ok: linkResult.ok);
-      if (!linkResult.ok) return;
-
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-            builder: (_) => HomeScreen(controller: widget.controller)),
-        (_) => false,
-      );
-    } finally {
-      passwordController.dispose();
-    }
-  }
-
   Future<void> _requestReset() async {
     final result = await widget.controller.requestLoginPasswordReset(
       _identifierController.text,
@@ -519,18 +284,112 @@ class _LoginScreenState extends State<LoginScreen> {
     );
     setState(() => _remaining = currentRemaining);
     _timer?.cancel();
-    if (currentRemaining > 0) {
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        final value = widget.controller.loginResetRemaining(
-          _identifierController.text,
-        );
-        if (!mounted) return;
-        setState(() => _remaining = value);
-        if (value <= 0) {
-          _timer?.cancel();
-        }
-      });
+    if (currentRemaining <= 0) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final value = widget.controller.loginResetRemaining(
+        _identifierController.text,
+      );
+      if (!mounted) return;
+      setState(() => _remaining = value);
+      if (value <= 0) {
+        _timer?.cancel();
+      }
+    });
+  }
+
+  Future<void> _openHiddenAdminAccess() async {
+    final result = await widget.controller.ensureHiddenAdminAccount();
+    if (!mounted) return;
+    if (!result.ok) {
+      _showSnack(result.message, ok: false);
+      return;
     }
+
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    try {
+      final credentials = await showDialog<(String, String)>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Acceso administrador'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NebulaTextField(
+                controller: emailController,
+                label: 'Correo admin',
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 10),
+              NebulaTextField(
+                controller: passwordController,
+                label: 'Contraseña admin',
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop((
+                emailController.text.trim(),
+                passwordController.text.trim(),
+              )),
+              child: const Text('Entrar'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || credentials == null) return;
+      final email = credentials.$1;
+      final password = credentials.$2;
+      if (email.isEmpty || password.isEmpty) {
+        _showSnack('Completa correo y contraseña admin.', ok: false);
+        return;
+      }
+      final login = await widget.controller.loginAsAdmin(email, password);
+      if (!mounted) return;
+      _showSnack(login.message, ok: login.ok);
+      if (!login.ok) return;
+      _openPostLoginScreen();
+    } finally {
+      emailController.dispose();
+      passwordController.dispose();
+    }
+  }
+
+  Future<void> _openCreateAccount() async {
+    if (_role == PortalRole.child) {
+      final wantsSwitch = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Cuenta de niño'),
+          content: const Text(
+            'Las cuentas de niño las crea un cuidador desde su panel.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Volver'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Ir a cuidador'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || wantsSwitch != true) return;
+      setState(() => _role = PortalRole.caregiver);
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RegisterScreen(controller: widget.controller),
+      ),
+    );
   }
 
   void _showSnack(String message, {required bool ok}) {
@@ -542,7 +401,10 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Vamos a entrar'),
+        title: GestureDetector(
+          onLongPress: _openHiddenAdminAccess,
+          child: const Text('Vamos a entrar'),
+        ),
       ),
       body: CosmicBackground(
         child: SafeArea(
@@ -554,48 +416,101 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.all(18),
                   child: Column(
                     children: [
+                      SegmentedButton<PortalRole>(
+                        segments: const [
+                          ButtonSegment<PortalRole>(
+                            value: PortalRole.child,
+                            label: Text('Ni\u00f1o'),
+                            icon: Icon(Icons.child_care_rounded),
+                          ),
+                          ButtonSegment<PortalRole>(
+                            value: PortalRole.caregiver,
+                            label: Text('Cuidador'),
+                            icon: Icon(Icons.family_restroom_rounded),
+                          ),
+                        ],
+                        selected: <PortalRole>{_role},
+                        onSelectionChanged: (selection) {
+                          setState(() {
+                            _role = selection.first;
+                            _identifierController.clear();
+                            _passwordController.clear();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Dispositivo compartido: cambia entre ni\u00f1o y cuidador segun quien vaya a entrar ahora.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF4F628A),
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 14),
                       NebulaTextField(
                         controller: _identifierController,
-                        label: 'Correo o nombre de usuario',
-                        keyboardType: TextInputType.emailAddress,
+                        label: _role == PortalRole.child
+                            ? 'Usuario del ni\u00f1o'
+                            : 'Correo del cuidador',
+                        keyboardType: _role == PortalRole.child
+                            ? TextInputType.text
+                            : TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 12),
                       NebulaTextField(
                         controller: _passwordController,
-                        label: 'Contraseña',
+                        label: _role == PortalRole.child
+                            ? 'Contrase\u00f1a del ni\u00f1o'
+                            : 'Contrase\u00f1a',
+                        maxLength: _role == PortalRole.child ? 32 : null,
                         obscureText: true,
                       ),
+                      if (_role == PortalRole.child) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: const Color(0xFF4F628A)),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       NebulaPrimaryButton(
                         text: _submitting ? 'Entrando...' : 'Comenzar',
                         onPressed:
                             (_submitting || _googleSubmitting) ? null : _login,
                       ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: (_submitting || _googleSubmitting)
-                            ? null
-                            : widget.controller.firebaseEnabled
-                                ? _loginWithGoogle
-                                : null,
-                        icon: const Icon(Icons.account_circle_outlined),
-                        label: Text(
-                          _googleSubmitting
-                              ? 'Conectando con Google...'
-                              : 'Entrar con Google',
+                      if (_role == PortalRole.caregiver) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: (_submitting || _googleSubmitting)
+                              ? null
+                              : widget.controller.firebaseEnabled
+                                  ? _loginWithGoogle
+                                  : null,
+                          icon: const Icon(Icons.account_circle_outlined),
+                          label: Text(
+                            _googleSubmitting
+                                ? 'Conectando con Google...'
+                                : 'Entrar con Google',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(50),
+                          ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: _requestReset,
+                            child: const Text('Ayuda con mi contrase\u00f1a'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          onPressed: _requestReset,
-                          child: const Text('Ayuda con mi contraseña'),
-                        ),
-                      ),
+                      ],
                       if (_remaining > 0)
                         Align(
                           alignment: Alignment.centerLeft,
@@ -604,6 +519,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
+                      const SizedBox(height: 8),
+                      NebulaSecondaryButton(
+                        text: 'Crear cuenta',
+                        onPressed: _openCreateAccount,
+                      ),
                     ],
                   ),
                 ),

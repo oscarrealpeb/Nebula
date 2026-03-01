@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
 import '../core/theme/app_theme.dart';
+import '../models/portal_role.dart';
+import '../screens/child_profile_setup_screen.dart';
+import '../screens/caregiver/caregiver_panel_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/welcome_screen.dart';
 
@@ -15,13 +18,24 @@ class NebulaApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        Widget home;
+        if (controller.currentUser == null) {
+          home = WelcomeScreen(controller: controller);
+        } else if (controller.activePortalRole == PortalRole.child) {
+          home = controller.hasChildProfile
+              ? HomeScreen(controller: controller)
+              : ChildProfileSetupScreen(
+                  controller: controller,
+                  isMandatory: true,
+                );
+        } else {
+          home = CaregiverPanelScreen(controller: controller);
+        }
         return MaterialApp(
           title: 'Nebula',
           debugShowCheckedModeBanner: false,
           theme: buildNebulaTheme(controller.accentColor),
-          home: controller.currentUser == null
-              ? WelcomeScreen(controller: controller)
-              : HomeScreen(controller: controller),
+          home: home,
         );
       },
     );
