@@ -36,6 +36,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   final List<Map<String, String>> _failedWords = [];
   static const int _maxRounds = 5;
   static const int _maxAttemptsPerWord = 3;
+  List<int> _errorIndexes = [];
 
 
   int _currentRound = 0;
@@ -63,7 +64,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
 final List<Map<String, String>> _mediumWords = [
   {
     'image': 'assets/images/conecta/elefante.jpg',
-    'text': 'elefante',
+    'text': 'Elefante',
     'audio': 'sounds/elefante.mp3',
   },
   // {
@@ -76,7 +77,7 @@ final List<Map<String, String>> _mediumWords = [
 final List<Map<String, String>> _hardWords = [
   {
     'image': 'assets/images/conecta/guitarra',
-    'text': 'guitarra',
+    'text': 'Guitarra',
     'audio': 'sounds/guitarra.mp3',
   },
   // {
@@ -244,6 +245,30 @@ final List<Map<String, String>> _hardWords = [
 }
 
 
+List<int> _getErrorIndexes(String spoken, String correct) {
+  final List<int> errors = [];
+
+  final minLength = spoken.length < correct.length
+      ? spoken.length
+      : correct.length;
+
+  for (int i = 0; i < minLength; i++) {
+    if (spoken[i] != correct[i]) {
+      errors.add(i);
+    }
+  }
+
+  // Si faltan letras al final
+  if (correct.length > spoken.length) {
+    for (int i = spoken.length; i < correct.length; i++) {
+      errors.add(i);
+    }
+  }
+
+  return errors;
+}
+
+
   void _evaluateAttempt() {
   final correctText = _normalize(_currentItem['text']!);
   final spokenText = _normalize(_recognizedText);
@@ -260,6 +285,8 @@ final List<Map<String, String>> _hardWords = [
   final isCorrect = distance <= allowedErrors;
 
   if (isCorrect) {
+    _errorIndexes = [];
+
     _correctAnswers++;
     _attemptsForCurrentWord = 0;
 
@@ -269,6 +296,7 @@ final List<Map<String, String>> _hardWords = [
 
     Future.delayed(const Duration(seconds: 1), _nextRound);
   } else {
+    _errorIndexes = _getErrorIndexes(spokenText, correctText);
     _totalMistakes++;
     _attemptsForCurrentWord++;
 
@@ -541,11 +569,10 @@ final List<Map<String, String>> _hardWords = [
               if (_recognizedText.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _recognizedText,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.black54,
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    children: _buildColoredText(),
                   ),
                 ),
               ),
@@ -650,4 +677,29 @@ final List<Map<String, String>> _hardWords = [
       ),
     );
   }
+
+  List<TextSpan> _buildColoredText() {
+  final correctText = _normalize(_currentItem['text']!);
+  final spokenText = _normalize(_recognizedText);
+
+  final List<TextSpan> spans = [];
+
+  for (int i = 0; i < spokenText.length; i++) {
+    final bool isError =
+        i >= correctText.length || _errorIndexes.contains(i);
+
+    spans.add(
+      TextSpan(
+        text: spokenText[i],
+        style: TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.bold,
+          color: isError ? Colors.red : Colors.black,
+        ),
+      ),
+    );
+  }
+
+  return spans;
+}
 }
