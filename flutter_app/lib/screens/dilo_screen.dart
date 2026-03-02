@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
@@ -37,7 +37,6 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   static const int _maxRounds = 5;
   static const int _maxAttemptsPerWord = 3;
 
-
   int _currentRound = 0;
   int _totalMistakes = 0;
   int _correctAnswers = 0;
@@ -48,42 +47,42 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   bool _completing = false;
 
   final List<Map<String, String>> _easyWords = [
-  {
-    'image': 'assets/images/conecta/gato.jpg',
-    'text': 'Gato',
-    'audio': 'sounds/gato.mp3',
-  },
-  // {
-  //   'image': 'assets/sol.png',
-  //   'text': 'sol',
-  //   'audio': 'sounds/sol.mp3',
-  // },
-];
+    {
+      'image': 'assets/images/conecta/gato.jpg',
+      'text': 'Gato',
+      'audio': 'sounds/gato.mp3',
+    },
+    // {
+    //   'image': 'assets/sol.png',
+    //   'text': 'sol',
+    //   'audio': 'sounds/sol.mp3',
+    // },
+  ];
 
-final List<Map<String, String>> _mediumWords = [
-  {
-    'image': 'assets/images/conecta/elefante.jpg',
-    'text': 'elefante',
-    'audio': 'sounds/elefante.mp3',
-  },
-  // {
-  //   'image': 'assets/mesa.png',
-  //   'text': 'mesa',
-  //   'audio': 'sounds/mesa.mp3',
-  // },
-];
+  final List<Map<String, String>> _mediumWords = [
+    {
+      'image': 'assets/images/conecta/elefante.jpg',
+      'text': 'elefante',
+      'audio': 'sounds/elefante.mp3',
+    },
+    // {
+    //   'image': 'assets/mesa.png',
+    //   'text': 'mesa',
+    //   'audio': 'sounds/mesa.mp3',
+    // },
+  ];
 
-final List<Map<String, String>> _hardWords = [
-  {
-    'image': 'assets/images/conecta/guitarra',
-    'text': 'guitarra',
-    'audio': 'sounds/guitarra.mp3',
-  },
-  // {
-  //   'image': 'assets/comer.png',
-  //   'text': 'quiero comer',
-  //   'audio': 'sounds/quiero_comer.mp3',
-  // },
+  final List<Map<String, String>> _hardWords = [
+    {
+      'image': 'assets/images/conecta/guitarra',
+      'text': 'guitarra',
+      'audio': 'sounds/guitarra.mp3',
+    },
+    // {
+    //   'image': 'assets/comer.png',
+    //   'text': 'quiero comer',
+    //   'audio': 'sounds/quiero_comer.mp3',
+    // },
   ];
 
   List<Map<String, String>> get _currentList {
@@ -103,63 +102,63 @@ final List<Map<String, String>> _hardWords = [
   }
 
   Future<void> _toggleListening() async {
-  if (!_speechAvailable) {
-    setState(() {
-      _feedbackMessage = 'Micrófono no disponible';
-    });
-    return;
-  }
-
-  if (_isListening) {
-    await _speech.stop();
-    setState(() {
-      _isListening = false;
-    });
-    return;
-  }
-
-  setState(() {
-    _recognizedText = '';
-    _feedbackMessage = null;
-    _isListening = true;
-  });
-
-  await _speech.listen(
-    localeId: _speechLocaleId,
-    listenFor: const Duration(seconds: 20),
-    pauseFor: const Duration(seconds: 8),
-    partialResults: false,
-    cancelOnError: true,
-    listenMode: stt.ListenMode.dictation,
-    onResult: (result) async {
-      if (!mounted) return;
-
+    if (!_speechAvailable) {
       setState(() {
-        _recognizedText = result.recognizedWords;
+        _feedbackMessage = 'Micrófono no disponible';
       });
+      return;
+    }
 
-      if (result.finalResult) {
-        await _speech.stop();
+    if (_isListening) {
+      await _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+      return;
+    }
 
+    setState(() {
+      _recognizedText = '';
+      _feedbackMessage = null;
+      _isListening = true;
+    });
+
+    await _speech.listen(
+      localeId: _speechLocaleId,
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 8),
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: false,
+        cancelOnError: true,
+        listenMode: stt.ListenMode.dictation,
+      ),
+      onResult: (result) async {
         if (!mounted) return;
 
         setState(() {
-          _isListening = false;
+          _recognizedText = result.recognizedWords;
         });
 
-        if (_recognizedText.trim().isEmpty) {
+        if (result.finalResult) {
+          await _speech.stop();
+
+          if (!mounted) return;
+
           setState(() {
-            _feedbackMessage = 'No escuché nada 😅';
+            _isListening = false;
           });
-        } else {
-          _evaluateAttempt();
+
+          if (_recognizedText.trim().isEmpty) {
+            setState(() {
+              _feedbackMessage = 'No escuché nada 😅';
+            });
+          } else {
+            _evaluateAttempt();
+          }
         }
-      }
-    },
-  );
-}
-
-
+      },
+    );
+  }
 
   Future<void> _playAudio() async {
     final audioPath = _currentItem['audio'];
@@ -184,8 +183,8 @@ final List<Map<String, String>> _hardWords = [
         debugPrint('Speech status: $status');
       },
       onError: (error) {
-  debugPrint('speech_to_text error: $error');
-},
+        debugPrint('speech_to_text error: $error');
+      },
     );
 
     if (!_speechAvailable) return;
@@ -209,112 +208,108 @@ final List<Map<String, String>> _hardWords = [
     super.dispose();
   }
 
-
   int _levenshtein(String s, String t) {
-  final m = s.length;
-  final n = t.length;
+    final m = s.length;
+    final n = t.length;
 
-  if (m == 0) return n;
-  if (n == 0) return m;
+    if (m == 0) return n;
+    if (n == 0) return m;
 
-  List<List<int>> dp =
-      List.generate(m + 1, (_) => List.filled(n + 1, 0));
+    List<List<int>> dp = List.generate(m + 1, (_) => List.filled(n + 1, 0));
 
-  for (int i = 0; i <= m; i++) {
-    dp[i][0] = i;
-  }
-
-  for (int j = 0; j <= n; j++) {
-    dp[0][j] = j;
-  }
-
-  for (int i = 1; i <= m; i++) {
-    for (int j = 1; j <= n; j++) {
-      int cost = s[i - 1] == t[j - 1] ? 0 : 1;
-
-      dp[i][j] = [
-        dp[i - 1][j] + 1,       // eliminación
-        dp[i][j - 1] + 1,       // inserción
-        dp[i - 1][j - 1] + cost // sustitución
-      ].reduce((a, b) => a < b ? a : b);
+    for (int i = 0; i <= m; i++) {
+      dp[i][0] = i;
     }
+
+    for (int j = 0; j <= n; j++) {
+      dp[0][j] = j;
+    }
+
+    for (int i = 1; i <= m; i++) {
+      for (int j = 1; j <= n; j++) {
+        int cost = s[i - 1] == t[j - 1] ? 0 : 1;
+
+        dp[i][j] = [
+          dp[i - 1][j] + 1, // eliminación
+          dp[i][j - 1] + 1, // inserción
+          dp[i - 1][j - 1] + cost // sustitución
+        ].reduce((a, b) => a < b ? a : b);
+      }
+    }
+
+    return dp[m][n];
   }
-
-  return dp[m][n];
-}
-
 
   void _evaluateAttempt() {
-  final correctText = _normalize(_currentItem['text']!);
-  final spokenText = _normalize(_recognizedText);
+    final correctText = _normalize(_currentItem['text']!);
+    final spokenText = _normalize(_recognizedText);
 
-  int allowedErrors;
+    int allowedErrors;
 
-  if (widget.difficultyStars <= 1) {
-    allowedErrors = 2;
-  } else {
-    allowedErrors = 1;
-  }
+    if (widget.difficultyStars <= 1) {
+      allowedErrors = 2;
+    } else {
+      allowedErrors = 1;
+    }
 
-  final distance = _levenshtein(spokenText, correctText);
-  final isCorrect = distance <= allowedErrors;
+    final distance = _levenshtein(spokenText, correctText);
+    final isCorrect = distance <= allowedErrors;
 
-  if (isCorrect) {
-    _correctAnswers++;
-    _attemptsForCurrentWord = 0;
-
-    setState(() {
-      _feedbackMessage = '¡Muy bien!';
-    });
-
-    Future.delayed(const Duration(seconds: 1), _nextRound);
-  } else {
-    _totalMistakes++;
-    _attemptsForCurrentWord++;
-
-    if (_attemptsForCurrentWord >= _maxAttemptsPerWord) {
-      // Guardar palabra fallada para repetición espaciada
-      _failedWords.add(_currentItem);
+    if (isCorrect) {
+      _correctAnswers++;
+      _attemptsForCurrentWord = 0;
 
       setState(() {
-        _feedbackMessage = 'Pasamos a la siguiente 😊';
+        _feedbackMessage = '¡Muy bien!';
       });
 
-      _attemptsForCurrentWord = 0;
       Future.delayed(const Duration(seconds: 1), _nextRound);
     } else {
-      setState(() {
-        _feedbackMessage = '¡Casi, prueba de nuevo!';
-      });
+      _totalMistakes++;
+      _attemptsForCurrentWord++;
+
+      if (_attemptsForCurrentWord >= _maxAttemptsPerWord) {
+        // Guardar palabra fallada para repetición espaciada
+        _failedWords.add(_currentItem);
+
+        setState(() {
+          _feedbackMessage = 'Pasamos a la siguiente 😊';
+        });
+
+        _attemptsForCurrentWord = 0;
+        Future.delayed(const Duration(seconds: 1), _nextRound);
+      } else {
+        setState(() {
+          _feedbackMessage = '¡Casi, prueba de nuevo!';
+        });
+      }
     }
   }
-}
-
 
   String _normalize(String text) {
-  return text
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[áàäâ]'), 'a')
-      .replaceAll(RegExp(r'[éèëê]'), 'e')
-      .replaceAll(RegExp(r'[íìïî]'), 'i')
-      .replaceAll(RegExp(r'[óòöô]'), 'o')
-      .replaceAll(RegExp(r'[úùüû]'), 'u')
-      .replaceAll(RegExp(r'\s+'), ' ');
-}
-
-  void _nextRound() {
-  if (_currentRound >= _maxRounds - 1) {
-    _completeGame();
-    return;
+    return text
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
-  setState(() {
-    _currentRound++;
-    _feedbackMessage = null;
-    _recognizedText = '';
-  });
-}
+  void _nextRound() {
+    if (_currentRound >= _maxRounds - 1) {
+      _completeGame();
+      return;
+    }
+
+    setState(() {
+      _currentRound++;
+      _feedbackMessage = null;
+      _recognizedText = '';
+    });
+  }
 
   Future<void> _completeGame() async {
     if (_completing) return;
@@ -492,14 +487,12 @@ final List<Map<String, String>> _hardWords = [
                         child: Image.asset(
                           _currentItem['image']!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const Center(child: Icon(Icons.broken_image_outlined)),
+                          errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(Icons.broken_image_outlined)),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 6),
-
                     Text(
                       _currentItem['text']!,
                       textAlign: TextAlign.center,
@@ -537,18 +530,17 @@ final List<Map<String, String>> _hardWords = [
                 ),
               ),
 
-
               if (_recognizedText.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _recognizedText,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.black54,
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _recognizedText,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.black54,
+                    ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 8),
               if (_feedbackMessage != null)
@@ -579,7 +571,8 @@ final List<Map<String, String>> _hardWords = [
                 children: [
                   Expanded(
                     child: Material(
-                      color: widget.controller.accentColor.withValues(alpha: 0.55),
+                      color:
+                          widget.controller.accentColor.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -589,7 +582,8 @@ final List<Map<String, String>> _hardWords = [
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.volume_up_rounded, color: Colors.white),
+                              Icon(Icons.volume_up_rounded,
+                                  color: Colors.white),
                               SizedBox(width: 8),
                               Text(
                                 'Escuchar',
@@ -610,7 +604,8 @@ final List<Map<String, String>> _hardWords = [
                     child: Material(
                       color: _isListening
                           ? widget.controller.accentColor
-                          : widget.controller.accentColor.withValues(alpha: 0.55),
+                          : widget.controller.accentColor
+                              .withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
