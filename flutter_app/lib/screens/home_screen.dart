@@ -7,6 +7,7 @@ import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'child_profile_setup_screen.dart';
 import 'connect_screen.dart';
+import 'dilo_screen.dart';
 import 'emotion_screen.dart';
 import 'explore_learn_screen.dart';
 import 'game_placeholder_screen1.dart';
@@ -98,6 +99,14 @@ class _HomeScreenState extends State<HomeScreen> {
         screen = ConnectSoundGameScreen(
           controller: widget.controller,
           difficulty: difficulty,
+        );
+        break;
+      case 'di_palabra':
+        screen = Gamediloscreen(
+          controller: widget.controller,
+          gameName: gameName,
+          gameKey: gameKey,
+          difficultyStars: stars,
         );
         break;
       default:
