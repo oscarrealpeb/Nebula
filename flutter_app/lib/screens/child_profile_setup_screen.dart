@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
+import '../models/nebula_user.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
 import 'caregiver/caregiver_panel_screen.dart';
-import 'home_screen.dart';
+import 'portal_entry_screen.dart';
 
 class ChildProfileSetupScreen extends StatefulWidget {
   const ChildProfileSetupScreen({
     super.key,
     required this.controller,
     this.isMandatory = false,
+    this.childId = '',
   });
 
   final AppController controller;
   final bool isMandatory;
+  final String childId;
 
   @override
   State<ChildProfileSetupScreen> createState() =>
@@ -25,132 +28,91 @@ class ChildProfileSetupScreen extends StatefulWidget {
 
 class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
   final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _loginUsernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _passwordConfirmController = TextEditingController();
   String _languageLevel = 'medio';
-  bool? _usernameAvailable = true;
+  int _birthDateMillis = 0;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    final child = widget.controller.childProfile;
+    final child = _editingChild;
     if (child != null) {
       _nameController.text = child.name;
-      if (child.age > 0) {
-        _ageController.text = child.age.toString();
-      }
-      _loginUsernameController.text = child.loginUsername;
       _languageLevel =
           child.languageLevel.trim().isEmpty ? 'medio' : child.languageLevel;
+      _birthDateMillis = child.birthDateMillis;
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _ageController.dispose();
-    _loginUsernameController.dispose();
-    _passwordController.dispose();
-    _passwordConfirmController.dispose();
     super.dispose();
   }
 
-  bool get _usernameFormatValid {
-    return widget.controller.authService
-        .isValidUsernameFormat(_loginUsernameController.text);
+  ChildProfile? get _editingChild {
+    final targetId = widget.childId.trim();
+    if (targetId.isEmpty) return null;
+    for (final child in widget.controller.childProfiles) {
+      if (child.id == targetId) return child;
+    }
+    return null;
   }
 
   bool get _canSave {
     return _nameController.text.trim().isNotEmpty &&
-        _loginUsernameController.text.trim().isNotEmpty &&
-        _usernameFormatValid &&
-        _usernameAvailable == true &&
+        _birthDateMillis > 0 &&
         !_saving;
-  }
-
-  String get _usernameValidationMessage {
-    if (_loginUsernameController.text.trim().isEmpty) {
-      return 'Escribe un usuario para el ni\u00f1o.';
-    }
-    if (!_usernameFormatValid) {
-      return 'Usa 3 a 18 caracteres: letras, numeros, ., _, -.';
-    }
-    return 'Ese usuario ya esta en uso.';
-  }
-
-  Future<bool> _validateChildUsername(String username) async {
-    final typed = username.trim();
-    final normalizedTyped = typed.toLowerCase();
-    if (!widget.controller.authService.isValidUsernameFormat(typed)) {
-      if (mounted &&
-          _loginUsernameController.text.trim().toLowerCase() ==
-              normalizedTyped) {
-        setState(() => _usernameAvailable = false);
-      }
-      return false;
-    }
-
-    final currentUser = widget.controller.currentUser;
-    if (currentUser == null) return false;
-    final available =
-        await widget.controller.authService.checkChildLoginUsernameAvailable(
-      typed,
-      excludeCaregiverUserId: currentUser.id,
-    );
-    if (!mounted) return available;
-    if (_loginUsernameController.text.trim().toLowerCase() != normalizedTyped) {
-      return available;
-    }
-    setState(() => _usernameAvailable = available);
-    return available;
   }
 
   String _languageGuideByLevel(String level) {
     switch (level) {
       case 'bajo':
-        return 'Bajo: usa palabras sueltas, apoyos visuales o necesita instrucciones muy cortas.';
+        return 'Bajo: usa palabras sueltas o requiere instrucciones muy cortas.';
       case 'alto':
-        return 'Alto: comprende frases completas, dialogos simples y mas detalles verbales.';
+        return 'Alto: comprende frases completas y dialogos simples.';
       case 'medio':
       default:
-        return 'Medio: entiende frases cortas y puede seguir instrucciones de 1 a 2 pasos.';
+        return 'Medio: sigue instrucciones breves de 1 a 2 pasos.';
     }
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final initial = _birthDateMillis > 0
+        ? DateTime.fromMillisecondsSinceEpoch(_birthDateMillis)
+        : DateTime(now.year - 6, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: DateTime(now.year - 18, 1, 1),
+      lastDate: now,
+      helpText: 'Fecha de nacimiento',
+    );
+    if (picked == null) return;
+    setState(() => _birthDateMillis = picked.millisecondsSinceEpoch);
+  }
+
+  int _computeAge(int birthDateMillis) {
+    if (birthDateMillis <= 0) return 0;
+    final birth = DateTime.fromMillisecondsSinceEpoch(birthDateMillis);
+    final now = DateTime.now();
+    var age = now.year - birth.year;
+    final beforeBirthday = now.month < birth.month ||
+        (now.month == birth.month && now.day < birth.day);
+    if (beforeBirthday) age -= 1;
+    return age.clamp(0, 18);
   }
 
   Future<void> _save() async {
     if (_saving) return;
-    final password = _passwordController.text.trim();
-    final passwordConfirm = _passwordConfirmController.text.trim();
-    if (password.isNotEmpty && password != passwordConfirm) {
-      await NebulaSnack.show(
-        context,
-        message: 'Las contrase\u00f1as del ni\u00f1o no coinciden.',
-        ok: false,
-      );
-      return;
-    }
-    if (password.isNotEmpty &&
-        !widget.controller.isValidChildLoginPinFormat(password)) {
-      await NebulaSnack.show(
-        context,
-        message:
-            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
-        ok: false,
-      );
-      return;
-    }
-
     setState(() => _saving = true);
-    final age = int.tryParse(_ageController.text.trim()) ?? 0;
     final result = await widget.controller.createOrUpdateChildProfile(
+      childId: widget.childId,
       name: _nameController.text,
-      age: age,
+      birthDateMillis: _birthDateMillis,
+      age: _computeAge(_birthDateMillis),
       languageLevel: _languageLevel,
-      loginUsername: _loginUsernameController.text,
-      loginPassword: password,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -164,7 +126,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => HomeScreen(controller: widget.controller),
+          builder: (_) => PortalEntryScreen(controller: widget.controller),
         ),
         (_) => false,
       );
@@ -187,6 +149,10 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     const levels = ['bajo', 'medio', 'alto'];
+    final birthDateLabel = _birthDateMillis <= 0
+        ? 'Seleccionar fecha de nacimiento'
+        : _formatDate(_birthDateMillis);
+
     return PopScope<Object?>(
       canPop: !widget.isMandatory,
       child: Scaffold(
@@ -194,7 +160,8 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
           leading: widget.isMandatory
               ? null
               : BackButton(onPressed: () => Navigator.of(context).pop()),
-          title: const Text('Perfil del ni\u00f1o'),
+          title:
+              Text(_editingChild == null ? 'Perfil del niño' : 'Editar niño'),
         ),
         body: CosmicBackground(
           child: SafeArea(
@@ -209,59 +176,25 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                       children: [
                         Text(
                           widget.isMandatory
-                              ? 'Antes de empezar, crea el perfil del ni\u00f1o.'
-                              : 'Actualiza la informacion del ni\u00f1o.',
+                              ? 'Antes de continuar, registra al menos un perfil de niño.'
+                              : 'Completa la información del niño.',
                         ),
                         const SizedBox(height: 12),
                         NebulaTextField(
                           controller: _nameController,
-                          label: 'Nombre del ni\u00f1o',
+                          label: 'Nombre del niño',
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
-                        NebulaTextField(
-                          controller: _ageController,
-                          label: 'Edad (opcional)',
-                          keyboardType: TextInputType.number,
-                          digitsOnly: true,
-                          maxLength: 2,
-                        ),
-                        const SizedBox(height: 12),
-                        NebulaTextField(
-                          controller: _loginUsernameController,
-                          label: 'Usuario para el ni\u00f1o',
-                          validator: _validateChildUsername,
-                          showValidationStatus: true,
-                          validationMessage: _usernameValidationMessage,
-                          onChanged: (_) {
-                            setState(() {
-                              _usernameAvailable =
-                                  _usernameFormatValid ? null : false;
-                            });
-                          },
+                        Text(
+                          'Fecha de nacimiento',
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          'Solo letras, numeros, punto, guion o _. Sin espacios.',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFF4F628A),
-                                  ),
-                        ),
-                        const SizedBox(height: 12),
-                        NebulaTextField(
-                          controller: _passwordController,
-                          label:
-                              'Contrase\u00f1a del ni\u00f1o (m\u00ednimo 6 caracteres)',
-                          obscureText: true,
-                          maxLength: 32,
-                        ),
-                        const SizedBox(height: 12),
-                        NebulaTextField(
-                          controller: _passwordConfirmController,
-                          label: 'Confirmar contrase\u00f1a del ni\u00f1o',
-                          obscureText: true,
-                          maxLength: 32,
+                        OutlinedButton.icon(
+                          onPressed: _pickBirthDate,
+                          icon: const Icon(Icons.cake_outlined),
+                          label: Text(birthDateLabel),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -288,7 +221,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Gu\u00eda r\u00e1pida: ${_languageGuideByLevel(_languageLevel)}',
+                          'Guía rápida: ${_languageGuideByLevel(_languageLevel)}',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: const Color(0xFF253966),
@@ -297,7 +230,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Importa porque contextualiza los reportes para cuidador y terapeuta (c\u00f3mo interpretar resultados y metas). No cambia la dificultad de los juegos por ahora.',
+                          'Este valor no cambia la lógica del juego. Se usa para contextualizar reportes y recomendaciones de acompañamiento.',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: const Color(0xFF4F628A),
@@ -318,5 +251,13 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDate(int millis) {
+    final date = DateTime.fromMillisecondsSinceEpoch(millis);
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day/$month/$year';
   }
 }

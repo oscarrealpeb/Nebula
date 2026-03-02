@@ -97,10 +97,13 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     }
   }
 
-  Future<void> _openChildProfileEditor() async {
+  Future<void> _openChildProfileEditor({String childId = ''}) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChildProfileSetupScreen(controller: widget.controller),
+        builder: (_) => ChildProfileSetupScreen(
+          controller: widget.controller,
+          childId: childId,
+        ),
       ),
     );
     if (!mounted) return;
@@ -244,7 +247,9 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
         : <Widget>[
             _SummaryTab(
               controller: widget.controller,
-              onEditChildProfile: _openChildProfileEditor,
+              onCreateChildProfile: () => _openChildProfileEditor(),
+              onEditChildProfile: (childId) =>
+                  _openChildProfileEditor(childId: childId),
             ),
             _ReportsTab(controller: widget.controller),
             const _SkillsTab(),
@@ -298,17 +303,19 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
 class _SummaryTab extends StatelessWidget {
   const _SummaryTab({
     required this.controller,
+    required this.onCreateChildProfile,
     required this.onEditChildProfile,
   });
 
   final AppController controller;
-  final Future<void> Function() onEditChildProfile;
+  final Future<void> Function() onCreateChildProfile;
+  final Future<void> Function(String childId) onEditChildProfile;
 
   @override
   Widget build(BuildContext context) {
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
-    final child = controller.childProfile;
+    final childProfiles = controller.childProfiles;
     final todayMinutes = controller.usedMinutesOn(DateTime.now());
     final thisWeekSessions = controller.sessionsForLastDays(7).length;
 
@@ -343,31 +350,49 @@ class _SummaryTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Perfil del ni\u00f1o',
+                  'Perfiles de niños',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 6),
-                if (child == null)
-                  const Text('Aun no hay perfil del ni\u00f1o.')
-                else ...[
-                  Text('Nombre: ${child.name}'),
-                  Text(
-                      'Edad: ${child.age > 0 ? child.age.toString() : 'No definida'}'),
-                  Text(
-                      'Nivel de lenguaje: ${child.languageLevel.toUpperCase()}'),
-                  Text(
-                    'Usuario de acceso: ${child.loginUsername.trim().isEmpty ? 'No definido' : child.loginUsername}',
-                  ),
-                  Text('Estrellas actuales: ${user.stars}'),
-                ],
+                if (childProfiles.isEmpty)
+                  const Text('Aún no hay perfiles de niño.')
+                else
+                  ...childProfiles.map((child) {
+                    final isActive = controller.childProfile?.id == child.id;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.child_care_rounded),
+                      title: Text(
+                        child.name.trim().isEmpty
+                            ? 'Niño sin nombre'
+                            : child.name,
+                      ),
+                      subtitle: Text(
+                        child.birthDateMillis > 0
+                            ? 'Nacimiento: ${_formatDate(child.birthDateMillis)} · Lenguaje: ${child.languageLevel.toUpperCase()}'
+                            : 'Nacimiento no definido · Lenguaje: ${child.languageLevel.toUpperCase()}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isActive)
+                            const Icon(Icons.check_circle_rounded,
+                                color: Color(0xFF1B8B3B)),
+                          IconButton(
+                            onPressed: () => onEditChildProfile(child.id),
+                            icon: const Icon(Icons.edit_rounded),
+                            tooltip: 'Editar',
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                 const SizedBox(height: 10),
                 NebulaSecondaryButton(
-                  text: child == null
-                      ? 'Crear perfil del ni\u00f1o'
-                      : 'Editar perfil del ni\u00f1o',
-                  onPressed: onEditChildProfile,
+                  text: 'Agregar otro perfil de niño',
+                  onPressed: onCreateChildProfile,
                 ),
               ],
             ),
@@ -406,6 +431,14 @@ class _SummaryTab extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatDate(int millis) {
+    final date = DateTime.fromMillisecondsSinceEpoch(millis);
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day/$month/$year';
   }
 }
 

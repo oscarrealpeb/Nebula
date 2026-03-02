@@ -6,6 +6,7 @@ import '../models/portal_role.dart';
 import '../screens/child_profile_setup_screen.dart';
 import '../screens/caregiver/caregiver_panel_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/portal_entry_screen.dart';
 import '../screens/welcome_screen.dart';
 
 class NebulaApp extends StatelessWidget {
@@ -21,6 +22,15 @@ class NebulaApp extends StatelessWidget {
         Widget home;
         if (controller.currentUser == null) {
           home = WelcomeScreen(controller: controller);
+        } else if (controller.isAdmin) {
+          home = CaregiverPanelScreen(controller: controller);
+        } else if (controller.needsChildOnboarding) {
+          home = ChildProfileSetupScreen(
+            controller: controller,
+            isMandatory: true,
+          );
+        } else if (controller.needsPortalSelection) {
+          home = PortalEntryScreen(controller: controller);
         } else if (controller.activePortalRole == PortalRole.child) {
           home = controller.hasChildProfile
               ? HomeScreen(controller: controller)

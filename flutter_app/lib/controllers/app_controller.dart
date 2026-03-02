@@ -49,6 +49,8 @@ class AppController extends ChangeNotifier {
   GameContentConfig _gameContentConfig = const GameContentConfig();
   AdminDashboardStats _adminDashboardStats = const AdminDashboardStats();
   List<DeletedAccountRecord> _deletedAccounts = const [];
+  String _activeChildProfileId = '';
+  bool _needsPortalSelection = false;
   bool _isOnline = true;
   StreamSubscription<bool>? _connectivitySub;
 
@@ -71,6 +73,12 @@ class AppController extends ChangeNotifier {
 
     controller._currentUser = await authService.restoreSession();
     controller._activePortalRole = authService.activePortalRole;
+    controller._activeChildProfileId = _resolveActiveChildId(
+      user: controller._currentUser,
+      requestedChildId: '',
+    );
+    controller._needsPortalSelection =
+        controller._shouldAskPortalSelectionOnAppOpen();
     final configResult = await authService.fetchAppAdminConfig();
     if (configResult.data != null) {
       controller._appAdminConfig = configResult.data!;
@@ -112,8 +120,38 @@ class AppController extends ChangeNotifier {
   bool get parentalPinEnabled =>
       (_currentUser?.parentalPinHash.trim().isNotEmpty ?? false);
   bool get isAdmin => (_currentUser?.role ?? '') == UserRole.admin;
-  ChildProfile? get childProfile => _currentUser?.childProfile;
+  String get activeChildProfileId => _activeChildProfileId;
+  List<ChildProfile> get childProfiles {
+    final user = _currentUser;
+    if (user == null) return const <ChildProfile>[];
+    if (user.childProfiles.isNotEmpty) {
+      return List.unmodifiable(user.childProfiles);
+    }
+    if (user.childProfile != null) {
+      return List.unmodifiable(<ChildProfile>[user.childProfile!]);
+    }
+    return const <ChildProfile>[];
+  }
+
+  ChildProfile? get childProfile {
+    final profiles = childProfiles;
+    if (profiles.isEmpty) return null;
+    final activeId = _activeChildProfileId.trim();
+    if (activeId.isNotEmpty) {
+      for (final item in profiles) {
+        if (item.id == activeId) return item;
+      }
+    }
+    return profiles.first;
+  }
+
   bool get hasChildProfile => childProfile != null;
+  bool get needsChildOnboarding => !isAdmin && childProfiles.isEmpty;
+  bool get needsPortalSelection =>
+      !isAdmin &&
+      _currentUser != null &&
+      childProfiles.isNotEmpty &&
+      _needsPortalSelection;
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
       _currentUser?.gameSessions ?? const <GameSessionRecord>[]);
   ParentalControl get parentalControl =>
@@ -174,6 +212,11 @@ class AppController extends ChangeNotifier {
     if (result.ok && result.data != null) {
       _currentUser = result.data;
       _activePortalRole = _authService.activePortalRole;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       await reloadGameContentConfig(notify: false);
       notifyListeners();
     }
@@ -200,7 +243,12 @@ class AppController extends ChangeNotifier {
       );
     }
     _currentUser = result.data;
-    _activePortalRole = _authService.activePortalRole;
+    _activePortalRole = PortalRole.caregiver;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: '',
+    );
+    _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
     notifyListeners();
@@ -227,6 +275,11 @@ class AppController extends ChangeNotifier {
     }
     _currentUser = result.data;
     _activePortalRole = _authService.activePortalRole;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: '',
+    );
+    _needsPortalSelection = false;
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
     await reloadAdminDashboard(notify: false);
@@ -238,18 +291,11 @@ class AppController extends ChangeNotifier {
     required String username,
     required String password,
   }) async {
-    final result = await _authService.loginChild(
-      username: username,
-      password: password,
+    return const ActionResult(
+      ok: false,
+      message:
+          'El acceso directo de niño ya no esta disponible. Entra con la cuenta del cuidador y luego elige el perfil del niño.',
     );
-    if (result.ok && result.data != null) {
-      _currentUser = result.data;
-      _activePortalRole = _authService.activePortalRole;
-      await reloadAppAdminConfig(notify: false);
-      await reloadGameContentConfig(notify: false);
-      notifyListeners();
-    }
-    return ActionResult(ok: result.ok, message: result.message);
   }
 
   Future<ActionResult> loginWithGoogle() async {
@@ -264,7 +310,12 @@ class AppController extends ChangeNotifier {
     final result = await _authService.loginWithGoogle();
     if (result.ok && result.data != null) {
       _currentUser = result.data;
-      _activePortalRole = _authService.activePortalRole;
+      _activePortalRole = PortalRole.caregiver;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       await reloadAppAdminConfig(notify: false);
       await reloadGameContentConfig(notify: false);
       notifyListeners();
@@ -282,7 +333,14 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
-      _activePortalRole = _authService.activePortalRole;
+      _activePortalRole = PortalRole.caregiver;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await reloadAppAdminConfig(notify: false);
+      await reloadGameContentConfig(notify: false);
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -306,7 +364,12 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
-      _activePortalRole = _authService.activePortalRole;
+      _activePortalRole = PortalRole.caregiver;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -324,10 +387,96 @@ class AppController extends ChangeNotifier {
     );
     if (result.ok && result.data != null) {
       _currentUser = result.data;
-      _activePortalRole = _authService.activePortalRole;
+      _activePortalRole = PortalRole.caregiver;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
+  }
+
+  Future<ActionResult> enterChildPortal(String childId) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    if (isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'El admin no usa portal de niño.',
+      );
+    }
+    final targetId = childId.trim();
+    if (targetId.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Selecciona un perfil de niño.',
+      );
+    }
+    final exists = childProfiles.any((item) => item.id == targetId);
+    if (!exists) {
+      return const ActionResult(
+        ok: false,
+        message: 'Ese perfil de niño no existe.',
+      );
+    }
+    _activeChildProfileId = targetId;
+    _activePortalRole = PortalRole.child;
+    _needsPortalSelection = false;
+
+    final selectedChild =
+        childProfiles.firstWhere((item) => item.id == targetId);
+    final nextPrimary = user.copyWith(
+      childProfile: selectedChild,
+      childProfiles: childProfiles,
+    );
+    final saved = await _authService.updateUser(nextPrimary);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+    }
+    await _authService.persistPortalRole(PortalRole.child);
+    notifyListeners();
+    return const ActionResult(ok: true, message: 'Portal niño listo.');
+  }
+
+  Future<ActionResult> enterCaregiverPortal({
+    required String password,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+    if (isAdmin) {
+      _activePortalRole = PortalRole.admin;
+      _needsPortalSelection = false;
+      notifyListeners();
+      return const ActionResult(ok: true, message: 'Portal admin listo.');
+    }
+    final typed = password.trim();
+    if (typed.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Escribe la contraseña del cuidador.',
+      );
+    }
+    final valid = await _authService.verifyCurrentUserPassword(typed);
+    if (!valid.ok) {
+      return ActionResult(ok: false, message: valid.message);
+    }
+    _activePortalRole = PortalRole.caregiver;
+    _needsPortalSelection = false;
+    await _authService.persistPortalRole(PortalRole.caregiver);
+    notifyListeners();
+    return const ActionResult(ok: true, message: 'Portal cuidador listo.');
+  }
+
+  void markPortalSelectionPending() {
+    if (_currentUser == null || isAdmin || childProfiles.isEmpty) return;
+    _needsPortalSelection = true;
+    notifyListeners();
   }
 
   Future<ActionResult> ensureHiddenAdminAccount() async {
@@ -453,6 +602,10 @@ class AppController extends ChangeNotifier {
     final result = await _authService.updateUsernameForCurrentUser(newUsername);
     if (result.ok && result.data != null) {
       _currentUser = result.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: _activeChildProfileId,
+      );
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -509,6 +662,12 @@ class AppController extends ChangeNotifier {
     if (result.ok) {
       final user = await _authService.restoreSession();
       _currentUser = user;
+      _activePortalRole = _authService.activePortalRole;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: _activeChildProfileId,
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -518,6 +677,8 @@ class AppController extends ChangeNotifier {
     await _authService.logout();
     _currentUser = null;
     _activePortalRole = _authService.activePortalRole;
+    _activeChildProfileId = '';
+    _needsPortalSelection = false;
     _gameContentConfig = const GameContentConfig();
     _adminDashboardStats = const AdminDashboardStats();
     _deletedAccounts = const [];
@@ -626,6 +787,8 @@ class AppController extends ChangeNotifier {
     }
     _currentUser = null;
     _activePortalRole = _authService.activePortalRole;
+    _activeChildProfileId = '';
+    _needsPortalSelection = false;
     _gameContentConfig = const GameContentConfig();
     _adminDashboardStats = const AdminDashboardStats();
     _deletedAccounts = const [];
@@ -848,11 +1011,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<ActionResult> createOrUpdateChildProfile({
+    String childId = '',
     required String name,
+    required int birthDateMillis,
     required int age,
     required String languageLevel,
-    required String loginUsername,
-    String loginPassword = '',
   }) async {
     final user = _currentUser;
     if (user == null) {
@@ -865,69 +1028,74 @@ class AppController extends ChangeNotifier {
         message: 'Escribe el nombre del ni\u00f1o.',
       );
     }
-    final normalizedLoginUsername = loginUsername.trim().toLowerCase();
-    if (!_authService.isValidUsernameFormat(normalizedLoginUsername)) {
+    final editingExisting = childId.trim().isNotEmpty;
+    if (birthDateMillis <= 0 && !editingExisting) {
       return const ActionResult(
         ok: false,
-        message:
-            'El usuario del ni\u00f1o debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
+        message: 'Selecciona la fecha de nacimiento del ni\u00f1o.',
       );
     }
-    final available = await _authService.checkChildLoginUsernameAvailable(
-      normalizedLoginUsername,
-      excludeCaregiverUserId: user.id,
-    );
-    if (!available) {
+    final normalizedName = trimmedName.toLowerCase();
+    final existingProfiles = List<ChildProfile>.from(childProfiles);
+    final duplicate = existingProfiles.any((item) {
+      if (childId.trim().isNotEmpty && item.id == childId.trim()) return false;
+      if (birthDateMillis <= 0) return false;
+      return item.name.trim().toLowerCase() == normalizedName &&
+          item.birthDateMillis == birthDateMillis;
+    });
+    if (duplicate) {
       return const ActionResult(
         ok: false,
-        message: 'Ese usuario de ni\u00f1o ya existe. Prueba otro.',
-      );
-    }
-    final trimmedPassword = loginPassword.trim();
-    if (trimmedPassword.isNotEmpty &&
-        !_authService.isValidChildLoginPinFormat(trimmedPassword)) {
-      return const ActionResult(
-        ok: false,
-        message:
-            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
+        message: 'Ya existe un perfil con ese nombre y fecha de nacimiento.',
       );
     }
 
     final boundedAge = age.clamp(0, 18);
     final now = DateTime.now().millisecondsSinceEpoch;
-    final existing = user.childProfile;
-    final nextPinHash = trimmedPassword.isNotEmpty
-        ? _authService.hashChildLoginPin(trimmedPassword)
-        : (existing?.loginPinHash ?? '');
-    if (nextPinHash.trim().isEmpty) {
-      return const ActionResult(
-        ok: false,
-        message:
-            'Define una contrase\u00f1a del ni\u00f1o para poder iniciar sesi\u00f3n.',
-      );
-    }
-    final child = (existing ??
+    final targetChildId =
+        childId.trim().isNotEmpty ? childId.trim() : 'child_${user.id}_$now';
+    final index =
+        existingProfiles.indexWhere((item) => item.id == targetChildId);
+    final base = index >= 0 ? existingProfiles[index] : null;
+    final child = (base ??
             ChildProfile(
-              id: 'child_${user.id}',
+              id: targetChildId,
               name: trimmedName,
               createdAtMillis: now,
             ))
         .copyWith(
+      id: targetChildId,
       name: trimmedName,
       age: boundedAge,
+      birthDateMillis:
+          birthDateMillis > 0 ? birthDateMillis : (base?.birthDateMillis ?? 0),
       languageLevel: languageLevel.trim().isEmpty ? 'medio' : languageLevel,
       active: true,
-      loginUsername: normalizedLoginUsername,
-      loginPinHash: nextPinHash,
     );
-    final next = user.copyWith(childProfile: child);
+    if (index >= 0) {
+      existingProfiles[index] = child;
+    } else {
+      existingProfiles.add(child);
+    }
+    _activeChildProfileId = child.id;
+    final next = user.copyWith(
+      childProfile: child,
+      childProfiles: existingProfiles,
+    );
     final saved = await _authService.updateUser(next);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: child.id,
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
       notifyListeners();
-      return const ActionResult(
+      return ActionResult(
         ok: true,
-        message: 'Perfil del ni\u00f1o guardado correctamente.',
+        message: index >= 0
+            ? 'Perfil del ni\u00f1o actualizado correctamente.'
+            : 'Perfil del ni\u00f1o creado correctamente.',
       );
     }
     return ActionResult(ok: false, message: saved.message);
@@ -1125,6 +1293,46 @@ class AppController extends ChangeNotifier {
 
   bool _sameLocalDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static String _resolveActiveChildId({
+    required NebulaUser? user,
+    required String requestedChildId,
+  }) {
+    if (user == null) return '';
+    final list = user.childProfiles.isNotEmpty
+        ? user.childProfiles
+        : (user.childProfile == null
+            ? const <ChildProfile>[]
+            : <ChildProfile>[user.childProfile!]);
+    if (list.isEmpty) return '';
+    final requested = requestedChildId.trim();
+    if (requested.isNotEmpty && list.any((item) => item.id == requested)) {
+      return requested;
+    }
+    final legacy = user.childProfile?.id.trim() ?? '';
+    if (legacy.isNotEmpty && list.any((item) => item.id == legacy)) {
+      return legacy;
+    }
+    return list.first.id;
+  }
+
+  bool _shouldAskPortalSelectionAfterAuth() {
+    final user = _currentUser;
+    if (user == null) return false;
+    if ((user.role).trim().toLowerCase() == UserRole.admin) return false;
+    final hasChildren =
+        user.childProfiles.isNotEmpty || user.childProfile != null;
+    return hasChildren;
+  }
+
+  bool _shouldAskPortalSelectionOnAppOpen() {
+    final user = _currentUser;
+    if (user == null) return false;
+    if ((user.role).trim().toLowerCase() == UserRole.admin) return false;
+    final hasChildren =
+        user.childProfiles.isNotEmpty || user.childProfile != null;
+    return hasChildren;
   }
 
   Future<void> _runThemeMigrationIfNeeded() async {

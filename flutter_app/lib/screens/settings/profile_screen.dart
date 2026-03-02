@@ -46,8 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final child = widget.controller.childProfile;
     final initialName =
         _isChildPortal && child != null ? child.name : user.name;
-    final initialUsername =
-        _isChildPortal && child != null ? child.loginUsername : user.username;
+    final initialUsername = _isChildPortal ? '' : user.username;
     _nameController = TextEditingController(text: initialName);
     _usernameController = TextEditingController(text: initialUsername);
     _avatarIndex = user.avatarIndex;
@@ -82,11 +81,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _nameValid => _nameController.text.trim().isNotEmpty;
 
   bool get _usernameFormatValid {
+    if (_isChildPortal) return true;
     return widget.controller.authService
         .isValidUsernameFormat(_usernameController.text);
   }
 
   bool get _canSaveProfile {
+    if (_isChildPortal) {
+      return _nameValid && !_saving;
+    }
     return _nameValid &&
         _usernameFormatValid &&
         _usernameValid == true &&
@@ -108,6 +111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<bool> _validateProfileUsername(String username) async {
+    if (_isChildPortal) return true;
     final typed = username.trim();
     final normalizedTyped = typed.toLowerCase();
     if (!widget.controller.authService.isValidUsernameFormat(typed)) {
@@ -153,13 +157,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnack('Escribe tu nombre.', ok: false);
       return;
     }
-    if (!_usernameFormatValid) {
-      _showSnack('Revisa el formato del apodo.', ok: false);
-      return;
-    }
-    if (_usernameValid != true) {
-      _showSnack('Revisa el apodo antes de guardar.', ok: false);
-      return;
+    if (!_isChildPortal) {
+      if (!_usernameFormatValid) {
+        _showSnack('Revisa el formato del apodo.', ok: false);
+        return;
+      }
+      if (_usernameValid != true) {
+        _showSnack('Revisa el apodo antes de guardar.', ok: false);
+        return;
+      }
     }
     setState(() => _saving = true);
     final result = _isChildPortal
@@ -185,10 +191,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final childResult = await widget.controller.createOrUpdateChildProfile(
+      childId: child.id,
       name: _nameController.text,
+      birthDateMillis: child.birthDateMillis,
       age: child.age,
       languageLevel: child.languageLevel,
-      loginUsername: _usernameController.text,
     );
     if (!childResult.ok) return childResult;
 
@@ -626,9 +633,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final user = widget.controller.currentUser;
         if (user == null) return const SizedBox.shrink();
         final child = widget.controller.childProfile;
-        final profileHeaderUsername = _isChildPortal && child != null
-            ? child.loginUsername
-            : user.username;
+        final profileHeaderUsername =
+            _isChildPortal && child != null ? child.name : user.username;
 
         final planet = planetForStars(user.stars);
         final progress = planetProgress(user.stars);
@@ -763,22 +769,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: 'Como te llamas?',
                           onChanged: (_) => setState(() {}),
                         ),
-                        const SizedBox(height: 12),
-                        NebulaTextField(
-                          controller: _usernameController,
-                          label: _isChildPortal
-                              ? 'Usuario del ni\u00f1o'
-                              : 'Tu apodo genial',
-                          validator: _validateProfileUsername,
-                          showValidationStatus: true,
-                          validationMessage: _usernameValidationMessage,
-                          onChanged: (_) {
-                            setState(() {
-                              _usernameValid =
-                                  _usernameFormatValid ? null : false;
-                            });
-                          },
-                        ),
+                        if (!_isChildPortal) ...[
+                          const SizedBox(height: 12),
+                          NebulaTextField(
+                            controller: _usernameController,
+                            label: 'Tu apodo genial',
+                            validator: _validateProfileUsername,
+                            showValidationStatus: true,
+                            validationMessage: _usernameValidationMessage,
+                            onChanged: (_) {
+                              setState(() {
+                                _usernameValid =
+                                    _usernameFormatValid ? null : false;
+                              });
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),

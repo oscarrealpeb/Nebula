@@ -474,10 +474,17 @@ class AuthService {
     final localTaken = users.any((user) {
       if (user.id == excludeUserId) return false;
       if (user.username.toLowerCase() == normalized) return true;
-      final childUsername =
-          user.childProfile?.loginUsername.trim().toLowerCase() ?? '';
-      if (childUsername.isEmpty) return false;
-      return childUsername == normalized;
+      final profiles = user.childProfiles.isNotEmpty
+          ? user.childProfiles
+          : (user.childProfile == null
+              ? const <ChildProfile>[]
+              : <ChildProfile>[user.childProfile!]);
+      for (final child in profiles) {
+        final childUsername = child.loginUsername.trim().toLowerCase();
+        if (childUsername.isEmpty) continue;
+        if (childUsername == normalized) return true;
+      }
+      return false;
     });
     if (localTaken) return false;
 
@@ -510,10 +517,17 @@ class AuthService {
           user.id == excludeCaregiverUserId) {
         return false;
       }
-      final childUsername =
-          user.childProfile?.loginUsername.trim().toLowerCase() ?? '';
-      if (childUsername.isEmpty) return false;
-      return childUsername == trimmed;
+      final profiles = user.childProfiles.isNotEmpty
+          ? user.childProfiles
+          : (user.childProfile == null
+              ? const <ChildProfile>[]
+              : <ChildProfile>[user.childProfile!]);
+      for (final child in profiles) {
+        final childUsername = child.loginUsername.trim().toLowerCase();
+        if (childUsername.isEmpty) continue;
+        if (childUsername == trimmed) return true;
+      }
+      return false;
     });
     if (localTaken) return false;
 
@@ -1026,14 +1040,21 @@ class AuthService {
 
     final users = await _store.readUsers();
     NebulaUser? match;
+    ChildProfile? matchedChild;
     for (final user in users) {
-      final child = user.childProfile;
-      if (child == null) continue;
-      final childUsername = child.loginUsername.trim().toLowerCase();
-      if (childUsername == normalizedUsername) {
+      final profiles = user.childProfiles.isNotEmpty
+          ? user.childProfiles
+          : (user.childProfile == null
+              ? const <ChildProfile>[]
+              : <ChildProfile>[user.childProfile!]);
+      for (final child in profiles) {
+        final childUsername = child.loginUsername.trim().toLowerCase();
+        if (childUsername != normalizedUsername) continue;
         match = user;
+        matchedChild = child;
         break;
       }
+      if (match != null) break;
     }
 
     if (match == null) {
@@ -1044,7 +1065,7 @@ class AuthService {
       );
     }
 
-    final expectedHash = match.childProfile?.loginPinHash.trim() ?? '';
+    final expectedHash = matchedChild?.loginPinHash.trim() ?? '';
     if (expectedHash.isEmpty ||
         expectedHash != _hashParentalPin(trimmedPassword)) {
       return const ServiceResult(
@@ -1060,6 +1081,82 @@ class AuthService {
       message: 'Bienvenido, a jugar.',
       data: match,
     );
+  }
+
+  Future<void> persistPortalRole(PortalRole role) async {
+    final user = _currentUser;
+    if (user == null) return;
+    final resolved = _resolvePortalRoleForUser(
+      user: user,
+      requestedRole: role,
+    );
+    await _store.saveSessionPortalRole(resolved.storageValue);
+    _activePortalRole = resolved;
+  }
+
+  Future<ServiceResult<void>> verifyCurrentUserPassword(String password) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay sesion activa.',
+      );
+    }
+    final typed = password.trim();
+    if (typed.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Escribe la contraseña del cuidador.',
+      );
+    }
+
+    final localHash = user.password.trim();
+    if (localHash.isNotEmpty &&
+        _passwordMatches(stored: localHash, input: typed)) {
+      return const ServiceResult(
+        ok: true,
+        message: 'Contraseña valida.',
+      );
+    }
+
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Contraseña incorrecta.',
+      );
+    }
+
+    try {
+      final credential = await _firebaseAuth!.signInWithEmailAndPassword(
+        email: user.email,
+        password: typed,
+      );
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'Contraseña incorrecta.',
+        );
+      }
+      final refreshed = user.copyWith(password: _hashPassword(typed));
+      await _upsertLocal(refreshed);
+      _currentUser = refreshed;
+      await _persistSessionState(refreshed, requestedRole: _activePortalRole);
+      return const ServiceResult(
+        ok: true,
+        message: 'Contraseña valida.',
+      );
+    } on FirebaseAuthException catch (_) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Contraseña incorrecta.',
+      );
+    } catch (_) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No pudimos validar la contraseña.',
+      );
+    }
   }
 
   Future<void> logout() async {
@@ -1199,15 +1296,8 @@ class AuthService {
           break;
         }
       }
-      final localMissingUsername =
-          existingUser == null || existingUser.username.trim().isEmpty;
-      final localMissingPassword =
+      var needsPasswordSetup =
           existingUser == null || existingUser.password.trim().isEmpty;
-      var needsUsernameSetup = localMissingUsername || localMissingPassword;
-      var suggestedUsername =
-          (existingUser != null && existingUser.username.trim().isNotEmpty)
-              ? existingUser.username.trim()
-              : generateSuggestedUsername(emailLower);
       if (existingUser == null && _useFirebase) {
         try {
           final cloudByEmail = await _firestore!
@@ -1215,25 +1305,14 @@ class AuthService {
               .where('emailLower', isEqualTo: emailLower)
               .limit(1)
               .get();
-          var cloudUsername = '';
           var cloudHasLocalPassword = false;
           if (cloudByEmail.docs.isNotEmpty) {
             final cloudData = cloudByEmail.docs.first.data();
-            cloudUsername = (cloudData['username'] as String?)?.trim() ?? '';
             cloudHasLocalPassword =
                 (cloudData['hasLocalPassword'] as bool?) ?? false;
           }
-          if (cloudUsername.isNotEmpty) {
-            suggestedUsername = cloudUsername;
-          }
-          needsUsernameSetup = cloudUsername.isEmpty || !cloudHasLocalPassword;
+          needsPasswordSetup = !cloudHasLocalPassword;
         } catch (_) {}
-      }
-      if (needsUsernameSetup) {
-        suggestedUsername = await _resolveAvailableUsername(
-          email: emailLower,
-          preferredUsername: suggestedUsername,
-        );
       }
 
       final auth = await account.authentication;
@@ -1252,11 +1331,10 @@ class AuthService {
       _pendingGoogleIdTokenForConfirm = idToken;
       _pendingGoogleEmailForConfirm = emailLower;
       _pendingGoogleNameForConfirm = account.displayName ?? 'Explorador';
-      if (needsUsernameSetup) {
+      if (needsPasswordSetup) {
         return ServiceResult(
           ok: false,
-          message:
-              'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:$emailLower|$suggestedUsername',
+          message: 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:$emailLower',
         );
       }
       return ServiceResult(
@@ -1402,91 +1480,9 @@ class AuthService {
       late final NebulaUser signedUser;
       if (existingUser != null) {
         final localUser = existingUser;
-        final preferredTyped = preferredUsernameForNewAccount.trim();
         final preferredPassword = preferredPasswordForNewAccount.trim();
         final requiresUsernameSetup = localUser.username.trim().isEmpty;
-        final requiresPasswordSetup =
-            localUser.password.trim().isEmpty || !hasPasswordProvider;
-
-        if (requiresUsernameSetup) {
-          if (preferredTyped.isEmpty) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message: 'Elige un apodo para continuar.',
-            );
-          }
-          if (!isValidUsernameFormat(preferredTyped)) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message:
-                  'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
-            );
-          }
-          final available = await checkUsernameAvailable(
-            preferredTyped,
-            excludeUserId: localUser.id,
-          );
-          if (!available) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
-            );
-          }
-        } else if (preferredTyped.isNotEmpty &&
-            preferredTyped.toLowerCase() != localUser.username.toLowerCase()) {
-          if (!isValidUsernameFormat(preferredTyped)) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message:
-                  'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
-            );
-          }
-          final available = await checkUsernameAvailable(
-            preferredTyped,
-            excludeUserId: localUser.id,
-          );
-          if (!available) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
-            );
-          }
-        }
+        final requiresPasswordSetup = localUser.password.trim().isEmpty;
 
         if (requiresPasswordSetup) {
           if (preferredPassword.length < 6) {
@@ -1497,9 +1493,9 @@ class AuthService {
             try {
               await _googleSignIn.signOut();
             } catch (_) {}
-            return const ServiceResult(
+            return ServiceResult(
               ok: false,
-              message: 'La contraseña debe tener al menos 6 caracteres.',
+              message: 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:$emailLower',
             );
           }
 
@@ -1559,10 +1555,9 @@ class AuthService {
         }
 
         final preferredForResolve = requiresUsernameSetup
-            ? (preferredTyped.isNotEmpty
-                ? preferredTyped
-                : (_pendingGoogleNameForConfirm ?? ''))
-            : (preferredTyped.isNotEmpty ? preferredTyped : localUser.username);
+            ? (_pendingGoogleNameForConfirm ??
+                generateSuggestedUsername(emailLower))
+            : localUser.username;
         final resolvedUsername = await _resolveAvailableUsername(
           email: emailLower,
           preferredUsername: preferredForResolve,
@@ -1590,6 +1585,7 @@ class AuthService {
           customImages: localUser.customImages,
           role: localUser.role,
           childProfile: localUser.childProfile,
+          childProfiles: localUser.childProfiles,
           gameSessions: localUser.gameSessions,
           parentalControl: localUser.parentalControl,
         );
@@ -1611,57 +1607,9 @@ class AuthService {
         final cloud = cloudDoc.data();
 
         final cloudUsername = (cloud?['username'] as String?)?.trim() ?? '';
-        final preferredTyped = preferredUsernameForNewAccount.trim();
         final preferredPassword = preferredPasswordForNewAccount.trim();
         final requiresUsernameSetup = cloudUsername.isEmpty;
         final requiresPasswordSetup = !hasPasswordProvider;
-
-        if (requiresUsernameSetup) {
-          if (preferredTyped.isEmpty) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message: 'Elige un apodo para continuar.',
-            );
-          }
-          if (!isValidUsernameFormat(preferredTyped)) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message:
-                  'El apodo debe tener 3 a 18 caracteres: letras, numeros, punto, guion y _.',
-            );
-          }
-          final available = await checkUsernameAvailable(
-            preferredTyped,
-            excludeUserId: firebaseUser.uid,
-          );
-          if (!available) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
-            return const ServiceResult(
-              ok: false,
-              message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
-            );
-          }
-        }
         if (requiresPasswordSetup && preferredPassword.length < 6) {
           _clearPendingGoogleConfirmation();
           try {
@@ -1670,9 +1618,9 @@ class AuthService {
           try {
             await _googleSignIn.signOut();
           } catch (_) {}
-          return const ServiceResult(
+          return ServiceResult(
             ok: false,
-            message: 'La contraseña debe tener al menos 6 caracteres.',
+            message: 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:$emailLower',
           );
         }
 
@@ -1733,9 +1681,8 @@ class AuthService {
         }
 
         final preferredForResolve = requiresUsernameSetup
-            ? (preferredTyped.isNotEmpty
-                ? preferredTyped
-                : (_pendingGoogleNameForConfirm ?? ''))
+            ? (_pendingGoogleNameForConfirm ??
+                generateSuggestedUsername(emailLower))
             : cloudUsername;
         final resolvedUsername = await _resolveAvailableUsername(
           email: emailLower,
@@ -1771,6 +1718,7 @@ class AuthService {
                   Map<String, dynamic>.from(cloud!['childProfile'] as Map),
                 )
               : null,
+          childProfiles: _childProfilesFromCloud(cloud),
           gameSessions: (cloud?['gameSessions'] as List? ?? const [])
               .whereType<Map>()
               .map(
@@ -2464,7 +2412,8 @@ class AuthService {
           role: deletingUser.role,
           deletedAtMillis: now,
           reason: 'self_delete',
-          hadChildProfile: deletingUser.childProfile != null,
+          hadChildProfile: deletingUser.childProfile != null ||
+              deletingUser.childProfiles.isNotEmpty,
           sessionCount: deletingUser.gameSessions.length,
         ),
       );
@@ -2572,6 +2521,7 @@ class AuthService {
         customImages: localUser.customImages,
         role: localUser.role,
         childProfile: localUser.childProfile,
+        childProfiles: localUser.childProfiles,
         gameSessions: localUser.gameSessions,
         parentalControl: localUser.parentalControl,
       );
@@ -2754,6 +2704,7 @@ class AuthService {
                 Map<String, dynamic>.from(cloud!['childProfile'] as Map),
               )
             : null,
+        childProfiles: _childProfilesFromCloud(cloud),
         gameSessions: (cloud?['gameSessions'] as List? ?? const [])
             .whereType<Map>()
             .map(
@@ -3056,7 +3007,8 @@ class AuthService {
             : UserRole.caregiver,
         deletedAtMillis: now,
         reason: 'unverified_email_ttl',
-        hadChildProfile: removedUser?.childProfile != null,
+        hadChildProfile: (removedUser?.childProfile != null) ||
+            (removedUser?.childProfiles.isNotEmpty ?? false),
         sessionCount: removedUser?.gameSessions.length ?? 0,
       ),
     );
@@ -3069,8 +3021,10 @@ class AuthService {
         .map(
           (user) => _DashboardUserSnapshot(
             role: user.role,
-            hasChildProfile: user.childProfile != null,
-            childProfileActive: user.childProfile?.active ?? false,
+            hasChildProfile:
+                user.childProfile != null || user.childProfiles.isNotEmpty,
+            childProfileActive: user.childProfiles.any((item) => item.active) ||
+                (user.childProfile?.active ?? false),
             sessions: user.gameSessions
                 .map(
                   (session) => _DashboardSessionSnapshot(
@@ -3095,9 +3049,13 @@ class AuthService {
       final data = doc.data();
       final role = (data['role'] as String?) ?? UserRole.caregiver;
       final childRaw = data['childProfile'];
-      final hasChildProfile = childRaw is Map;
-      final childActive =
-          childRaw is Map ? ((childRaw['active'] as bool?) ?? false) : false;
+      final childListRaw = data['childProfiles'];
+      final childList =
+          childListRaw is List ? childListRaw.whereType<Map>() : const <Map>[];
+      final hasChildProfile = childRaw is Map || childList.isNotEmpty;
+      final childActive = childList
+              .any((item) => (item['active'] as bool?) ?? false) ||
+          (childRaw is Map ? ((childRaw['active'] as bool?) ?? false) : false);
 
       final sessions = <_DashboardSessionSnapshot>[];
       final sessionsRaw = data['gameSessions'];
@@ -3275,6 +3233,27 @@ class AuthService {
     } catch (_) {}
   }
 
+  List<ChildProfile> _childProfilesFromCloud(Map<String, dynamic>? cloud) {
+    if (cloud == null) return const <ChildProfile>[];
+    final rawList = cloud['childProfiles'];
+    if (rawList is List) {
+      final parsed = rawList
+          .whereType<Map>()
+          .map((item) => ChildProfile.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+      if (parsed.isNotEmpty) {
+        return parsed;
+      }
+    }
+    final legacyRaw = cloud['childProfile'];
+    if (legacyRaw is Map) {
+      return <ChildProfile>[
+        ChildProfile.fromJson(Map<String, dynamic>.from(legacyRaw)),
+      ];
+    }
+    return const <ChildProfile>[];
+  }
+
   NebulaUser _copyUserWithId(NebulaUser user, String id) {
     return NebulaUser(
       id: id,
@@ -3292,6 +3271,7 @@ class AuthService {
       customImages: user.customImages,
       role: user.role,
       childProfile: user.childProfile,
+      childProfiles: user.childProfiles,
       gameSessions: user.gameSessions,
       parentalControl: user.parentalControl,
     );
@@ -3316,6 +3296,7 @@ class AuthService {
       'customImages': user.customImages,
       'role': user.role,
       'childProfile': user.childProfile?.toJson(),
+      'childProfiles': user.childProfiles.map((item) => item.toJson()).toList(),
       'gameSessions': user.gameSessions.map((item) => item.toJson()).toList(),
       'parentalControl': user.parentalControl.toJson(),
     };
@@ -3357,10 +3338,11 @@ class AuthService {
     required NebulaUser user,
     PortalRole? requestedRole,
   }) {
+    final hasChild = user.childProfile != null || user.childProfiles.isNotEmpty;
     if (user.role == UserRole.admin) {
       return PortalRole.admin;
     }
-    if (requestedRole == PortalRole.child && user.childProfile != null) {
+    if (requestedRole == PortalRole.child && hasChild) {
       return PortalRole.child;
     }
     if (requestedRole == PortalRole.admin) {

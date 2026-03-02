@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-import '../models/portal_role.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
-import 'caregiver/caregiver_panel_screen.dart';
-import 'home_screen.dart';
+import 'child_profile_setup_screen.dart';
 import 'login_screen.dart';
+import 'portal_entry_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, required this.controller});
@@ -79,7 +78,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             builder: (_) => LoginScreen(
               controller: widget.controller,
               initialIdentifier: _emailController.text.trim(),
-              initialRole: PortalRole.caregiver,
             ),
           ),
         );
@@ -160,27 +158,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      var preferredUsernameForNewAccount = '';
       var preferredPasswordForNewAccount = '';
-
-      if (_isGoogleConfirmWithUsername(result.message)) {
-        final data = await _askGooglePasswordForFirstLogin(email: email);
+      if (_isGooglePasswordRequired(result.message)) {
+        final password = await _askGooglePasswordForFirstLogin(email: email);
         if (!mounted) return;
-        if (data == null) {
+        if (password == null) {
           await widget.controller.cancelPendingGoogleLogin();
           return;
         }
-        preferredUsernameForNewAccount = data.$1;
-        preferredPasswordForNewAccount = data.$2;
+        preferredPasswordForNewAccount = password;
       }
 
       setState(() => _googleSubmitting = true);
       final confirmResult = await widget.controller.confirmPendingGoogleLogin(
-        preferredUsernameForNewAccount: preferredUsernameForNewAccount,
         preferredPasswordForNewAccount: preferredPasswordForNewAccount,
       );
       if (!mounted) return;
       setState(() => _googleSubmitting = false);
+      if (!confirmResult.ok &&
+          preferredPasswordForNewAccount.isEmpty &&
+          _isGooglePasswordRequired(confirmResult.message)) {
+        final retryPassword = await _askGooglePasswordForFirstLogin(
+          email: _extractGoogleConfirmEmail(confirmResult.message).isEmpty
+              ? email
+              : _extractGoogleConfirmEmail(confirmResult.message),
+        );
+        if (!mounted) return;
+        if (retryPassword == null) {
+          await widget.controller.cancelPendingGoogleLogin();
+          return;
+        }
+        setState(() => _googleSubmitting = true);
+        final retryResult = await widget.controller.confirmPendingGoogleLogin(
+          preferredPasswordForNewAccount: retryPassword,
+        );
+        if (!mounted) return;
+        setState(() => _googleSubmitting = false);
+        _showSnack(retryResult.message, ok: retryResult.ok);
+        if (!retryResult.ok) return;
+        _openPostRegisterScreen();
+        return;
+      }
       _showSnack(confirmResult.message, ok: confirmResult.ok);
       if (!confirmResult.ok) return;
 
@@ -194,10 +212,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _openPostRegisterScreen() {
-    final role = widget.controller.activePortalRole;
-    final Widget destination = role == PortalRole.child
-        ? HomeScreen(controller: widget.controller)
-        : CaregiverPanelScreen(controller: widget.controller);
+    final Widget destination;
+    if (widget.controller.needsChildOnboarding) {
+      destination = ChildProfileSetupScreen(
+        controller: widget.controller,
+        isMandatory: true,
+      );
+    } else if (widget.controller.needsPortalSelection) {
+      destination = PortalEntryScreen(controller: widget.controller);
+    } else {
+      destination = PortalEntryScreen(controller: widget.controller);
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => destination),
       (_) => false,
@@ -206,14 +231,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _isGoogleConfirmRequired(String message) {
     return message.startsWith('GOOGLE_CONFIRM_REQUIRED:') ||
+        message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:') ||
         message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
-  bool _isGoogleConfirmWithUsername(String message) {
-    return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
+  bool _isGooglePasswordRequired(String message) {
+    return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:') ||
+        message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
   String _extractGoogleConfirmEmail(String message) {
+    const withPassword = 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:';
+    if (message.startsWith(withPassword)) {
+      return message.substring(withPassword.length).trim();
+    }
     const withUsername = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
     if (message.startsWith(withUsername)) {
       final payload = message.substring(withUsername.length);
@@ -230,7 +261,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Confirmar cuenta Google'),
-        content: Text('Vas a entrar con $selected. Deseas continuar?'),
+        content: Text('Vas a entrar con $selected. ¿Deseas continuar?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -246,13 +277,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return confirmed == true;
   }
 
-  Future<(String, String)?> _askGooglePasswordForFirstLogin({
+  Future<String?> _askGooglePasswordForFirstLogin({
     required String email,
   }) async {
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
     try {
-      final result = await showDialog<(String, String)>(
+      final result = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
@@ -261,10 +292,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               final pass = passwordController.text.trim();
               final confirm = confirmController.text.trim();
               final ok = pass.length >= 6 && pass == confirm;
-              final username =
-                  widget.controller.authService.generateSuggestedUsername(
-                email,
-              );
               return AlertDialog(
                 title: const Text('Completa tu cuenta'),
                 content: Column(
@@ -272,18 +299,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Text('Cuenta Google: $email'),
                     const SizedBox(height: 8),
-                    Text('Usuario interno: $username'),
+                    const Text(
+                      'Esta contraseña protege la entrada a la Zona cuidador en dispositivos compartidos.',
+                    ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: passwordController,
-                      label: 'Contrase\u00f1a de respaldo (minimo 6)',
+                      label: 'Contraseña del cuidador (mínimo 6)',
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
-                      label: 'Confirmar contrase\u00f1a',
+                      label: 'Confirmar contraseña',
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
@@ -295,9 +324,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: const Text('Cancelar'),
                   ),
                   FilledButton(
-                    onPressed: ok
-                        ? () => Navigator.of(context).pop((username, pass))
-                        : null,
+                    onPressed:
+                        ok ? () => Navigator.of(context).pop(pass) : null,
                     child: const Text('Continuar'),
                   ),
                 ],
@@ -349,14 +377,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     NebulaTextField(
                       controller: _passwordController,
                       onChanged: (_) => setState(() {}),
-                      label: 'Contrase\u00f1a',
+                      label: 'Contraseña',
                       obscureText: true,
                     ),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _confirmController,
                       onChanged: (_) => setState(() {}),
-                      label: 'Confirmar contrase\u00f1a',
+                      label: 'Confirmar contraseña',
                       obscureText: true,
                     ),
                     const SizedBox(height: 18),

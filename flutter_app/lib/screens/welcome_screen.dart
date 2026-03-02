@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-import '../models/portal_role.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
@@ -28,7 +27,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _navigating = false;
-  PortalRole _role = PortalRole.caregiver;
 
   final _slides = const [
     (
@@ -72,10 +70,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => LoginScreen(
-            controller: widget.controller,
-            initialRole: _role,
-          ),
+          builder: (_) => LoginScreen(controller: widget.controller),
         ),
       );
     } finally {
@@ -85,29 +80,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Future<void> _openRegister() async {
     if (_navigating || !mounted) return;
-    if (_role == PortalRole.child) {
-      final goCaregiver = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Cuenta de ni\u00f1o'),
-          content: const Text(
-            'Las cuentas de ni\u00f1o las crea un cuidador desde su panel.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Volver'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Ir a cuidador'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || goCaregiver != true) return;
-      setState(() => _role = PortalRole.caregiver);
-    }
     _navigating = true;
     try {
       await Navigator.of(context).push(
@@ -157,27 +129,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                SegmentedButton<PortalRole>(
-                  segments: const [
-                    ButtonSegment<PortalRole>(
-                      value: PortalRole.child,
-                      label: Text('Ni\u00f1o'),
-                      icon: Icon(Icons.child_care_rounded),
-                    ),
-                    ButtonSegment<PortalRole>(
-                      value: PortalRole.caregiver,
-                      label: Text('Cuidador'),
-                      icon: Icon(Icons.family_restroom_rounded),
-                    ),
-                  ],
-                  selected: <PortalRole>{_role},
-                  onSelectionChanged: (selection) {
-                    setState(() => _role = selection.first);
-                  },
-                ),
-                const SizedBox(height: 10),
                 Text(
-                  '\u00bfQui\u00e9n va a usar la app ahora?',
+                  'Inicia con la cuenta del cuidador',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF4F628A),
                   ),
@@ -185,7 +138,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Este dispositivo puede ser compartido. Puedes alternar entre ni\u00f1o y cuidador cuando quieras.',
+                  'Luego podras elegir si entra el cuidador o un perfil de niño en el mismo dispositivo.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF4F628A),
                   ),

@@ -20,8 +20,7 @@ class _TestFirebaseAuth extends MockFirebaseAuth {
   _TestFirebaseAuth({
     super.mockUser,
     super.verifyEmailAutomatically = true,
-  }) : super(
-        );
+  }) : super();
 
   @override
   Future<void> setLanguageCode(String? languageCode) async {}
@@ -116,7 +115,7 @@ void main() {
   );
 
   test(
-    'Google primera vez exige username+password y luego permite login sin dialogo',
+    'Google primera vez exige password local y luego permite login sin dialogo',
     () async {
       final store = await LocalStore.create();
       final firestore = FakeFirebaseFirestore();
@@ -160,13 +159,12 @@ void main() {
       expect(firstGoogleStart.ok, isFalse);
       expect(
         firstGoogleStart.message.startsWith(
-          'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:',
+          'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:',
         ),
         isTrue,
       );
 
       final firstGoogleConfirm = await service.confirmPendingGoogleLogin(
-        preferredUsernameForNewAccount: 'google_new_user',
         preferredPasswordForNewAccount: '123456',
       );
       expect(firstGoogleConfirm.ok, isTrue);
@@ -197,7 +195,7 @@ void main() {
       );
       expect(
         secondGoogleStart.message.startsWith(
-          'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:',
+          'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:',
         ),
         isFalse,
       );

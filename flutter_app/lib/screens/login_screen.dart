@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
-import '../models/portal_role.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/nebula_text_field.dart';
 import 'caregiver/caregiver_panel_screen.dart';
-import 'home_screen.dart';
+import 'child_profile_setup_screen.dart';
+import 'portal_entry_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,12 +17,10 @@ class LoginScreen extends StatefulWidget {
     super.key,
     required this.controller,
     this.initialIdentifier = '',
-    this.initialRole = PortalRole.caregiver,
   });
 
   final AppController controller;
   final String initialIdentifier;
-  final PortalRole initialRole;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -36,14 +34,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _googleSubmitting = false;
   int _remaining = 0;
   Timer? _timer;
-  late PortalRole _role;
 
   @override
   void initState() {
     super.initState();
-    _role = widget.initialRole == PortalRole.child
-        ? PortalRole.child
-        : PortalRole.caregiver;
     final initial = widget.initialIdentifier.trim();
     if (initial.isNotEmpty) {
       _identifierController.text = initial;
@@ -65,35 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnack('Completa los campos para continuar.', ok: false);
       return;
     }
-    if (_role == PortalRole.caregiver && !identifier.contains('@')) {
+    if (!identifier.contains('@')) {
       _showSnack('Ingresa el correo del cuidador.', ok: false);
-      return;
-    }
-    if (_role == PortalRole.child &&
-        !widget.controller.isValidChildLoginPinFormat(secret)) {
-      _showSnack(
-        'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
-        ok: false,
-      );
       return;
     }
 
     setState(() => _submitting = true);
-    final result = switch (_role) {
-      PortalRole.child => widget.controller.loginAsChild(
-          username: identifier,
-          password: secret,
-        ),
-      PortalRole.caregiver => widget.controller.loginAsCaregiver(
-          identifier,
-          secret,
-        ),
-      PortalRole.admin => widget.controller.loginAsAdmin(
-          identifier,
-          secret,
-        ),
-    };
-    final resolved = await result;
+    final resolved = await widget.controller.loginAsCaregiver(
+      identifier,
+      secret,
+    );
     if (!mounted) return;
     setState(() => _submitting = false);
     _showSnack(resolved.message, ok: resolved.ok);
@@ -102,7 +77,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
-    if (_role != PortalRole.caregiver) return;
     FocusScope.of(context).unfocus();
     setState(() => _googleSubmitting = true);
     final result = await widget.controller.loginWithGoogle();
@@ -119,29 +93,49 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      var preferredUsernameForNewAccount = '';
       var preferredPasswordForNewAccount = '';
-
-      if (_isGoogleConfirmWithUsername(result.message)) {
-        final data = await _askGooglePasswordForFirstLogin(
+      if (_isGooglePasswordRequired(result.message)) {
+        final password = await _askGooglePasswordForFirstLogin(
           email: _extractGoogleConfirmEmail(result.message),
         );
         if (!mounted) return;
-        if (data == null) {
+        if (password == null) {
           await widget.controller.cancelPendingGoogleLogin();
           return;
         }
-        preferredUsernameForNewAccount = data.$1;
-        preferredPasswordForNewAccount = data.$2;
+        preferredPasswordForNewAccount = password;
       }
 
       setState(() => _googleSubmitting = true);
       final confirmResult = await widget.controller.confirmPendingGoogleLogin(
-        preferredUsernameForNewAccount: preferredUsernameForNewAccount,
         preferredPasswordForNewAccount: preferredPasswordForNewAccount,
       );
       if (!mounted) return;
       setState(() => _googleSubmitting = false);
+      if (!confirmResult.ok &&
+          preferredPasswordForNewAccount.isEmpty &&
+          _isGooglePasswordRequired(confirmResult.message)) {
+        final retryPassword = await _askGooglePasswordForFirstLogin(
+          email: _extractGoogleConfirmEmail(confirmResult.message).isEmpty
+              ? _extractGoogleConfirmEmail(result.message)
+              : _extractGoogleConfirmEmail(confirmResult.message),
+        );
+        if (!mounted) return;
+        if (retryPassword == null) {
+          await widget.controller.cancelPendingGoogleLogin();
+          return;
+        }
+        setState(() => _googleSubmitting = true);
+        final retryResult = await widget.controller.confirmPendingGoogleLogin(
+          preferredPasswordForNewAccount: retryPassword,
+        );
+        if (!mounted) return;
+        setState(() => _googleSubmitting = false);
+        _showSnack(retryResult.message, ok: retryResult.ok);
+        if (!retryResult.ok) return;
+        _openPostLoginScreen();
+        return;
+      }
       _showSnack(confirmResult.message, ok: confirmResult.ok);
       if (!confirmResult.ok) return;
       _openPostLoginScreen();
@@ -154,10 +148,19 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openPostLoginScreen() {
-    final role = widget.controller.activePortalRole;
-    final Widget destination = role == PortalRole.child
-        ? HomeScreen(controller: widget.controller)
-        : CaregiverPanelScreen(controller: widget.controller);
+    final Widget destination;
+    if (widget.controller.isAdmin) {
+      destination = CaregiverPanelScreen(controller: widget.controller);
+    } else if (widget.controller.needsChildOnboarding) {
+      destination = ChildProfileSetupScreen(
+        controller: widget.controller,
+        isMandatory: true,
+      );
+    } else if (widget.controller.needsPortalSelection) {
+      destination = PortalEntryScreen(controller: widget.controller);
+    } else {
+      destination = CaregiverPanelScreen(controller: widget.controller);
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => destination),
       (_) => false,
@@ -166,14 +169,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isGoogleConfirmRequired(String message) {
     return message.startsWith('GOOGLE_CONFIRM_REQUIRED:') ||
+        message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:') ||
         message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
-  bool _isGoogleConfirmWithUsername(String message) {
-    return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
+  bool _isGooglePasswordRequired(String message) {
+    return message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:') ||
+        message.startsWith('GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:');
   }
 
   String _extractGoogleConfirmEmail(String message) {
+    const withPassword = 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:';
+    if (message.startsWith(withPassword)) {
+      return message.substring(withPassword.length).trim();
+    }
     const withUsername = 'GOOGLE_CONFIRM_REQUIRED_WITH_USERNAME:';
     if (message.startsWith(withUsername)) {
       final payload = message.substring(withUsername.length);
@@ -184,13 +193,13 @@ class _LoginScreenState extends State<LoginScreen> {
     return message.substring(simple.length).trim();
   }
 
-  Future<(String, String)?> _askGooglePasswordForFirstLogin({
+  Future<String?> _askGooglePasswordForFirstLogin({
     required String email,
   }) async {
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
     try {
-      final result = await showDialog<(String, String)>(
+      final result = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
@@ -199,10 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
               final pass = passwordController.text.trim();
               final confirm = confirmController.text.trim();
               final ok = pass.length >= 6 && pass == confirm;
-              final username =
-                  widget.controller.authService.generateSuggestedUsername(
-                email,
-              );
               return AlertDialog(
                 title: const Text('Completa tu cuenta'),
                 content: Column(
@@ -210,18 +215,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Text('Cuenta Google: $email'),
                     const SizedBox(height: 8),
-                    Text('Usuario interno: $username'),
+                    const Text(
+                      'Por seguridad, crea una contraseña del cuidador para abrir la Zona cuidador en dispositivos compartidos.',
+                    ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: passwordController,
-                      label: 'Contrase\u00f1a de respaldo (minimo 6)',
+                      label: 'Contraseña del cuidador (mínimo 6)',
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
-                      label: 'Confirmar contrase\u00f1a',
+                      label: 'Confirmar contraseña',
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
@@ -233,9 +240,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: const Text('Cancelar'),
                   ),
                   FilledButton(
-                    onPressed: ok
-                        ? () => Navigator.of(context).pop((username, pass))
-                        : null,
+                    onPressed:
+                        ok ? () => Navigator.of(context).pop(pass) : null,
                     child: const Text('Continuar'),
                   ),
                 ],
@@ -257,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Confirmar cuenta Google'),
-        content: Text('Vas a entrar con $selected. Deseas continuar?'),
+        content: Text('Vas a entrar con $selected. ¿Deseas continuar?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -362,29 +368,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _openCreateAccount() async {
-    if (_role == PortalRole.child) {
-      final wantsSwitch = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Cuenta de niño'),
-          content: const Text(
-            'Las cuentas de niño las crea un cuidador desde su panel.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Volver'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Ir a cuidador'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || wantsSwitch != true) return;
-      setState(() => _role = PortalRole.caregiver);
-    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RegisterScreen(controller: widget.controller),
@@ -403,7 +386,7 @@ class _LoginScreenState extends State<LoginScreen> {
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: GestureDetector(
           onLongPress: _openHiddenAdminAccess,
-          child: const Text('Vamos a entrar'),
+          child: const Text('Entrar como cuidador'),
         ),
       ),
       body: CosmicBackground(
@@ -416,32 +399,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.all(18),
                   child: Column(
                     children: [
-                      SegmentedButton<PortalRole>(
-                        segments: const [
-                          ButtonSegment<PortalRole>(
-                            value: PortalRole.child,
-                            label: Text('Ni\u00f1o'),
-                            icon: Icon(Icons.child_care_rounded),
-                          ),
-                          ButtonSegment<PortalRole>(
-                            value: PortalRole.caregiver,
-                            label: Text('Cuidador'),
-                            icon: Icon(Icons.family_restroom_rounded),
-                          ),
-                        ],
-                        selected: <PortalRole>{_role},
-                        onSelectionChanged: (selection) {
-                          setState(() {
-                            _role = selection.first;
-                            _identifierController.clear();
-                            _passwordController.clear();
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
                       Text(
-                        'Dispositivo compartido: cambia entre ni\u00f1o y cuidador segun quien vaya a entrar ahora.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        'Accede con tu correo de cuidador.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: const Color(0xFF4F628A),
                             ),
                         textAlign: TextAlign.center,
@@ -449,68 +409,46 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 14),
                       NebulaTextField(
                         controller: _identifierController,
-                        label: _role == PortalRole.child
-                            ? 'Usuario del ni\u00f1o'
-                            : 'Correo del cuidador',
-                        keyboardType: _role == PortalRole.child
-                            ? TextInputType.text
-                            : TextInputType.emailAddress,
+                        label: 'Correo del cuidador',
+                        keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 12),
                       NebulaTextField(
                         controller: _passwordController,
-                        label: _role == PortalRole.child
-                            ? 'Contrase\u00f1a del ni\u00f1o'
-                            : 'Contrase\u00f1a',
-                        maxLength: _role == PortalRole.child ? 32 : null,
+                        label: 'Contraseña',
                         obscureText: true,
                       ),
-                      if (_role == PortalRole.child) ...[
-                        const SizedBox(height: 6),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'La contrase\u00f1a del ni\u00f1o debe tener al menos 6 caracteres.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: const Color(0xFF4F628A)),
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 18),
                       NebulaPrimaryButton(
                         text: _submitting ? 'Entrando...' : 'Comenzar',
                         onPressed:
                             (_submitting || _googleSubmitting) ? null : _login,
                       ),
-                      if (_role == PortalRole.caregiver) ...[
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          onPressed: (_submitting || _googleSubmitting)
-                              ? null
-                              : widget.controller.firebaseEnabled
-                                  ? _loginWithGoogle
-                                  : null,
-                          icon: const Icon(Icons.account_circle_outlined),
-                          label: Text(
-                            _googleSubmitting
-                                ? 'Conectando con Google...'
-                                : 'Entrar con Google',
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(50),
-                          ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: (_submitting || _googleSubmitting)
+                            ? null
+                            : widget.controller.firebaseEnabled
+                                ? _loginWithGoogle
+                                : null,
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: Text(
+                          _googleSubmitting
+                              ? 'Conectando con Google...'
+                              : 'Entrar con Google',
                         ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton(
-                            onPressed: _requestReset,
-                            child: const Text('Ayuda con mi contrase\u00f1a'),
-                          ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(50),
                         ),
-                      ],
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: _requestReset,
+                          child: const Text('Ayuda con mi contraseña'),
+                        ),
+                      ),
                       if (_remaining > 0)
                         Align(
                           alignment: Alignment.centerLeft,

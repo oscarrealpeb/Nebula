@@ -8,6 +8,7 @@ class ChildProfile {
     required this.id,
     required this.name,
     this.age = 0,
+    this.birthDateMillis = 0,
     this.languageLevel = 'medio',
     this.active = true,
     this.createdAtMillis = 0,
@@ -18,6 +19,7 @@ class ChildProfile {
   final String id;
   final String name;
   final int age;
+  final int birthDateMillis;
   final String languageLevel;
   final bool active;
   final int createdAtMillis;
@@ -28,6 +30,7 @@ class ChildProfile {
     String? id,
     String? name,
     int? age,
+    int? birthDateMillis,
     String? languageLevel,
     bool? active,
     int? createdAtMillis,
@@ -38,6 +41,7 @@ class ChildProfile {
       id: id ?? this.id,
       name: name ?? this.name,
       age: age ?? this.age,
+      birthDateMillis: birthDateMillis ?? this.birthDateMillis,
       languageLevel: languageLevel ?? this.languageLevel,
       active: active ?? this.active,
       createdAtMillis: createdAtMillis ?? this.createdAtMillis,
@@ -51,6 +55,7 @@ class ChildProfile {
       'id': id,
       'name': name,
       'age': age,
+      'birthDateMillis': birthDateMillis,
       'languageLevel': languageLevel,
       'active': active,
       'createdAtMillis': createdAtMillis,
@@ -65,6 +70,7 @@ class ChildProfile {
       id: (json['id'] as String?) ?? '',
       name: (json['name'] as String?) ?? '',
       age: (json['age'] as num?)?.toInt() ?? 0,
+      birthDateMillis: (json['birthDateMillis'] as num?)?.toInt() ?? 0,
       languageLevel: (json['languageLevel'] as String?) ?? 'medio',
       active: (json['active'] as bool?) ?? true,
       createdAtMillis: (json['createdAtMillis'] as num?)?.toInt() ?? 0,
@@ -206,6 +212,7 @@ class NebulaUser {
     required this.customImages,
     this.role = UserRole.caregiver,
     this.childProfile,
+    this.childProfiles = const [],
     this.gameSessions = const [],
     this.parentalControl = const ParentalControl(),
   });
@@ -225,6 +232,7 @@ class NebulaUser {
   final Map<String, String> customImages;
   final String role;
   final ChildProfile? childProfile;
+  final List<ChildProfile> childProfiles;
   final List<GameSessionRecord> gameSessions;
   final ParentalControl parentalControl;
 
@@ -244,6 +252,7 @@ class NebulaUser {
     String? role,
     ChildProfile? childProfile,
     bool clearChildProfile = false,
+    List<ChildProfile>? childProfiles,
     List<GameSessionRecord>? gameSessions,
     ParentalControl? parentalControl,
   }) {
@@ -264,6 +273,7 @@ class NebulaUser {
       role: role ?? this.role,
       childProfile:
           clearChildProfile ? null : (childProfile ?? this.childProfile),
+      childProfiles: childProfiles ?? this.childProfiles,
       gameSessions: gameSessions ?? this.gameSessions,
       parentalControl: parentalControl ?? this.parentalControl,
     );
@@ -286,12 +296,34 @@ class NebulaUser {
       'customImages': customImages,
       'role': role,
       'childProfile': childProfile?.toJson(),
+      'childProfiles': childProfiles.map((item) => item.toJson()).toList(),
       'gameSessions': gameSessions.map((item) => item.toJson()).toList(),
       'parentalControl': parentalControl.toJson(),
     };
   }
 
   factory NebulaUser.fromJson(Map<String, dynamic> json) {
+    final parsedChildProfiles = (json['childProfiles'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (item) => ChildProfile.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .toList();
+    final legacyChildProfile = json['childProfile'] is Map
+        ? ChildProfile.fromJson(
+            Map<String, dynamic>.from(json['childProfile'] as Map),
+          )
+        : null;
+    final resolvedChildProfiles = parsedChildProfiles.isNotEmpty
+        ? parsedChildProfiles
+        : (legacyChildProfile == null
+            ? const <ChildProfile>[]
+            : <ChildProfile>[legacyChildProfile]);
+    final resolvedPrimaryChild = legacyChildProfile ??
+        (resolvedChildProfiles.isEmpty ? null : resolvedChildProfiles.first);
+
     return NebulaUser(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -309,11 +341,8 @@ class NebulaUser {
         json['customImages'] as Map? ?? const {},
       ),
       role: (json['role'] as String?) ?? UserRole.caregiver,
-      childProfile: json['childProfile'] is Map
-          ? ChildProfile.fromJson(
-              Map<String, dynamic>.from(json['childProfile'] as Map),
-            )
-          : null,
+      childProfile: resolvedPrimaryChild,
+      childProfiles: resolvedChildProfiles,
       gameSessions: (json['gameSessions'] as List? ?? const [])
           .whereType<Map>()
           .map(
