@@ -1,58 +1,78 @@
 import '../../models/planet_level.dart';
+import 'avatar_catalog.dart';
+
 
 const List<PlanetLevel> planetLadder = [
   PlanetLevel(
-    name: 'Tierra',
+    name: 'Mercurio',
     minStars: 0,
-    maxStars: 400,
+    maxStars: 300,
     reward: 'Avatar explorador + animales base',
   ),
   PlanetLevel(
-    name: 'Luna',
-    minStars: 400,
-    maxStars: 900,
+    name: 'Venus',
+    minStars: 300,
+    maxStars: 700,
     reward: 'Avatar lunar + objetos nuevos',
   ),
   PlanetLevel(
-    name: 'Marte',
-    minStars: 900,
-    maxStars: 1600,
+    name: 'Tierra',
+    minStars: 700,
+    maxStars: 1200,
     reward: 'Avatar rover + animales del desierto',
   ),
   PlanetLevel(
-    name: 'Jupiter',
-    minStars: 1600,
-    maxStars: 2500,
+    name: 'Marte',
+    minStars: 1200,
+    maxStars: 1800,
     reward: 'Avatar tormenta + objetos avanzados',
+  ),
+  PlanetLevel(
+    name: 'Jupiter',
+    minStars: 1800,
+    maxStars: 2500,
+    reward: 'Avatar anillos + animales marinos',
   ),
   PlanetLevel(
     name: 'Saturno',
     minStars: 2500,
-    maxStars: 3600,
-    reward: 'Avatar anillos + animales marinos',
-  ),
-  PlanetLevel(
-    name: 'Neptuno',
-    minStars: 3600,
-    maxStars: 5000,
+    maxStars: 3300,
     reward: 'Avatar oceano + coleccion premium',
   ),
   PlanetLevel(
-    name: 'Galaxia Azul',
-    minStars: 5000,
-    maxStars: 7000,
+    name: 'Urano',
+    minStars: 3300,
+    maxStars: 4200,
     reward: 'Avatar cosmico + expansion de objetos',
   ),
   PlanetLevel(
-    name: 'Nebulosa Dorada',
-    minStars: 7000,
-    maxStars: 9500,
+    name: 'Neptuno',
+    minStars: 4200,
+    maxStars: 5200,
     reward: 'Avatar dorado + recompensas especiales',
   ),
   PlanetLevel(
-    name: 'Universo Supremo',
-    minStars: 9500,
-    maxStars: 13000,
+    name: 'Nebulosa Dorada',
+    minStars: 5200,
+    maxStars: 6300,
+    reward: 'Avatar legendario + todo desbloqueado',
+  ),
+  PlanetLevel(
+    name: 'Galaxia Prisma',
+    minStars: 6300,
+    maxStars: 7500,
+    reward: 'Avatar legendario + todo desbloqueado',
+  ),
+  // PlanetLevel(
+  //   name: 'Constelación Zen',
+  //   minStars: 7500,
+  //   maxStars: 8800,
+  //   reward: 'Avatar legendario + todo desbloqueado',
+  // ),
+  PlanetLevel(
+    name: 'Universo Infinito',
+    minStars: 8800,
+    maxStars: 10000,
     reward: 'Avatar legendario + todo desbloqueado',
   ),
 ];
@@ -84,8 +104,48 @@ int starsToNextPlanet(int stars) {
 int unlockedAvatarCount(int stars) {
   final currentPlanet = planetForStars(stars);
   final index = planetLadder.indexOf(currentPlanet);
-  final count = 3 + (index * 2);
-  if (count < 3) return 3;
+
+  int count = 3; // empieza con 3
+
+  if (index <= 6) {
+    // Mercurio hasta Urano -> +1 por nivel
+    count += (index + 1);
+  } else {
+    // Primero sumamos los 7 niveles que daban 1 cada uno
+    count += 7;
+
+    // Desde Neptuno en adelante -> +2 por nivel
+    final extraLevels = index - 6;
+    count += extraLevels * 2;
+  }
+
   if (count > 18) return 18;
   return count;
+}
+
+
+List<String> avatarsUnlockedAtLevel(int levelIndex) {
+  if (levelIndex < 0) return [];
+
+  int previousCount;
+  int currentCount;
+
+  if (levelIndex == 0) {
+    previousCount = 3;
+  } else {
+    previousCount = unlockedAvatarCount(
+      planetLadder[levelIndex - 1].minStars,
+    );
+  }
+
+  currentCount = unlockedAvatarCount(
+    planetLadder[levelIndex].minStars,
+  );
+
+  return avatarCatalog.sublist(
+    previousCount,
+    currentCount > avatarCatalog.length
+        ? avatarCatalog.length
+        : currentCount,
+  );
 }

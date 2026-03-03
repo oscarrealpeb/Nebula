@@ -1081,8 +1081,11 @@ class AuthService {
     _clearPendingGoogleConfirmation();
   }
 
-  Future<ServiceResult<NebulaUser>> updateUser(NebulaUser nextUser) async {
-    await _upsertLocal(nextUser);
+  Future<ServiceResult<NebulaUser>> updateUser(
+    NebulaUser nextUser, {
+    bool syncCloud = true,
+  }) async {
+    await _upsertLocal(nextUser, syncCloud: syncCloud);
     await _persistSessionState(nextUser, requestedRole: _activePortalRole);
     _currentUser = nextUser;
     return ServiceResult(
@@ -3343,14 +3346,16 @@ class AuthService {
     } catch (_) {}
   }
 
-  Future<void> _upsertLocal(NebulaUser user) async {
+  Future<void> _upsertLocal(NebulaUser user, {bool syncCloud = true}) async {
     final users = await _store.readUsers();
     final updated = users.map((u) => u.id == user.id ? user : u).toList();
     if (!users.any((u) => u.id == user.id)) {
       updated.add(user);
     }
     await _store.writeUsers(updated);
-    await _syncCloudUserBestEffort(user);
+    if (syncCloud) {
+      await _syncCloudUserBestEffort(user);
+    }
   }
 
   PortalRole _resolvePortalRoleForUser({

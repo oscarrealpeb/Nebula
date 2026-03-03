@@ -773,7 +773,7 @@ class AppController extends ChangeNotifier {
     final user = _currentUser;
     if (user == null) return;
     final next = user.copyWith(stars: user.stars + value);
-    final saved = await _authService.updateUser(next);
+    final saved = await _authService.updateUser(next, syncCloud: false);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
       notifyListeners();
