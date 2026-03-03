@@ -13,6 +13,7 @@ import 'explore_learn_screen.dart';
 import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
+import 'portal_entry_screen.dart';
 import 'settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -124,6 +125,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _backToPortalSelector() async {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    widget.controller.markPortalSelectionPending();
+    if (!mounted) return;
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => PortalEntryScreen(controller: widget.controller),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
@@ -150,6 +166,20 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: _backToPortalSelector,
+                  child: Ink(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withValues(alpha: 0.90),
+                    ),
+                    child: const Icon(Icons.arrow_back_rounded),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

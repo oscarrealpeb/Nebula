@@ -23,6 +23,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  bool _attemptedSubmit = false;
   bool _submitting = false;
   bool _googleSubmitting = false;
 
@@ -47,13 +48,61 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool get _passwordsMatch =>
       _passwordController.text.trim() == _confirmController.text.trim();
 
-  bool get _canSubmit {
-    return _nameValid &&
-        _emailValid &&
-        _passwordValid &&
-        _passwordsMatch &&
-        !_submitting &&
-        !_googleSubmitting;
+  bool get _showNameError =>
+      _attemptedSubmit || _nameController.text.trim().isNotEmpty;
+
+  bool get _showEmailError =>
+      _attemptedSubmit || _emailController.text.trim().isNotEmpty;
+
+  bool get _showPasswordError =>
+      _attemptedSubmit || _passwordController.text.isNotEmpty;
+
+  bool get _showConfirmError =>
+      _attemptedSubmit || _confirmController.text.isNotEmpty;
+
+  String? get _nameError {
+    if (!_showNameError) return null;
+    if (_nameValid) return null;
+    return 'Ingresa tu nombre.';
+  }
+
+  String? get _emailError {
+    if (!_showEmailError) return null;
+    if (_emailValid) return null;
+    return 'Ingresa un correo valido.';
+  }
+
+  String? get _passwordError {
+    if (!_showPasswordError) return null;
+    final value = _passwordController.text.trim();
+    if (value.isEmpty) return 'Ingresa una contrase\u00f1a.';
+    if (_passwordValid) return null;
+    return 'La contrase\u00f1a debe tener al menos 6 caracteres.';
+  }
+
+  String? get _confirmError {
+    if (!_showConfirmError) return null;
+    final value = _confirmController.text.trim();
+    if (value.isEmpty) return 'Confirma la contrase\u00f1a.';
+    if (_passwordsMatch) return null;
+    return 'Las contrase\u00f1as no coinciden.';
+  }
+
+  bool get _hasValidationErrors =>
+      _nameError != null ||
+      _emailError != null ||
+      _passwordError != null ||
+      _confirmError != null;
+
+  Future<void> _submitRegister() async {
+    if (_submitting || _googleSubmitting) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _attemptedSubmit = true);
+    if (_hasValidationErrors) {
+      _showSnack('Corrige los campos marcados en rojo.', ok: false);
+      return;
+    }
+    await _registerCaregiver();
   }
 
   Future<void> _registerCaregiver() async {
@@ -66,8 +115,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    _showSnack(result.message, ok: result.ok);
-    if (!result.ok) return;
+    if (!result.ok) {
+      _showSnack(result.message, ok: false);
+      return;
+    }
 
     if (widget.controller.currentUser == null) {
       if (_isVerificationPendingMessage(result.message)) {
@@ -194,20 +245,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
         if (!mounted) return;
         setState(() => _googleSubmitting = false);
-        _showSnack(retryResult.message, ok: retryResult.ok);
-        if (!retryResult.ok) return;
+        if (!retryResult.ok) {
+          _showSnack(retryResult.message, ok: false);
+          return;
+        }
         _openPostRegisterScreen();
         return;
       }
-      _showSnack(confirmResult.message, ok: confirmResult.ok);
-      if (!confirmResult.ok) return;
+      if (!confirmResult.ok) {
+        _showSnack(confirmResult.message, ok: false);
+        return;
+      }
 
       _openPostRegisterScreen();
       return;
     }
 
-    _showSnack(result.message, ok: result.ok);
-    if (!result.ok) return;
+    if (!result.ok) {
+      _showSnack(result.message, ok: false);
+      return;
+    }
     _openPostRegisterScreen();
   }
 
@@ -223,10 +280,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } else {
       destination = PortalEntryScreen(controller: widget.controller);
     }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => destination),
-      (_) => false,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => destination),
+        (_) => false,
+      );
+    });
   }
 
   bool _isGoogleConfirmRequired(String message) {
@@ -282,6 +342,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }) async {
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
+    var attemptedSubmit = false;
     try {
       final result = await showDialog<String>(
         context: context,
@@ -291,11 +352,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
             builder: (context, setLocalState) {
               final pass = passwordController.text.trim();
               final confirm = confirmController.text.trim();
-              final ok = pass.length >= 6 && pass == confirm;
+              final minLengthOk = pass.length >= 6;
+              final matchOk = confirm.isNotEmpty && pass == confirm;
+              final ok = minLengthOk && matchOk;
               return AlertDialog(
                 title: const Text('Completa tu cuenta'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Cuenta Google: $email'),
                     const SizedBox(height: 8),
@@ -309,6 +373,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
+                    if ((attemptedSubmit || pass.isNotEmpty) && !minLengthOk)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Mínimo 6 caracteres.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
@@ -316,6 +392,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
+                    if (attemptedSubmit && confirm.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Confirma la contraseña.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else if (confirm.isNotEmpty && !matchOk)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Las contraseñas no coinciden.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 actions: [
@@ -324,8 +424,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: const Text('Cancelar'),
                   ),
                   FilledButton(
-                    onPressed:
-                        ok ? () => Navigator.of(context).pop(pass) : null,
+                    onPressed: () {
+                      if (ok) {
+                        Navigator.of(context).pop(pass);
+                        return;
+                      }
+                      setLocalState(() => attemptedSubmit = true);
+                    },
                     child: const Text('Continuar'),
                   ),
                 ],
@@ -343,6 +448,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _showSnack(String message, {required bool ok}) {
     NebulaSnack.show(context, message: message, ok: ok);
+  }
+
+  Widget _inlineError(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 2),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: Color(0xFFB3261E),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 
   @override
@@ -366,6 +485,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       onChanged: (_) => setState(() {}),
                       label: 'Nombre',
                     ),
+                    if (_nameError != null) _inlineError(_nameError!),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _emailController,
@@ -373,6 +493,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       label: 'Correo',
                       keyboardType: TextInputType.emailAddress,
                     ),
+                    if (_emailError != null) _inlineError(_emailError!),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _passwordController,
@@ -380,6 +501,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       label: 'Contraseña',
                       obscureText: true,
                     ),
+                    if (_passwordError != null) _inlineError(_passwordError!),
                     const SizedBox(height: 12),
                     NebulaTextField(
                       controller: _confirmController,
@@ -387,10 +509,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       label: 'Confirmar contraseña',
                       obscureText: true,
                     ),
+                    if (_confirmError != null) _inlineError(_confirmError!),
                     const SizedBox(height: 18),
                     NebulaPrimaryButton(
                       text: _submitting ? 'Creando cuenta...' : 'Crear cuenta',
-                      onPressed: _canSubmit ? _registerCaregiver : null,
+                      onPressed: (_submitting || _googleSubmitting)
+                          ? null
+                          : _submitRegister,
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(

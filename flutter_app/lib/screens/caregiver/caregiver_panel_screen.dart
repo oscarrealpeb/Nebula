@@ -11,6 +11,7 @@ import '../../widgets/nebula_snack.dart';
 import 'admin_game_content_screen.dart';
 import 'caregiver_settings_screen.dart';
 import '../child_profile_setup_screen.dart';
+import '../portal_entry_screen.dart';
 import '../settings/personalization_screen.dart';
 import '../welcome_screen.dart';
 
@@ -188,6 +189,21 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     );
   }
 
+  void _backToPortalSelector() {
+    if (widget.controller.isAdmin) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    widget.controller.markPortalSelectionPending();
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => PortalEntryScreen(controller: widget.controller),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = widget.controller.isAdmin;
@@ -283,9 +299,11 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
       length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
-          leading: Navigator.of(context).canPop()
-              ? BackButton(onPressed: () => Navigator.of(context).pop())
-              : null,
+          leading: isAdmin
+              ? (Navigator.of(context).canPop()
+                  ? BackButton(onPressed: () => Navigator.of(context).pop())
+                  : null)
+              : BackButton(onPressed: _backToPortalSelector),
           title: Text(isAdmin ? 'Zona administrador' : 'Zona cuidador'),
           bottom: TabBar(
             isScrollable: true,

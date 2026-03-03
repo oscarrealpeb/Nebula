@@ -921,28 +921,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   text: _saving ? 'Guardando...' : 'Guardar cambios!',
                   onPressed: _canSaveProfile ? _saveProfile : null,
                 ),
-                const SizedBox(height: 12),
-                NebulaSecondaryButton(
-                  text: _loggingOut ? 'Cerrando...' : 'Cerrar sesión',
-                  onPressed: () async {
-                    if (_loggingOut) return;
-                    FocusScope.of(context).unfocus();
-                    setState(() => _loggingOut = true);
-                    await widget.controller.logout();
-                    if (!context.mounted) return;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!_isChildPortal) ...[
+                  const SizedBox(height: 12),
+                  NebulaSecondaryButton(
+                    text: _loggingOut ? 'Cerrando...' : 'Cerrar sesión',
+                    onPressed: () async {
+                      if (_loggingOut) return;
+                      FocusScope.of(context).unfocus();
+                      setState(() => _loggingOut = true);
+                      await widget.controller.logout();
                       if (!context.mounted) return;
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (_) => WelcomeScreen(
-                            controller: widget.controller,
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!context.mounted) return;
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) => WelcomeScreen(
+                              controller: widget.controller,
+                            ),
                           ),
-                        ),
-                        (_) => false,
-                      );
-                    });
-                  },
-                ),
+                          (_) => false,
+                        );
+                      });
+                    },
+                  ),
+                ],
                 const SizedBox(height: 8),
                 if (widget.showSecurity)
                   TextButton(

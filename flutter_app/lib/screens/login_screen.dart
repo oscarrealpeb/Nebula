@@ -71,8 +71,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    _showSnack(resolved.message, ok: resolved.ok);
-    if (!resolved.ok) return;
+    if (!resolved.ok) {
+      _showSnack(resolved.message, ok: false);
+      return;
+    }
     _openPostLoginScreen();
   }
 
@@ -131,19 +133,25 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
         setState(() => _googleSubmitting = false);
-        _showSnack(retryResult.message, ok: retryResult.ok);
-        if (!retryResult.ok) return;
+        if (!retryResult.ok) {
+          _showSnack(retryResult.message, ok: false);
+          return;
+        }
         _openPostLoginScreen();
         return;
       }
-      _showSnack(confirmResult.message, ok: confirmResult.ok);
-      if (!confirmResult.ok) return;
+      if (!confirmResult.ok) {
+        _showSnack(confirmResult.message, ok: false);
+        return;
+      }
       _openPostLoginScreen();
       return;
     }
 
-    _showSnack(result.message, ok: result.ok);
-    if (!result.ok) return;
+    if (!result.ok) {
+      _showSnack(result.message, ok: false);
+      return;
+    }
     _openPostLoginScreen();
   }
 
@@ -161,10 +169,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       destination = CaregiverPanelScreen(controller: widget.controller);
     }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => destination),
-      (_) => false,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => destination),
+        (_) => false,
+      );
+    });
   }
 
   bool _isGoogleConfirmRequired(String message) {
@@ -198,6 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }) async {
     final passwordController = TextEditingController();
     final confirmController = TextEditingController();
+    var attemptedSubmit = false;
     try {
       final result = await showDialog<String>(
         context: context,
@@ -207,11 +219,14 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (context, setLocalState) {
               final pass = passwordController.text.trim();
               final confirm = confirmController.text.trim();
-              final ok = pass.length >= 6 && pass == confirm;
+              final minLengthOk = pass.length >= 6;
+              final matchOk = confirm.isNotEmpty && pass == confirm;
+              final ok = minLengthOk && matchOk;
               return AlertDialog(
                 title: const Text('Completa tu cuenta'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Cuenta Google: $email'),
                     const SizedBox(height: 8),
@@ -225,6 +240,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
+                    if ((attemptedSubmit || pass.isNotEmpty) && !minLengthOk)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Mínimo 6 caracteres.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     NebulaTextField(
                       controller: confirmController,
@@ -232,6 +259,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: true,
                       onChanged: (_) => setLocalState(() {}),
                     ),
+                    if (attemptedSubmit && confirm.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Confirma la contraseña.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else if (confirm.isNotEmpty && !matchOk)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, left: 2),
+                        child: Text(
+                          'Las contraseñas no coinciden.',
+                          style: TextStyle(
+                            color: Color(0xFFB3261E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 actions: [
@@ -240,8 +291,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: const Text('Cancelar'),
                   ),
                   FilledButton(
-                    onPressed:
-                        ok ? () => Navigator.of(context).pop(pass) : null,
+                    onPressed: () {
+                      if (ok) {
+                        Navigator.of(context).pop(pass);
+                        return;
+                      }
+                      setLocalState(() => attemptedSubmit = true);
+                    },
                     child: const Text('Continuar'),
                   ),
                 ],
