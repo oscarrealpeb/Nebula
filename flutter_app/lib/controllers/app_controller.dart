@@ -1260,7 +1260,6 @@ class AppController extends ChangeNotifier {
     required String name,
     required int birthDateMillis,
     required int age,
-    required String languageLevel,
   }) async {
     final user = _currentUser;
     if (user == null) {
@@ -1318,7 +1317,7 @@ class AppController extends ChangeNotifier {
       age: boundedAge,
       birthDateMillis:
           birthDateMillis > 0 ? birthDateMillis : (base?.birthDateMillis ?? 0),
-      languageLevel: languageLevel.trim().isEmpty ? 'medio' : languageLevel,
+      languageLevel: base?.languageLevel ?? 'medio',
       active: true,
     );
     if (index >= 0) {

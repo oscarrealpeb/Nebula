@@ -30,7 +30,6 @@ class ChildProfileSetupScreen extends StatefulWidget {
 class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
   final _nameController = TextEditingController();
   final _birthDateController = TextEditingController();
-  String _languageLevel = 'medio';
   int _birthDateMillis = 0;
   bool _saving = false;
 
@@ -40,8 +39,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     final child = _editingChild;
     if (child != null) {
       _nameController.text = child.name;
-      _languageLevel =
-          child.languageLevel.trim().isEmpty ? 'medio' : child.languageLevel;
       _birthDateMillis = child.birthDateMillis;
     }
     if (_birthDateMillis > 0) {
@@ -69,18 +66,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     return _nameController.text.trim().isNotEmpty &&
         _birthDateMillis > 0 &&
         !_saving;
-  }
-
-  String _languageGuideByLevel(String level) {
-    switch (level) {
-      case 'bajo':
-        return 'Bajo: usa palabras sueltas o requiere instrucciones muy cortas.';
-      case 'alto':
-        return 'Alto: comprende frases completas y dialogos simples.';
-      case 'medio':
-      default:
-        return 'Medio: sigue instrucciones breves de 1 a 2 pasos.';
-    }
   }
 
   Future<void> _pickBirthDate() async {
@@ -165,7 +150,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
       name: _nameController.text,
       birthDateMillis: _birthDateMillis,
       age: _computeAge(_birthDateMillis),
-      languageLevel: _languageLevel,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -201,8 +185,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const levels = ['bajo', 'medio', 'alto'];
-
     return PopScope<Object?>(
       canPop: !widget.isMandatory,
       child: Scaffold(
@@ -258,46 +240,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                               tooltip: 'Elegir desde calendario',
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Nivel de lenguaje',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          initialValue: levels.contains(_languageLevel)
-                              ? _languageLevel
-                              : 'medio',
-                          items: levels
-                              .map(
-                                (value) => DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value.toUpperCase()),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _languageLevel = value);
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Guía rápida: ${_languageGuideByLevel(_languageLevel)}',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFF253966),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Este valor no cambia la lógica del juego. Se usa para contextualizar reportes y recomendaciones de acompañamiento.',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFF4F628A),
-                                  ),
                         ),
                         const SizedBox(height: 16),
                         NebulaPrimaryButton(

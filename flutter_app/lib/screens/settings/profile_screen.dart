@@ -195,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       name: _nameController.text,
       birthDateMillis: child.birthDateMillis,
       age: child.age,
-      languageLevel: child.languageLevel,
     );
     if (!childResult.ok) return childResult;
 

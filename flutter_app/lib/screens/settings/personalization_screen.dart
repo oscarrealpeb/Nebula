@@ -106,7 +106,6 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                   title: Text(
                     child.name.trim().isEmpty ? 'Niño sin nombre' : child.name,
                   ),
-                  subtitle: Text('Nivel: ${child.languageLevel.toUpperCase()}'),
                 );
               }),
             ],

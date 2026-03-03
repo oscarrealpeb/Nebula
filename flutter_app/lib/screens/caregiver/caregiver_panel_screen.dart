@@ -515,8 +515,8 @@ class _SummaryTab extends StatelessWidget {
                       ),
                       subtitle: Text(
                         child.birthDateMillis > 0
-                            ? 'Nacimiento: ${_formatDate(child.birthDateMillis)} · Lenguaje: ${child.languageLevel.toUpperCase()}'
-                            : 'Nacimiento no definido · Lenguaje: ${child.languageLevel.toUpperCase()}',
+                            ? 'Nacimiento: ${_formatDate(child.birthDateMillis)}'
+                            : 'Nacimiento no definido',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
