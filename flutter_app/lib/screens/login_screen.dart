@@ -207,24 +207,26 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<String?> _askGooglePasswordForFirstLogin({
     required String email,
   }) async {
-    final passwordController = TextEditingController();
-    final confirmController = TextEditingController();
-    var attemptedSubmit = false;
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setLocalState) {
-              final pass = passwordController.text.trim();
-              final confirm = confirmController.text.trim();
-              final minLengthOk = pass.length >= 6;
-              final matchOk = confirm.isNotEmpty && pass == confirm;
-              final ok = minLengthOk && matchOk;
-              return AlertDialog(
-                title: const Text('Completa tu cuenta'),
-                content: Column(
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var pass = '';
+        var confirm = '';
+        var attemptedSubmit = false;
+        var obscurePass = true;
+        var obscureConfirm = true;
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            final minLengthOk = pass.length >= 6;
+            final matchOk = confirm.isNotEmpty && pass == confirm;
+            final ok = minLengthOk && matchOk;
+
+            return AlertDialog(
+              scrollable: true,
+              title: const Text('Completa tu cuenta'),
+              content: SingleChildScrollView(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -234,11 +236,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       'Por seguridad, crea una contraseña del cuidador para abrir la Zona cuidador en dispositivos compartidos.',
                     ),
                     const SizedBox(height: 10),
-                    NebulaTextField(
-                      controller: passwordController,
-                      label: 'Contraseña del cuidador (mínimo 6)',
-                      obscureText: true,
-                      onChanged: (_) => setLocalState(() {}),
+                    TextField(
+                      obscureText: obscurePass,
+                      onChanged: (value) =>
+                          setLocalState(() => pass = value.trim()),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña del cuidador (mínimo 6)',
+                        suffixIcon: IconButton(
+                          onPressed: () => setLocalState(() {
+                            obscurePass = !obscurePass;
+                          }),
+                          icon: Icon(
+                            obscurePass
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
+                      ),
                     ),
                     if ((attemptedSubmit || pass.isNotEmpty) && !minLengthOk)
                       const Padding(
@@ -253,11 +267,30 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     const SizedBox(height: 10),
-                    NebulaTextField(
-                      controller: confirmController,
-                      label: 'Confirmar contraseña',
-                      obscureText: true,
-                      onChanged: (_) => setLocalState(() {}),
+                    TextField(
+                      obscureText: obscureConfirm,
+                      onChanged: (value) =>
+                          setLocalState(() => confirm = value.trim()),
+                      onSubmitted: (_) {
+                        if (ok) {
+                          Navigator.of(dialogContext).pop(pass);
+                          return;
+                        }
+                        setLocalState(() => attemptedSubmit = true);
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Confirmar contraseña',
+                        suffixIcon: IconButton(
+                          onPressed: () => setLocalState(() {
+                            obscureConfirm = !obscureConfirm;
+                          }),
+                          icon: Icon(
+                            obscureConfirm
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
+                      ),
                     ),
                     if (attemptedSubmit && confirm.isEmpty)
                       const Padding(
@@ -285,32 +318,28 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                   ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancelar'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      if (ok) {
-                        Navigator.of(context).pop(pass);
-                        return;
-                      }
-                      setLocalState(() => attemptedSubmit = true);
-                    },
-                    child: const Text('Continuar'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-      return result;
-    } finally {
-      passwordController.dispose();
-      confirmController.dispose();
-    }
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (ok) {
+                      Navigator.of(dialogContext).pop(pass);
+                      return;
+                    }
+                    setLocalState(() => attemptedSubmit = true);
+                  },
+                  child: const Text('Continuar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<bool> _confirmGoogleSelection(String email) async {
@@ -379,7 +408,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               NebulaTextField(
                 controller: emailController,
-                label: 'Correo admin',
+                label: 'Usuario o correo admin',
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 10),
@@ -514,6 +543,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       const SizedBox(height: 8),
+                      Text(
+                        'No tienes cuenta? Creala.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF4F628A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
                       NebulaSecondaryButton(
                         text: 'Crear cuenta',
                         onPressed: _openCreateAccount,

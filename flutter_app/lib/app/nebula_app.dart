@@ -42,7 +42,7 @@ class NebulaApp extends StatelessWidget {
           home = CaregiverPanelScreen(controller: controller);
         }
         return MaterialApp(
-          title: 'Nebula',
+          title: 'Habla conmigo',
           debugShowCheckedModeBanner: false,
           theme: buildNebulaTheme(controller.accentColor),
           home: home,

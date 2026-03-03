@@ -1,1 +1,24 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"nebula-bd","appId":"1:405929030496:android:e4cea62e2e9f3ad34e2405","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"nebula-bd","configurations":{"android":"1:405929030496:android:e4cea62e2e9f3ad34e2405"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "nebula-bd",
+          "appId": "1:405929030496:android:e4cea62e2e9f3ad34e2405",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "nebula-bd",
+          "configurations": {
+            "android": "1:405929030496:android:e4cea62e2e9f3ad34e2405"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

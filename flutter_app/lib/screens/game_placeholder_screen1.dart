@@ -93,7 +93,7 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Narrador activo: ${widget.controller.currentUser?.selectedNarratorId ?? 'narrator_1'}',
+                        'Narrador activo: ${widget.controller.selectedNarratorId}',
                       ),
                     ],
                   ),

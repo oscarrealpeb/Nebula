@@ -12,6 +12,10 @@ class ChildProfile {
     this.languageLevel = 'medio',
     this.active = true,
     this.createdAtMillis = 0,
+    this.selectedNarratorId = 'narrator_1',
+    this.soundEffectsEnabled = true,
+    this.accentHue = 190,
+    this.accentIntensity = 0.55,
     this.loginUsername = '',
     this.loginPinHash = '',
   });
@@ -23,6 +27,10 @@ class ChildProfile {
   final String languageLevel;
   final bool active;
   final int createdAtMillis;
+  final String selectedNarratorId;
+  final bool soundEffectsEnabled;
+  final double accentHue;
+  final double accentIntensity;
   final String loginUsername;
   final String loginPinHash;
 
@@ -34,6 +42,10 @@ class ChildProfile {
     String? languageLevel,
     bool? active,
     int? createdAtMillis,
+    String? selectedNarratorId,
+    bool? soundEffectsEnabled,
+    double? accentHue,
+    double? accentIntensity,
     String? loginUsername,
     String? loginPinHash,
   }) {
@@ -45,6 +57,10 @@ class ChildProfile {
       languageLevel: languageLevel ?? this.languageLevel,
       active: active ?? this.active,
       createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+      selectedNarratorId: selectedNarratorId ?? this.selectedNarratorId,
+      soundEffectsEnabled: soundEffectsEnabled ?? this.soundEffectsEnabled,
+      accentHue: accentHue ?? this.accentHue,
+      accentIntensity: accentIntensity ?? this.accentIntensity,
       loginUsername: loginUsername ?? this.loginUsername,
       loginPinHash: loginPinHash ?? this.loginPinHash,
     );
@@ -59,6 +75,10 @@ class ChildProfile {
       'languageLevel': languageLevel,
       'active': active,
       'createdAtMillis': createdAtMillis,
+      'selectedNarratorId': selectedNarratorId,
+      'soundEffectsEnabled': soundEffectsEnabled,
+      'accentHue': accentHue,
+      'accentIntensity': accentIntensity,
       'loginUsername': loginUsername,
       'loginUsernameLower': loginUsername.trim().toLowerCase(),
       'loginPinHash': loginPinHash,
@@ -74,6 +94,11 @@ class ChildProfile {
       languageLevel: (json['languageLevel'] as String?) ?? 'medio',
       active: (json['active'] as bool?) ?? true,
       createdAtMillis: (json['createdAtMillis'] as num?)?.toInt() ?? 0,
+      selectedNarratorId:
+          (json['selectedNarratorId'] as String?) ?? 'narrator_1',
+      soundEffectsEnabled: (json['soundEffectsEnabled'] as bool?) ?? true,
+      accentHue: (json['accentHue'] as num?)?.toDouble() ?? 190,
+      accentIntensity: (json['accentIntensity'] as num?)?.toDouble() ?? 0.55,
       loginUsername: (json['loginUsername'] as String?) ?? '',
       loginPinHash: (json['loginPinHash'] as String?) ?? '',
     );

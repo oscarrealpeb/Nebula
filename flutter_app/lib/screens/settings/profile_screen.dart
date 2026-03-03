@@ -234,7 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Ten presente que si borras tu cuenta, perderas tu progreso y configuracion guardada.',
+                'Ten presente que si borras tu cuenta, perderás tu progreso y configuración guardada.',
               ),
               if (requirePassword) ...[
                 const SizedBox(height: 10),
@@ -487,17 +487,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Esta cuenta de Google es antigua y aun no tiene contraseña local. Crea una ahora para recuperar tu PIN solo con contraseña.',
+                'Esta cuenta de Google es antigua y aún no tiene contraseña local. Crea una ahora para recuperar tu PIN solo con contraseña.',
               ),
               const SizedBox(height: 8),
               const Text(
-                'Tip: cuando quieras entrar, podras usar Google o correo + contraseña.',
+                'Tip: cuando quieras entrar, podrás usar Google o correo + contraseña.',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 10),
               NebulaTextField(
                 controller: passwordController,
-                label: 'Escribe una contraseña (minimo 6)',
+                label: 'Escribe una contraseña (mínimo 6)',
                 obscureText: true,
               ),
               const SizedBox(height: 10),
@@ -937,6 +937,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           MaterialPageRoute(
                             builder: (_) => WelcomeScreen(
                               controller: widget.controller,
+                              flashMessage: 'Sesión cerrada correctamente.',
+                              flashOk: true,
                             ),
                           ),
                           (_) => false,

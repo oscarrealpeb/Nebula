@@ -121,7 +121,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Nebula',
+                      'Habla conmigo',
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: const Color(0xFF13254B),
                       ),
@@ -138,7 +138,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Luego podras elegir si entra el cuidador o un perfil de niño en el mismo dispositivo.',
+                  'Luego podrás elegir si entra el cuidador o un perfil de niño en el mismo dispositivo.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF4F628A),
                   ),
@@ -242,7 +242,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const Spacer(),
                 NebulaPrimaryButton(
-                  text: 'Iniciar sesion',
+                  text: 'Iniciar sesión',
                   onPressed: _openLogin,
                 ),
                 const SizedBox(height: 12),

@@ -87,48 +87,83 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   }
 
   Future<String?> _askCurrentPasswordForDelete() async {
-    final passwordController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Eliminar cuenta'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Esta accion elimina la cuenta del cuidador y el progreso guardado en este perfil.',
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var typed = '';
+        var attemptedSubmit = false;
+        var obscure = true;
+        return StatefulBuilder(
+          builder: (context, setLocalState) => AlertDialog(
+            title: const Text('Eliminar cuenta'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Esta acción elimina la cuenta del cuidador y el progreso guardado en este perfil.',
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  obscureText: obscure,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña actual',
+                    suffixIcon: IconButton(
+                      onPressed: () => setLocalState(() => obscure = !obscure),
+                      icon: Icon(
+                        obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                    ),
+                  ),
+                  onChanged: (value) =>
+                      setLocalState(() => typed = value.trim()),
+                  onSubmitted: (value) {
+                    final trimmed = value.trim();
+                    if (trimmed.isEmpty) {
+                      setLocalState(() => attemptedSubmit = true);
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(trimmed);
+                  },
+                ),
+                if (attemptedSubmit && typed.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6, left: 2),
+                    child: Text(
+                      'Escribe la contraseña para continuar.',
+                      style: TextStyle(
+                        color: Color(0xFFB3261E),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
               ),
-              const SizedBox(height: 10),
-              NebulaTextField(
-                controller: passwordController,
-                label: 'Contrasena actual',
-                obscureText: true,
+              FilledButton(
+                onPressed: () {
+                  if (typed.isNotEmpty) {
+                    Navigator.of(dialogContext).pop(typed);
+                    return;
+                  }
+                  setLocalState(() => attemptedSubmit = true);
+                },
+                child: const Text('Eliminar'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Eliminar'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return null;
-      final typed = passwordController.text.trim();
-      if (typed.isEmpty) {
-        _showSnack('Escribe la contrasena para continuar.', ok: false);
-        return null;
-      }
-      return typed;
-    } finally {
-      passwordController.dispose();
-    }
+        );
+      },
+    );
   }
 
   Future<void> _deleteAccount() async {
@@ -162,7 +197,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Configuracion cuidador'),
+        title: const Text('Configuración cuidador'),
       ),
       body: CosmicBackground(
         child: ListView(
@@ -221,7 +256,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                       label: Text(
                         _remaining > 0
                             ? 'Espera ${widget.controller.formatSeconds(_remaining)}'
-                            : 'Restablecer contrasena por correo',
+                            : 'Restablecer contraseña por correo',
                       ),
                     ),
                   ],
@@ -236,23 +271,24 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Personalizacion para ninos',
+                      'Personalización para niños',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Gestiona las imagenes que veran los ninos vinculados a esta cuenta.',
+                      'Gestiona las imágenes que verán los niños vinculados a esta cuenta.',
                     ),
                     const SizedBox(height: 10),
                     NebulaSecondaryButton(
-                      text: 'Abrir personalizacion',
+                      text: 'Abrir personalización',
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => PersonalizationScreen(
-                                controller: widget.controller),
+                              controller: widget.controller,
+                            ),
                           ),
                         );
                       },

@@ -6,7 +6,8 @@ import 'package:nebula/controllers/app_controller.dart';
 import 'package:nebula/services/connectivity_service.dart';
 
 void main() {
-  testWidgets('Nebula renders welcome flow', (WidgetTester tester) async {
+  testWidgets('Habla conmigo renders welcome flow',
+      (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final controller = await AppController.bootstrap(
       connectivityService: FakeConnectivityService(initialOnline: true),
@@ -15,8 +16,8 @@ void main() {
     await tester.pumpWidget(NebulaApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nebula'), findsOneWidget);
-    expect(find.text('Iniciar sesion'), findsOneWidget);
+    expect(find.text('Habla conmigo'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Crear cuenta'), findsOneWidget);
 
     controller.dispose();

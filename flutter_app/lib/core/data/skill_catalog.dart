@@ -40,7 +40,7 @@ const List<SkillInfo> skillCatalog = [
       SkillGameLink(
         gameKey: 'descubre_emocion',
         howItHelps:
-            'El nino observa una cara y elige la emocion correcta entre opciones.',
+            'El niño observa una cara y elige la emoción correcta entre opciones.',
       ),
     ],
   ),
@@ -79,7 +79,7 @@ const List<SkillInfo> skillCatalog = [
       SkillGameLink(
         gameKey: 'conecta_sonidos',
         howItHelps:
-            'El nino escucha un audio y diferencia cual opcion coincide con ese sonido.',
+            'El niño escucha un audio y diferencia cuál opción coincide con ese sonido.',
       ),
     ],
   ),

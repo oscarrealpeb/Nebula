@@ -82,7 +82,7 @@ class _NebulaTextFieldState extends State<NebulaTextField> {
       return;
     }
 
-    // Iniciar debounce de 250ms para feedback mas rapido.
+    // Iniciar debounce de 250ms para feedback más rápido.
     setState(() {
       // Limpia resultado previo para evitar "flash" de error viejo.
       _validationResult = null;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../controllers/app_controller.dart';
 import '../models/nebula_user.dart';
@@ -28,6 +29,7 @@ class ChildProfileSetupScreen extends StatefulWidget {
 
 class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
   final _nameController = TextEditingController();
+  final _birthDateController = TextEditingController();
   String _languageLevel = 'medio';
   int _birthDateMillis = 0;
   bool _saving = false;
@@ -42,11 +44,15 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
           child.languageLevel.trim().isEmpty ? 'medio' : child.languageLevel;
       _birthDateMillis = child.birthDateMillis;
     }
+    if (_birthDateMillis > 0) {
+      _birthDateController.text = _formatDate(_birthDateMillis);
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _birthDateController.dispose();
     super.dispose();
   }
 
@@ -90,7 +96,46 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
       helpText: 'Fecha de nacimiento',
     );
     if (picked == null) return;
-    setState(() => _birthDateMillis = picked.millisecondsSinceEpoch);
+    setState(() {
+      _birthDateMillis = picked.millisecondsSinceEpoch;
+      _birthDateController.text = _formatDate(_birthDateMillis);
+    });
+  }
+
+  void _onBirthDateChanged(String raw) {
+    final parsed = _parseBirthDate(raw);
+    if (_birthDateMillis == parsed) {
+      if (mounted) setState(() {});
+      return;
+    }
+    setState(() => _birthDateMillis = parsed);
+  }
+
+  int _parseBirthDate(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length != 8) return 0;
+    final day = int.tryParse(digits.substring(0, 2));
+    final month = int.tryParse(digits.substring(2, 4));
+    final year = int.tryParse(digits.substring(4, 8));
+    if (day == null || month == null || year == null) return 0;
+
+    final now = DateTime.now();
+    final minDate = DateTime(now.year - 18, 1, 1);
+    final maxDate = DateTime(now.year, now.month, now.day);
+    final date = DateTime(year, month, day);
+    final isExact = date.year == year && date.month == month && date.day == day;
+    if (!isExact) return 0;
+    if (date.isBefore(minDate) || date.isAfter(maxDate)) return 0;
+    return date.millisecondsSinceEpoch;
+  }
+
+  String? get _birthDateErrorText {
+    final typed = _birthDateController.text.trim();
+    if (typed.isEmpty) return null;
+    final digits = typed.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 8) return 'Completa la fecha en formato DD/MM/AAAA.';
+    if (_birthDateMillis <= 0) return 'Fecha invalida.';
+    return null;
   }
 
   int _computeAge(int birthDateMillis) {
@@ -106,6 +151,14 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
 
   Future<void> _save() async {
     if (_saving) return;
+    if (_birthDateMillis <= 0) {
+      await NebulaSnack.show(
+        context,
+        message: 'Ingresa una fecha valida en formato DD/MM/AAAA.',
+        ok: false,
+      );
+      return;
+    }
     setState(() => _saving = true);
     final result = await widget.controller.createOrUpdateChildProfile(
       childId: widget.childId,
@@ -149,9 +202,6 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     const levels = ['bajo', 'medio', 'alto'];
-    final birthDateLabel = _birthDateMillis <= 0
-        ? 'Seleccionar fecha de nacimiento'
-        : _formatDate(_birthDateMillis);
 
     return PopScope<Object?>(
       canPop: !widget.isMandatory,
@@ -191,10 +241,23 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 6),
-                        OutlinedButton.icon(
-                          onPressed: _pickBirthDate,
-                          icon: const Icon(Icons.cake_outlined),
-                          label: Text(birthDateLabel),
+                        TextField(
+                          controller: _birthDateController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: const [
+                            _BirthDateTextInputFormatter()
+                          ],
+                          onChanged: _onBirthDateChanged,
+                          decoration: InputDecoration(
+                            labelText: 'DD/MM/AAAA',
+                            hintText: '12/03/2018',
+                            errorText: _birthDateErrorText,
+                            suffixIcon: IconButton(
+                              onPressed: _pickBirthDate,
+                              icon: const Icon(Icons.cake_outlined),
+                              tooltip: 'Elegir desde calendario',
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -260,4 +323,65 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     final year = date.year.toString();
     return '$day/$month/$year';
   }
+}
+
+class _BirthDateTextInputFormatter extends TextInputFormatter {
+  const _BirthDateTextInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = newValue.text;
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    final limited = digits.length > 8 ? digits.substring(0, 8) : digits;
+    final formatted = _format(limited);
+    final digitsBeforeCursor = _countDigitsBeforeCursor(
+      raw,
+      newValue.selection.end,
+    );
+    final nextCursor = _cursorFromDigitIndex(digitsBeforeCursor, formatted);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: nextCursor),
+    );
+  }
+
+  String _format(String digits) {
+    if (digits.isEmpty) return '';
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if ((i == 1 || i == 3) && i != digits.length - 1) {
+        buffer.write('/');
+      }
+    }
+    return buffer.toString();
+  }
+
+  int _countDigitsBeforeCursor(String text, int cursor) {
+    final safeCursor = cursor.clamp(0, text.length);
+    var count = 0;
+    for (var i = 0; i < safeCursor; i++) {
+      if (_isDigit(text.codeUnitAt(i))) count++;
+    }
+    return count;
+  }
+
+  int _cursorFromDigitIndex(int digitIndex, String formatted) {
+    if (digitIndex <= 0) return 0;
+    var seenDigits = 0;
+    for (var i = 0; i < formatted.length; i++) {
+      if (_isDigit(formatted.codeUnitAt(i))) {
+        seenDigits++;
+        if (seenDigits == digitIndex) {
+          return i + 1;
+        }
+      }
+    }
+    return formatted.length;
+  }
+
+  bool _isDigit(int codeUnit) => codeUnit >= 48 && codeUnit <= 57;
 }

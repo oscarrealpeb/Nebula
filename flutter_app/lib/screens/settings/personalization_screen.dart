@@ -21,22 +21,43 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
   final _picker = ImagePicker();
   final _targets = const ['perro', 'gato', 'pelota', 'carro', 'arbol', 'luna'];
   String? _busyKey;
+  String _selectedChildId = '';
 
-  Future<void> _pick(String target, ImageSource source) async {
-    setState(() => _busyKey = target);
+  @override
+  void initState() {
+    super.initState();
+    final selected = widget.controller.childProfile?.id.trim() ?? '';
+    if (selected.isNotEmpty) {
+      _selectedChildId = selected;
+      return;
+    }
+    final children = widget.controller.childProfiles;
+    if (children.isNotEmpty) {
+      _selectedChildId = children.first.id;
+    }
+  }
+
+  Future<void> _pick({
+    required String target,
+    required String childId,
+    required ImageSource source,
+  }) async {
+    final busy = '$childId::$target';
+    setState(() => _busyKey = busy);
     try {
       final file = await _picker.pickImage(source: source, imageQuality: 75);
       if (file != null) {
         await widget.controller.updateCustomImage(
           key: target,
           imagePath: file.path,
+          childId: childId,
         );
       }
-      if (!mounted) return;
+      if (!mounted || file == null) return;
+      final childName = _childNameById(childId);
       NebulaSnack.show(
         context,
-        message:
-            'Imagen guardada. Pendiente conectar validacion IA (ML Kit/Firebase).',
+        message: 'Imagen guardada para $childName.',
         ok: true,
       );
     } finally {
@@ -44,7 +65,74 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     }
   }
 
+  Future<String?> _askTargetChild() async {
+    final children = widget.controller.childProfiles;
+    if (children.isEmpty) {
+      NebulaSnack.show(
+        context,
+        message: 'Primero crea un perfil de niño.',
+        ok: false,
+      );
+      return null;
+    }
+    if (children.length == 1) return children.first.id;
+
+    var selected = _selectedChildId;
+    if (selected.trim().isEmpty ||
+        !children.any((item) => item.id == selected.trim())) {
+      selected = children.first.id;
+    }
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocalState) => AlertDialog(
+          title: const Text('Aplicar imagen a'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...children.map((child) {
+                final isSelected = selected == child.id;
+                return ListTile(
+                  onTap: () => setLocalState(() => selected = child.id),
+                  leading: Icon(
+                    isSelected
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: isSelected
+                        ? const Color(0xFF1B8B3B)
+                        : const Color(0xFF5A6E97),
+                  ),
+                  title: Text(
+                    child.name.trim().isEmpty ? 'Niño sin nombre' : child.name,
+                  ),
+                  subtitle: Text('Nivel: ${child.languageLevel.toUpperCase()}'),
+                );
+              }),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(selected),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSourceSheet(String target) async {
+    final childId = await _askTargetChild();
+    if (!mounted || childId == null) return;
+    if (_selectedChildId != childId) {
+      setState(() => _selectedChildId = childId);
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       builder: (_) => SafeArea(
@@ -58,7 +146,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                 title: const Text('Tomar foto'),
                 onTap: () async {
                   Navigator.of(context).pop();
-                  await _pick(target, ImageSource.camera);
+                  await _pick(
+                    target: target,
+                    childId: childId,
+                    source: ImageSource.camera,
+                  );
                 },
               ),
               ListTile(
@@ -66,7 +158,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                 title: const Text('Usar galeria'),
                 onTap: () async {
                   Navigator.of(context).pop();
-                  await _pick(target, ImageSource.gallery);
+                  await _pick(
+                    target: target,
+                    childId: childId,
+                    source: ImageSource.gallery,
+                  );
                 },
               ),
             ],
@@ -76,30 +172,93 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     );
   }
 
+  String _childNameById(String childId) {
+    for (final child in widget.controller.childProfiles) {
+      if (child.id != childId) continue;
+      final name = child.name.trim();
+      return name.isEmpty ? 'niño sin nombre' : name;
+    }
+    return 'este perfil';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
+    final children = widget.controller.childProfiles;
+
+    var previewChildId = _selectedChildId.trim();
+    if (previewChildId.isEmpty ||
+        !children.any((item) => item.id == previewChildId)) {
+      previewChildId = children.isNotEmpty ? children.first.id : '';
+    }
 
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Personalizacion de contenido'),
+        title: const Text('Personalización de contenido'),
       ),
       body: CosmicBackground(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             const Text(
-              'Aqui el cuidador edita imagenes de animales y objetos para los ninos vinculados a esta cuenta.',
+              'Aquí el cuidador edita imágenes de animales y objetos para cada niño vinculado.',
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Puedes usar fotos propias o dejar las imagenes predeterminadas.',
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            if (children.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'No hay perfiles de niño todavía. Crea uno desde Zona cuidador.',
+                  ),
+                ),
+              )
+            else if (children.length == 1)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.child_care_rounded),
+                  title: Text(_childNameById(children.first.id)),
+                  subtitle:
+                      const Text('Las imágenes se guardarán para este perfil.'),
+                ),
+              )
+            else
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: DropdownButtonFormField<String>(
+                    initialValue: previewChildId,
+                    decoration: const InputDecoration(
+                      labelText: 'Vista previa del perfil',
+                    ),
+                    items: children
+                        .map(
+                          (child) => DropdownMenuItem<String>(
+                            value: child.id,
+                            child: Text(
+                              child.name.trim().isEmpty
+                                  ? 'Niño sin nombre'
+                                  : child.name,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedChildId = value);
+                    },
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
             ..._targets.map((target) {
-              final imagePath = user.customImages[target];
+              final imagePath = widget.controller.customImagePathFor(
+                key: target,
+                childId: previewChildId,
+              );
+              final busy = _busyKey == '$previewChildId::$target';
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Card(
@@ -129,7 +288,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                               Text(
                                 target.toUpperCase(),
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                               Text(
                                 imagePath == null
@@ -141,10 +301,10 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                           ),
                         ),
                         IconButton(
-                          onPressed: _busyKey == target
+                          onPressed: (busy || children.isEmpty)
                               ? null
                               : () => _openSourceSheet(target),
-                          icon: _busyKey == target
+                          icon: busy
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,

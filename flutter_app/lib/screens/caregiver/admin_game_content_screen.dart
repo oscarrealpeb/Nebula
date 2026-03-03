@@ -197,7 +197,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Aqui defines recursos editables para juegos. Esta base no reemplaza aun la logica actual en runtime.',
+                      'Aquí defines recursos editables para juegos. Esta base no reemplaza aún la lógica actual en runtime.',
                     ),
                     const SizedBox(height: 8),
                     Text(

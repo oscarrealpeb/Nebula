@@ -119,115 +119,115 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
   }
 
   Future<String?> _askCaregiverPassword() async {
-    final passwordController = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          var typed = '';
-          var resetSending = false;
-          var resetMessage = '';
-          var resetOk = false;
-          return StatefulBuilder(
-            builder: (context, setLocalState) => AlertDialog(
-              title: const Text('Entrar como cuidador'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Contraseña del cuidador',
-                    ),
-                    onChanged: (value) =>
-                        setLocalState(() => typed = value.trim()),
-                    onSubmitted: (_) {
-                      final value = passwordController.text.trim();
-                      if (value.isNotEmpty) {
-                        Navigator.of(context).pop(value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 4),
-                  TextButton(
-                    onPressed: resetSending
-                        ? null
-                        : () async {
-                            final email =
-                                widget.controller.currentUser?.email.trim() ??
-                                    '';
-                            if (email.isEmpty) {
-                              setLocalState(() {
-                                resetMessage =
-                                    'No hay correo del cuidador para recuperar.';
-                                resetOk = false;
-                              });
-                              return;
-                            }
-                            setLocalState(() {
-                              resetSending = true;
-                              resetMessage = '';
-                            });
-                            final result = await widget.controller
-                                .requestLoginPasswordReset(email);
-                            if (!context.mounted) return;
-                            setLocalState(() {
-                              resetSending = false;
-                              resetMessage = result.message;
-                              resetOk = result.ok;
-                            });
-                          },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      resetSending
-                          ? 'Enviando correo...'
-                          : 'Olvidé mi contraseña',
-                    ),
-                  ),
-                  if (resetMessage.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        resetMessage,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: resetOk
-                              ? const Color(0xFF1B8B3B)
-                              : const Color(0xFFB3261E),
-                          fontWeight: FontWeight.w600,
-                        ),
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        var typed = '';
+        var resetSending = false;
+        var resetMessage = '';
+        var resetOk = false;
+        var obscure = true;
+
+        return StatefulBuilder(
+          builder: (context, setLocalState) => AlertDialog(
+            title: const Text('Entrar como cuidador'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  obscureText: obscure,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña del cuidador',
+                    suffixIcon: IconButton(
+                      onPressed: () => setLocalState(() => obscure = !obscure),
+                      icon: Icon(
+                        obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
                       ),
                     ),
-                ],
-              ),
-              actions: [
+                  ),
+                  onChanged: (value) =>
+                      setLocalState(() => typed = value.trim()),
+                  onSubmitted: (value) {
+                    final trimmed = value.trim();
+                    if (trimmed.isEmpty) return;
+                    Navigator.of(dialogContext).pop(trimmed);
+                  },
+                ),
+                const SizedBox(height: 4),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: typed.isEmpty
+                  onPressed: resetSending
                       ? null
-                      : () => Navigator.of(context).pop(
-                            passwordController.text.trim(),
-                          ),
-                  child: const Text('Entrar'),
+                      : () async {
+                          final email =
+                              widget.controller.currentUser?.email.trim() ?? '';
+                          if (email.isEmpty) {
+                            setLocalState(() {
+                              resetMessage =
+                                  'No hay correo del cuidador para recuperar.';
+                              resetOk = false;
+                            });
+                            return;
+                          }
+                          setLocalState(() {
+                            resetSending = true;
+                            resetMessage = '';
+                          });
+                          final result = await widget.controller
+                              .requestLoginPasswordReset(email);
+                          if (!dialogContext.mounted) return;
+                          setLocalState(() {
+                            resetSending = false;
+                            resetMessage = result.message;
+                            resetOk = result.ok;
+                          });
+                        },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    resetSending
+                        ? 'Enviando correo...'
+                        : 'Olvidé mi contraseña',
+                  ),
                 ),
+                if (resetMessage.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      resetMessage,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: resetOk
+                            ? const Color(0xFF1B8B3B)
+                            : const Color(0xFFB3261E),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
               ],
             ),
-          );
-        },
-      );
-    } finally {
-      passwordController.dispose();
-    }
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: typed.isEmpty
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(typed),
+                child: const Text('Entrar'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override

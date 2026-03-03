@@ -141,8 +141,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _isVerificationPendingMessage(String message) {
     final text = message.toLowerCase();
-    return text.contains('correo de verificacion') ||
-        text.contains('correo no esta verificado') ||
+    return text.contains('correo de verificación') ||
+        text.contains('correo no está verificado') ||
         text.contains('verifica tu cuenta');
   }
 
@@ -178,7 +178,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Te enviamos un correo de verificacion. Tienes 1 hora para activarlo.',
+                'Te enviamos un correo de verificación. Tienes 1 hora para activarlo.\n\nSi no lo ves, revisa spam o correo no deseado.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
@@ -340,24 +340,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<String?> _askGooglePasswordForFirstLogin({
     required String email,
   }) async {
-    final passwordController = TextEditingController();
-    final confirmController = TextEditingController();
-    var attemptedSubmit = false;
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setLocalState) {
-              final pass = passwordController.text.trim();
-              final confirm = confirmController.text.trim();
-              final minLengthOk = pass.length >= 6;
-              final matchOk = confirm.isNotEmpty && pass == confirm;
-              final ok = minLengthOk && matchOk;
-              return AlertDialog(
-                title: const Text('Completa tu cuenta'),
-                content: Column(
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var pass = '';
+        var confirm = '';
+        var attemptedSubmit = false;
+        var obscurePass = true;
+        var obscureConfirm = true;
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            final minLengthOk = pass.length >= 6;
+            final matchOk = confirm.isNotEmpty && pass == confirm;
+            final ok = minLengthOk && matchOk;
+            return AlertDialog(
+              scrollable: true,
+              title: const Text('Completa tu cuenta'),
+              content: SingleChildScrollView(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -367,11 +368,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       'Esta contraseña protege la entrada a la Zona cuidador en dispositivos compartidos.',
                     ),
                     const SizedBox(height: 10),
-                    NebulaTextField(
-                      controller: passwordController,
-                      label: 'Contraseña del cuidador (mínimo 6)',
-                      obscureText: true,
-                      onChanged: (_) => setLocalState(() {}),
+                    TextField(
+                      obscureText: obscurePass,
+                      onChanged: (value) =>
+                          setLocalState(() => pass = value.trim()),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña del cuidador (mínimo 6)',
+                        suffixIcon: IconButton(
+                          onPressed: () => setLocalState(() {
+                            obscurePass = !obscurePass;
+                          }),
+                          icon: Icon(
+                            obscurePass
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
+                      ),
                     ),
                     if ((attemptedSubmit || pass.isNotEmpty) && !minLengthOk)
                       const Padding(
@@ -386,11 +399,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     const SizedBox(height: 10),
-                    NebulaTextField(
-                      controller: confirmController,
-                      label: 'Confirmar contraseña',
-                      obscureText: true,
-                      onChanged: (_) => setLocalState(() {}),
+                    TextField(
+                      obscureText: obscureConfirm,
+                      onChanged: (value) =>
+                          setLocalState(() => confirm = value.trim()),
+                      onSubmitted: (_) {
+                        if (ok) {
+                          Navigator.of(dialogContext).pop(pass);
+                          return;
+                        }
+                        setLocalState(() => attemptedSubmit = true);
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Confirmar contraseña',
+                        suffixIcon: IconButton(
+                          onPressed: () => setLocalState(() {
+                            obscureConfirm = !obscureConfirm;
+                          }),
+                          icon: Icon(
+                            obscureConfirm
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
+                      ),
                     ),
                     if (attemptedSubmit && confirm.isEmpty)
                       const Padding(
@@ -418,32 +450,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                   ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancelar'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      if (ok) {
-                        Navigator.of(context).pop(pass);
-                        return;
-                      }
-                      setLocalState(() => attemptedSubmit = true);
-                    },
-                    child: const Text('Continuar'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-      return result;
-    } finally {
-      passwordController.dispose();
-      confirmController.dispose();
-    }
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (ok) {
+                      Navigator.of(dialogContext).pop(pass);
+                      return;
+                    }
+                    setLocalState(() => attemptedSubmit = true);
+                  },
+                  child: const Text('Continuar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showSnack(String message, {required bool ok}) {

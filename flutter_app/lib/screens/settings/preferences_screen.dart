@@ -37,11 +37,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   @override
   void initState() {
     super.initState();
-    final user = widget.controller.currentUser!;
-    _narratorId = user.selectedNarratorId;
-    _soundEnabled = user.soundEffectsEnabled;
-    _hue = user.accentHue;
-    _intensity = user.accentIntensity.clamp(0.72, 1.0).toDouble();
+    _narratorId = widget.controller.selectedNarratorId;
+    _soundEnabled = widget.controller.soundEffectsEnabled;
+    _hue = widget.controller.currentAccentHue;
+    _intensity =
+        widget.controller.currentAccentIntensity.clamp(0.72, 1.0).toDouble();
   }
 
   @override

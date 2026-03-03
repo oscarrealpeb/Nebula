@@ -153,7 +153,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted || _levelUpDialogVisible) return;
       final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? false;
       if (!isCurrentRoute) return;
-      final nextPlanetName = widget.controller.consumePendingHomeLevelUpPlanetName();
+      final nextPlanetName =
+          widget.controller.consumePendingHomeLevelUpPlanetName();
       if (nextPlanetName == null || nextPlanetName.trim().isEmpty) return;
       _levelUpDialogVisible = true;
       final accent = widget.controller.accentButtonColor;
@@ -162,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
         barrierDismissible: false,
         builder: (_) {
           final width = MediaQuery.sizeOf(context).width;
-          final dialogWidth = (width * 0.92).clamp(280.0, _levelUpDialogMaxWidth);
+          final dialogWidth =
+              (width * 0.92).clamp(280.0, _levelUpDialogMaxWidth);
           return Dialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(
@@ -303,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 6),
                       const Text(
-                        'Nebula',
+                        'Habla conmigo',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ],

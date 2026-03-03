@@ -222,10 +222,27 @@ class AuthService {
     try {
       await _store.writeAdminConfig(normalized.toJson());
       if (_useFirebase) {
-        await _firestore!
-            .collection('app')
-            .doc('admin_config')
-            .set(normalized.toJson(), SetOptions(merge: true));
+        try {
+          await _firestore!
+              .collection('app')
+              .doc('admin_config')
+              .set(normalized.toJson(), SetOptions(merge: true));
+        } on FirebaseException catch (e) {
+          if (e.code == 'permission-denied') {
+            return ServiceResult(
+              ok: false,
+              message:
+                  'Firestore rechazó el cambio global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
+              data: normalized,
+            );
+          }
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos publicar la config admin en la nube: ${e.message ?? e.code}',
+            data: normalized,
+          );
+        }
       }
       return ServiceResult(
         ok: true,
@@ -254,7 +271,7 @@ class AuthService {
         return const ServiceResult(
           ok: false,
           message:
-              'La sincronizacion global requiere Firebase habilitado en esta app.',
+              'La sincronización global requiere Firebase habilitado en esta app.',
         );
       }
       return ServiceResult(
@@ -272,7 +289,7 @@ class AuthService {
         if (requireCloud) {
           return const ServiceResult(
             ok: false,
-            message: 'No hay contenido global publicado por administracion.',
+            message: 'No hay contenido global publicado por administración.',
           );
         }
         return ServiceResult(
@@ -348,10 +365,27 @@ class AuthService {
     try {
       await _store.writeGameContentConfig(normalized.toJson());
       if (_useFirebase) {
-        await _firestore!
-            .collection('app')
-            .doc('game_content_config')
-            .set(normalized.toJson(), SetOptions(merge: true));
+        try {
+          await _firestore!
+              .collection('app')
+              .doc('game_content_config')
+              .set(normalized.toJson(), SetOptions(merge: true));
+        } on FirebaseException catch (e) {
+          if (e.code == 'permission-denied') {
+            return ServiceResult(
+              ok: false,
+              message:
+                  'Firestore rechazó la publicación global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
+              data: normalized,
+            );
+          }
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos publicar el contenido global en la nube: ${e.message ?? e.code}',
+            data: normalized,
+          );
+        }
       }
       return ServiceResult(
         ok: true,
@@ -641,7 +675,7 @@ class AuthService {
     if (!available) {
       return const ServiceResult(
         ok: false,
-        message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
+        message: 'Ese apodo ya lo usa alguien más. Prueba otro.',
       );
     }
 
@@ -696,7 +730,7 @@ class AuthService {
     if (!usernameAvailable) {
       return const ServiceResult(
         ok: false,
-        message: 'Ese apodo ya lo usa alguien mas. Prueba otro.',
+        message: 'Ese apodo ya lo usa alguien más. Prueba otro.',
       );
     }
 
@@ -713,13 +747,14 @@ class AuthService {
         return const ServiceResult(
           ok: false,
           message:
-              'Ese correo ya existe con Google. Entra con Google y luego crea una contraseña desde tu perfil si quieres entrar tambien con contraseña.',
+              'Ese correo ya existe con Google. Entra con Google y luego crea una contraseña desde tu perfil si quieres entrar también con contraseña.',
         );
       }
-      return const ServiceResult(
-        ok: false,
-        message: 'Ese correo ya esta registrado.',
+      final duplicateMessage = await _buildDuplicateEmailRegisterMessage(
+        email: normalizedEmail,
+        password: trimmedPassword,
       );
+      return ServiceResult(ok: false, message: duplicateMessage);
     }
 
     String userId = _uuid.v4();
@@ -743,15 +778,16 @@ class AuthService {
         } catch (_) {}
       } on FirebaseAuthException catch (e) {
         if (e.code == 'email-already-in-use') {
-          return const ServiceResult(
-            ok: false,
-            message: 'Ese correo ya esta registrado.',
+          final duplicateMessage = await _buildDuplicateEmailRegisterMessage(
+            email: normalizedEmail,
+            password: trimmedPassword,
           );
+          return ServiceResult(ok: false, message: duplicateMessage);
         }
         if (e.code == 'weak-password') {
           return const ServiceResult(
             ok: false,
-            message: 'La contraseña es muy debil. Usa al menos 6 caracteres.',
+            message: 'La contraseña es muy débil. Usa al menos 6 caracteres.',
           );
         }
         if (e.code == 'invalid-email') {
@@ -790,6 +826,10 @@ class AuthService {
         if (firebaseUser != null) {
           await _firebaseAuth?.setLanguageCode('es');
           await firebaseUser.sendEmailVerification();
+          await _store.writePendingVerificationIssuedAt(
+            normalizedEmail,
+            DateTime.now().millisecondsSinceEpoch,
+          );
         }
         await _firebaseAuth?.signOut();
         await _store.clearSession();
@@ -798,7 +838,7 @@ class AuthService {
         return const ServiceResult(
           ok: true,
           message:
-              'Cuenta creada. Te enviamos un correo de verificacion. Tienes 1 hora para verificarlo o la cuenta se eliminara por seguridad.',
+              'Cuenta creada. Te enviamos un correo de verificación. Tienes 1 hora para verificarlo o la cuenta se eliminará por seguridad.',
         );
       } catch (e) {
         try {
@@ -823,7 +863,7 @@ class AuthService {
 
     return ServiceResult(
       ok: true,
-      message: 'Cuenta creada. Bienvenido a Nebula.',
+      message: 'Cuenta creada. Bienvenido a Habla conmigo.',
       data: newUser,
     );
   }
@@ -847,13 +887,119 @@ class AuthService {
     );
   }
 
+  Future<String> _buildDuplicateEmailRegisterMessage({
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final typedPassword = password.trim();
+    final pendingIssuedAtMillis =
+        _store.readPendingVerificationIssuedAt(normalizedEmail);
+
+    if (!_useFirebase || typedPassword.isEmpty) {
+      final pendingMinutes = _pendingMinutesLeft(pendingIssuedAtMillis);
+      if (pendingMinutes != null) {
+        return 'Ese correo ya está registrado, pero aún no está verificado. Revisa tu buzón y la carpeta de spam/correo no deseado. Te quedan $pendingMinutes min para verificar.';
+      }
+      return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+    }
+
+    final firebaseAuth = _firebaseAuth;
+    if (firebaseAuth == null) {
+      final pendingMinutes = _pendingMinutesLeft(pendingIssuedAtMillis);
+      if (pendingMinutes != null) {
+        return 'Ese correo ya está registrado, pero aún no está verificado. Revisa tu buzón y la carpeta de spam/correo no deseado. Te quedan $pendingMinutes min para verificar.';
+      }
+      return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+    }
+
+    try {
+      final credential = await firebaseAuth.signInWithEmailAndPassword(
+        email: normalizedEmail,
+        password: typedPassword,
+      );
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        final pendingMinutes = _pendingMinutesLeft(pendingIssuedAtMillis);
+        if (pendingMinutes != null) {
+          return 'Ese correo ya está registrado, pero aún no está verificado. Revisa tu buzón y la carpeta de spam/correo no deseado. Te quedan $pendingMinutes min para verificar.';
+        }
+        return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+      }
+
+      await firebaseUser.reload();
+      final refreshed = firebaseAuth.currentUser ?? firebaseUser;
+      final usesPasswordProvider = refreshed.providerData.any(
+        (provider) => provider.providerId == EmailAuthProvider.PROVIDER_ID,
+      );
+      final usesGoogleProvider = refreshed.providerData.any(
+        (provider) => provider.providerId == GoogleAuthProvider.PROVIDER_ID,
+      );
+
+      if (!usesPasswordProvider && usesGoogleProvider) {
+        await firebaseAuth.signOut();
+        return 'Ese correo ya está vinculado con Google. Entra con Google para continuar.';
+      }
+
+      if (refreshed.emailVerified) {
+        await _store.clearPendingVerificationIssuedAt(normalizedEmail);
+        await firebaseAuth.signOut();
+        return 'Ese correo ya está registrado. Inicia sesión con tu correo y contraseña.';
+      }
+
+      final createdAt = refreshed.metadata.creationTime;
+      final issuedAtMillis = createdAt?.millisecondsSinceEpoch ??
+          pendingIssuedAtMillis ??
+          DateTime.now().millisecondsSinceEpoch;
+      final remaining = _pendingMinutesLeft(issuedAtMillis) ?? 1;
+
+      if (_pendingMinutesLeft(issuedAtMillis) == null) {
+        await _deleteUnverifiedFirebaseAccount(
+          refreshed,
+          fallbackEmail: normalizedEmail,
+        );
+        await _store.clearPendingVerificationIssuedAt(normalizedEmail);
+        return 'No verificaste ese correo en 1 hora y la cuenta se eliminó por seguridad. Regístrate de nuevo.';
+      }
+
+      try {
+        await firebaseAuth.setLanguageCode('es');
+        await refreshed.sendEmailVerification();
+      } catch (_) {}
+      await _store.writePendingVerificationIssuedAt(
+        normalizedEmail,
+        issuedAtMillis,
+      );
+      await firebaseAuth.signOut();
+      return 'Ese correo ya está registrado, pero aún no está verificado. Revisa tu buzón y la carpeta de spam/correo no deseado. Te quedan $remaining min para verificar.';
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        final pendingMinutes = _pendingMinutesLeft(pendingIssuedAtMillis);
+        if (pendingMinutes != null) {
+          return 'Ese correo ya está en proceso de verificación. Revisa tu buzón y spam/correo no deseado. Te quedan $pendingMinutes min para verificar.';
+        }
+        return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+      }
+      if (e.code == 'user-not-found') {
+        await _store.clearPendingVerificationIssuedAt(normalizedEmail);
+      }
+      return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+    } catch (_) {
+      final pendingMinutes = _pendingMinutesLeft(pendingIssuedAtMillis);
+      if (pendingMinutes != null) {
+        return 'Ese correo ya está en proceso de verificación. Revisa tu buzón y spam/correo no deseado. Te quedan $pendingMinutes min para verificar.';
+      }
+      return 'Ese correo ya está registrado. Revisa tu buzón y spam/correo no deseado o inicia sesión si ya verificaste.';
+    }
+  }
+
   Future<ServiceResult<NebulaUser>> ensureHiddenAdminAccount({
     required String email,
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final trimmedPassword = password.trim();
-    if (!isValidEmailFormat(normalizedEmail) || trimmedPassword.length < 6) {
+    if (!isValidEmailFormat(normalizedEmail) || trimmedPassword.isEmpty) {
       return const ServiceResult(
         ok: false,
         message: 'Configuracion admin invalida.',
@@ -863,15 +1009,24 @@ class AuthService {
     final users = await _store.readUsers();
     for (final user in users) {
       if (user.role == UserRole.admin) {
+        final canUseAdminAlias = !users.any(
+          (u) => u.id != user.id && u.username.toLowerCase() == 'admin',
+        );
+        final refreshedAdmin = user.copyWith(
+          email: normalizedEmail,
+          password: _hashPassword(trimmedPassword),
+          username: canUseAdminAlias ? 'admin' : user.username,
+        );
+        await _upsertLocal(refreshedAdmin);
         return ServiceResult(
           ok: true,
           message: 'Cuenta admin ya existente.',
-          data: user,
+          data: refreshedAdmin,
         );
       }
     }
 
-    var usernameBase = 'admin_nebula';
+    var usernameBase = 'admin';
     var candidate = usernameBase;
     var i = 1;
     while (users.any((u) => u.username.toLowerCase() == candidate)) {
@@ -881,7 +1036,7 @@ class AuthService {
 
     final newAdmin = NebulaUser(
       id: _uuid.v4(),
-      name: 'Administrador Nebula',
+      name: 'Administrador Habla conmigo',
       username: candidate,
       email: normalizedEmail,
       password: _hashPassword(trimmedPassword),
@@ -977,6 +1132,7 @@ class AuthService {
           match = firebaseSync.data!;
           await _persistSessionState(match);
           _currentUser = match;
+          await _store.clearPendingVerificationIssuedAt(match.email);
           return ServiceResult(
             ok: true,
             message: 'Listo, ya estas dentro.',
@@ -996,19 +1152,31 @@ class AuthService {
       match = migrated;
     }
 
-    if (_useFirebase && match.role != UserRole.admin) {
-      final firebaseSync = await _ensureFirebaseUserForPasswordLogin(
-        localUser: match,
-        plainPassword: secret,
-      );
-      if (!firebaseSync.ok || firebaseSync.data == null) {
-        return ServiceResult(ok: false, message: firebaseSync.message);
+    if (_useFirebase) {
+      if (match.role == UserRole.admin) {
+        final adminSync = await _ensureFirebaseAdminSession(
+          localAdmin: match,
+          plainPassword: secret,
+        );
+        if (!adminSync.ok || adminSync.data == null) {
+          return ServiceResult(ok: false, message: adminSync.message);
+        }
+        match = adminSync.data!;
+      } else {
+        final firebaseSync = await _ensureFirebaseUserForPasswordLogin(
+          localUser: match,
+          plainPassword: secret,
+        );
+        if (!firebaseSync.ok || firebaseSync.data == null) {
+          return ServiceResult(ok: false, message: firebaseSync.message);
+        }
+        match = firebaseSync.data!;
       }
-      match = firebaseSync.data!;
     }
 
     await _persistSessionState(match);
     _currentUser = match;
+    await _store.clearPendingVerificationIssuedAt(match.email);
     return ServiceResult(
         ok: true, message: 'Listo, ya estas dentro.', data: match);
   }
@@ -1062,7 +1230,7 @@ class AuthService {
       return const ServiceResult(
         ok: false,
         message:
-            'No encontramos ese perfil de ni\u00f1o en este dispositivo. Pide a un cuidador iniciar sesion aqui primero.',
+            'No encontramos ese perfil de niño en este dispositivo. Pide a un cuidador iniciar sesión aquí primero.',
       );
     }
 
@@ -1100,7 +1268,7 @@ class AuthService {
     if (user == null) {
       return const ServiceResult(
         ok: false,
-        message: 'No hay sesion activa.',
+        message: 'No hay sesión activa.',
       );
     }
     final typed = password.trim();
@@ -1233,7 +1401,7 @@ class AuthService {
     if (!usernameAvailable) {
       return const ServiceResult(
         ok: false,
-        message: 'Ese apodo ya esta en uso por otra cuenta.',
+        message: 'Ese apodo ya está en uso por otra cuenta.',
       );
     }
 
@@ -1285,7 +1453,7 @@ class AuthService {
       if (emailLower.isEmpty) {
         return const ServiceResult(
           ok: false,
-          message: 'Tu cuenta de Google no devolvio un correo valido.',
+          message: 'Tu cuenta de Google no devolvió un correo válido.',
         );
       }
 
@@ -1298,22 +1466,42 @@ class AuthService {
         }
       }
       var needsPasswordSetup =
-          existingUser == null || existingUser.password.trim().isEmpty;
-      if (existingUser == null && _useFirebase) {
-        try {
-          final cloudByEmail = await _firestore!
-              .collection('users')
-              .where('emailLower', isEqualTo: emailLower)
-              .limit(1)
-              .get();
-          var cloudHasLocalPassword = false;
-          if (cloudByEmail.docs.isNotEmpty) {
-            final cloudData = cloudByEmail.docs.first.data();
-            cloudHasLocalPassword =
-                (cloudData['hasLocalPassword'] as bool?) ?? false;
-          }
-          needsPasswordSetup = !cloudHasLocalPassword;
-        } catch (_) {}
+          existingUser != null && existingUser.password.trim().isEmpty;
+      var cloudRecordFound = false;
+      var cloudHasLocalPassword = false;
+      if (_useFirebase) {
+        final firestore = _firestore;
+        if (firestore != null) {
+          try {
+            final cloudByEmail = await firestore
+                .collection('users')
+                .where('emailLower', isEqualTo: emailLower)
+                .limit(1)
+                .get();
+            if (cloudByEmail.docs.isNotEmpty) {
+              final cloudData = cloudByEmail.docs.first.data();
+              cloudRecordFound = true;
+              cloudHasLocalPassword =
+                  (cloudData['hasLocalPassword'] as bool?) ?? false;
+            } else {
+              // Fallback para cuentas legacy donde no existía emailLower.
+              final cloudByLegacyEmail = await firestore
+                  .collection('users')
+                  .where('email', isEqualTo: emailLower)
+                  .limit(1)
+                  .get();
+              if (cloudByLegacyEmail.docs.isNotEmpty) {
+                final cloudData = cloudByLegacyEmail.docs.first.data();
+                cloudRecordFound = true;
+                cloudHasLocalPassword =
+                    (cloudData['hasLocalPassword'] as bool?) ?? false;
+              }
+            }
+            if (cloudRecordFound) {
+              needsPasswordSetup = !cloudHasLocalPassword;
+            }
+          } catch (_) {}
+        }
       }
 
       final auth = await account.authentication;
@@ -1398,7 +1586,7 @@ class AuthService {
         _clearPendingGoogleConfirmation();
         return const ServiceResult(
           ok: false,
-          message: 'Tu cuenta de Google no devolvio un correo valido.',
+          message: 'Tu cuenta de Google no devolvió un correo válido.',
         );
       }
 
@@ -1487,13 +1675,6 @@ class AuthService {
 
         if (requiresPasswordSetup) {
           if (preferredPassword.length < 6) {
-            _clearPendingGoogleConfirmation();
-            try {
-              await _firebaseAuth.signOut();
-            } catch (_) {}
-            try {
-              await _googleSignIn.signOut();
-            } catch (_) {}
             return ServiceResult(
               ok: false,
               message: 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:$emailLower',
@@ -1543,7 +1724,7 @@ class AuthService {
                 return const ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos crear la contraseña local porque ese correo ya esta vinculado en otra cuenta.',
+                      'No pudimos crear la contraseña local porque ese correo ya está vinculado en otra cuenta.',
                 );
               }
               return ServiceResult(
@@ -1608,17 +1789,11 @@ class AuthService {
         final cloud = cloudDoc.data();
 
         final cloudUsername = (cloud?['username'] as String?)?.trim() ?? '';
+        final cloudPassword = (cloud?['password'] as String?)?.trim() ?? '';
         final preferredPassword = preferredPasswordForNewAccount.trim();
         final requiresUsernameSetup = cloudUsername.isEmpty;
         final requiresPasswordSetup = !hasPasswordProvider;
         if (requiresPasswordSetup && preferredPassword.length < 6) {
-          _clearPendingGoogleConfirmation();
-          try {
-            await _firebaseAuth.signOut();
-          } catch (_) {}
-          try {
-            await _googleSignIn.signOut();
-          } catch (_) {}
           return ServiceResult(
             ok: false,
             message: 'GOOGLE_CONFIRM_REQUIRED_WITH_PASSWORD:$emailLower',
@@ -1669,7 +1844,7 @@ class AuthService {
                 return const ServiceResult(
                   ok: false,
                   message:
-                      'No pudimos crear la contraseña local porque ese correo ya esta vinculado en otra cuenta.',
+                      'No pudimos crear la contraseña local porque ese correo ya está vinculado en otra cuenta.',
                 );
               }
               return ServiceResult(
@@ -1690,6 +1865,13 @@ class AuthService {
           preferredUsername: preferredForResolve,
           excludeUserId: firebaseUser.uid,
         );
+        final resolvedLocalPassword = requiresPasswordSetup
+            ? _hashPassword(preferredPassword)
+            : (cloudPassword.isNotEmpty
+                ? cloudPassword
+                : (preferredPassword.isNotEmpty
+                    ? _hashPassword(preferredPassword)
+                    : ''));
         final newUser = NebulaUser(
           id: firebaseUser.uid,
           name: (cloud?['name'] as String?)?.trim().isNotEmpty == true
@@ -1699,8 +1881,7 @@ class AuthService {
                   'Explorador'),
           username: resolvedUsername,
           email: emailLower,
-          password:
-              requiresPasswordSetup ? _hashPassword(preferredPassword) : '',
+          password: resolvedLocalPassword,
           parentalPinHash: '',
           stars: (cloud?['stars'] as num?)?.toInt() ?? 0,
           avatarIndex: (cloud?['avatarIndex'] as num?)?.toInt() ?? 0,
@@ -1852,7 +2033,7 @@ class AuthService {
     if (currentEmail.isEmpty) {
       return const ServiceResult(
         ok: false,
-        message: 'No pudimos leer un correo valido en tu cuenta.',
+        message: 'No pudimos leer un correo válido en tu cuenta.',
       );
     }
 
@@ -1904,7 +2085,7 @@ class AuthService {
             return const ServiceResult(
               ok: false,
               message:
-                  'Ese correo ya esta vinculado con contraseña en otra cuenta.',
+                  'Ese correo ya está vinculado con contraseña en otra cuenta.',
             );
           } else {
             rethrow;
@@ -1943,7 +2124,7 @@ class AuthService {
     return const ServiceResult(
       ok: false,
       message:
-          'El cambio de contraseña en la app esta deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseña en la app está deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1955,7 +2136,7 @@ class AuthService {
   }) async {
     return const ServiceResult(
       ok: false,
-      message: 'El cambio de correo desde la app esta deshabilitado.',
+      message: 'El cambio de correo desde la app está deshabilitado.',
     );
   }
 
@@ -2025,6 +2206,114 @@ class AuthService {
       );
     }
     return sendPasswordResetForIdentifier(_currentUser!.email);
+  }
+
+  Future<ServiceResult<void>> resendVerificationEmailForCredentials({
+    required String email,
+    required String password,
+  }) async {
+    if (!_useFirebase) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Verificación por correo requiere Firebase.',
+      );
+    }
+
+    final normalizedEmail = email.trim().toLowerCase();
+    final typedPassword = password.trim();
+    if (!isValidEmailFormat(normalizedEmail) || typedPassword.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Escribe correo válido y contraseña para reenviar.',
+      );
+    }
+
+    final firebaseAuth = _firebaseAuth;
+    if (firebaseAuth == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Verificación por correo requiere Firebase.',
+      );
+    }
+
+    try {
+      final credential = await firebaseAuth.signInWithEmailAndPassword(
+        email: normalizedEmail,
+        password: typedPassword,
+      );
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos abrir sesión para reenviar verificación.',
+        );
+      }
+
+      await firebaseUser.reload();
+      final refreshed = firebaseAuth.currentUser ?? firebaseUser;
+
+      if (refreshed.emailVerified) {
+        await _store.clearPendingVerificationIssuedAt(normalizedEmail);
+        await firebaseAuth.signOut();
+        return const ServiceResult(
+          ok: true,
+          message: 'Ese correo ya está verificado. Ya puedes ingresar.',
+        );
+      }
+
+      final createdAt = refreshed.metadata.creationTime;
+      if (createdAt != null &&
+          DateTime.now().difference(createdAt) >= const Duration(hours: 1)) {
+        await _deleteUnverifiedFirebaseAccount(
+          refreshed,
+          fallbackEmail: normalizedEmail,
+        );
+        return const ServiceResult(
+          ok: false,
+          message:
+              'No verificaste en 1 hora. La cuenta se eliminó por seguridad. Regístrate otra vez.',
+        );
+      }
+
+      await firebaseAuth.setLanguageCode('es');
+      await refreshed.sendEmailVerification();
+      await _store.writePendingVerificationIssuedAt(
+        normalizedEmail,
+        (createdAt ?? DateTime.now()).millisecondsSinceEpoch,
+      );
+      await firebaseAuth.signOut();
+      await _store.clearSession();
+      _currentUser = null;
+      _activePortalRole = PortalRole.caregiver;
+      return const ServiceResult(
+        ok: true,
+        message:
+            'Reenviamos el correo de verificación. Revisa también spam/promociones.',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        return const ServiceResult(
+          ok: false,
+          message: 'La contraseña no coincide para reenviar verificación.',
+        );
+      }
+      if (e.code == 'user-not-found') {
+        await _store.clearPendingVerificationIssuedAt(normalizedEmail);
+        return const ServiceResult(
+          ok: false,
+          message: 'No existe esa cuenta para reenviar verificación.',
+        );
+      }
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos reenviar la verificación: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error al reenviar verificación: $e',
+      );
+    }
   }
 
   bool isValidParentalPinFormat(String value) {
@@ -2729,6 +3018,7 @@ class AuthService {
             : PortalRole.caregiver,
       );
       _currentUser = restored;
+      await _store.clearPendingVerificationIssuedAt(restored.email);
       return ServiceResult(
         ok: true,
         message: 'Listo, ya estas dentro.',
@@ -2751,6 +3041,87 @@ class AuthService {
       return ServiceResult(
         ok: false,
         message: 'Error al recuperar tu cuenta de Firebase: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<NebulaUser>> _ensureFirebaseAdminSession({
+    required NebulaUser localAdmin,
+    required String plainPassword,
+  }) async {
+    if (!_useFirebase) {
+      return ServiceResult(
+        ok: true,
+        message: 'Firebase no activo.',
+        data: localAdmin,
+      );
+    }
+
+    try {
+      UserCredential credential;
+      try {
+        credential = await _firebaseAuth!.signInWithEmailAndPassword(
+          email: localAdmin.email,
+          password: plainPassword,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found') {
+          credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+            email: localAdmin.email,
+            password: plainPassword,
+          );
+        } else if (e.code == 'wrong-password' ||
+            e.code == 'invalid-credential') {
+          return const ServiceResult(
+            ok: false,
+            message: 'La contraseña de admin no coincide con Firebase.',
+          );
+        } else {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos abrir sesión admin en Firebase: ${e.message ?? e.code}',
+          );
+        }
+      }
+
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        return const ServiceResult(
+          ok: false,
+          message: 'No pudimos recuperar la sesión admin en Firebase.',
+        );
+      }
+
+      var syncedAdmin =
+          localAdmin.copyWith(password: _hashPassword(plainPassword));
+      if (localAdmin.id != firebaseUser.uid) {
+        syncedAdmin = _copyUserWithId(syncedAdmin, firebaseUser.uid);
+        final users = await _store.readUsers();
+        final nextUsers = users
+            .where((u) => u.id != localAdmin.id && u.id != firebaseUser.uid)
+            .toList();
+        nextUsers.add(syncedAdmin);
+        await _store.writeUsers(nextUsers);
+      } else {
+        await _upsertLocal(syncedAdmin);
+      }
+
+      await _syncCloudUserBestEffort(syncedAdmin);
+      return ServiceResult(
+        ok: true,
+        message: 'Admin autenticado en Firebase.',
+        data: syncedAdmin,
+      );
+    } on FirebaseAuthException catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error Firebase admin: ${e.message ?? e.code}',
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'Error al sincronizar sesión admin con Firebase: $e',
       );
     }
   }
@@ -2838,6 +3209,7 @@ class AuthService {
       }
 
       await _syncCloudUserBestEffort(syncedUser);
+      await _store.clearPendingVerificationIssuedAt(localUser.email);
       return ServiceResult(
         ok: true,
         message: 'Firebase validado.',
@@ -2880,11 +3252,14 @@ class AuthService {
     if (!usesPasswordProvider || usesGoogleProvider) {
       return const ServiceResult(
         ok: true,
-        message: 'No requiere verificacion por correo.',
+        message: 'No requiere verificación por correo.',
       );
     }
 
     if (refreshed.emailVerified) {
+      await _store.clearPendingVerificationIssuedAt(
+        (refreshed.email ?? fallbackEmail).trim().toLowerCase(),
+      );
       return const ServiceResult(
         ok: true,
         message: 'Correo verificado.',
@@ -2910,6 +3285,10 @@ class AuthService {
       final left = ttl - age;
       final minutesLeft =
           (left.inMinutes + ((left.inSeconds % 60 == 0) ? 0 : 1)).clamp(1, 60);
+      await _store.writePendingVerificationIssuedAt(
+        (refreshed.email ?? fallbackEmail).trim().toLowerCase(),
+        createdAt.millisecondsSinceEpoch,
+      );
       try {
         await _firebaseAuth?.setLanguageCode('es');
         await refreshed.sendEmailVerification();
@@ -2923,11 +3302,15 @@ class AuthService {
       return ServiceResult(
         ok: false,
         message:
-            'Tu correo no esta verificado. Revisa tu email y vuelve a entrar. Si no verificas en $minutesLeft min, la cuenta se elimina.',
+            'Tu correo no está verificado. Revisa tu email y vuelve a entrar. Si no verificas en $minutesLeft min, la cuenta se elimina.',
       );
     }
 
     try {
+      await _store.writePendingVerificationIssuedAt(
+        (refreshed.email ?? fallbackEmail).trim().toLowerCase(),
+        DateTime.now().millisecondsSinceEpoch,
+      );
       await _firebaseAuth?.setLanguageCode('es');
       await refreshed.sendEmailVerification();
     } catch (_) {}
@@ -2940,7 +3323,7 @@ class AuthService {
     return const ServiceResult(
       ok: false,
       message:
-          'Tu correo no esta verificado. Revisa tu email para activar la cuenta.',
+          'Tu correo no está verificado. Revisa tu email para activar la cuenta.',
     );
   }
 
@@ -2951,6 +3334,7 @@ class AuthService {
     final uid = firebaseUser.uid;
     final emailToClean =
         (firebaseUser.email ?? fallbackEmail).trim().toLowerCase();
+    await _store.clearPendingVerificationIssuedAt(emailToClean);
     NebulaUser? removedUser;
 
     try {
@@ -3373,6 +3757,16 @@ class AuthService {
 
   bool isValidEmailFormat(String email) {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+  }
+
+  int? _pendingMinutesLeft(int? issuedAtMillis) {
+    if (issuedAtMillis == null || issuedAtMillis <= 0) return null;
+    final issuedAt = DateTime.fromMillisecondsSinceEpoch(issuedAtMillis);
+    final age = DateTime.now().difference(issuedAt);
+    const ttl = Duration(hours: 1);
+    if (age >= ttl) return null;
+    final left = ttl - age;
+    return (left.inMinutes + ((left.inSeconds % 60 == 0) ? 0 : 1)).clamp(1, 60);
   }
 
   String _hashParentalPin(String value) {

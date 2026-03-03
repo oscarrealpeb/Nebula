@@ -111,6 +111,16 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     setState(() {});
   }
 
+  Future<void> _changeChildContext(String childId) async {
+    final result = await widget.controller.setCaregiverChildContext(childId);
+    if (!mounted) return;
+    if (!result.ok) {
+      await NebulaSnack.show(context, message: result.message, ok: false);
+      return;
+    }
+    setState(() {});
+  }
+
   Future<void> _saveParentalControl() async {
     if (_savingControl) return;
     setState(() => _savingControl = true);
@@ -183,7 +193,11 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => WelcomeScreen(controller: widget.controller),
+        builder: (_) => WelcomeScreen(
+          controller: widget.controller,
+          flashMessage: 'Sesión cerrada correctamente.',
+          flashOk: true,
+        ),
       ),
       (_) => false,
     );
@@ -266,9 +280,16 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
               onCreateChildProfile: () => _openChildProfileEditor(),
               onEditChildProfile: (childId) =>
                   _openChildProfileEditor(childId: childId),
+              onChildContextChanged: _changeChildContext,
             ),
-            _ReportsTab(controller: widget.controller),
-            const _SkillsTab(),
+            _ReportsTab(
+              controller: widget.controller,
+              onChildContextChanged: _changeChildContext,
+            ),
+            _SkillsTab(
+              controller: widget.controller,
+              onChildContextChanged: _changeChildContext,
+            ),
             _ControlTab(
               controller: widget.controller,
               dailyLimitController: _dailyLimitController,
@@ -276,6 +297,7 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
               endHour: _endHour,
               blockedGameKeys: _blockedGameKeys,
               savingControl: _savingControl,
+              onChildContextChanged: _changeChildContext,
               onStartHourChanged: (value) => setState(() => _startHour = value),
               onEndHourChanged: (value) => setState(() => _endHour = value),
               onBlockedChanged: (gameKey, blocked) {
@@ -318,16 +340,113 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
   }
 }
 
+class _ChildContextCard extends StatelessWidget {
+  const _ChildContextCard({
+    required this.controller,
+    required this.onChildChanged,
+    this.note = '',
+  });
+
+  final AppController controller;
+  final Future<void> Function(String childId) onChildChanged;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = controller.childProfiles;
+    if (children.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Text(
+            'No hay perfiles de niño para seleccionar.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    var selectedId = controller.childProfile?.id.trim() ?? '';
+    if (selectedId.isEmpty || !children.any((item) => item.id == selectedId)) {
+      selectedId = children.first.id;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Perfil en vista',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            if (children.length == 1)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.child_care_rounded),
+                title: Text(
+                  children.first.name.trim().isEmpty
+                      ? 'Niño sin nombre'
+                      : children.first.name,
+                ),
+                subtitle: const Text('Perfil unico disponible'),
+              )
+            else
+              DropdownButtonFormField<String>(
+                initialValue: selectedId,
+                decoration: const InputDecoration(
+                  labelText: 'Selecciona un niño',
+                ),
+                items: children
+                    .map(
+                      (child) => DropdownMenuItem<String>(
+                        value: child.id,
+                        child: Text(
+                          child.name.trim().isEmpty
+                              ? 'Niño sin nombre'
+                              : child.name,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  onChildChanged(value);
+                },
+              ),
+            if (note.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                note,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF4F628A),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SummaryTab extends StatelessWidget {
   const _SummaryTab({
     required this.controller,
     required this.onCreateChildProfile,
     required this.onEditChildProfile,
+    required this.onChildContextChanged,
   });
 
   final AppController controller;
   final Future<void> Function() onCreateChildProfile;
   final Future<void> Function(String childId) onEditChildProfile;
+  final Future<void> Function(String childId) onChildContextChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -340,6 +459,13 @@ class _SummaryTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _ChildContextCard(
+          controller: controller,
+          onChildChanged: onChildContextChanged,
+          note:
+              'Este perfil se usa como contexto activo para personalización y seguimiento.',
+        ),
+        const SizedBox(height: 10),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -424,14 +550,14 @@ class _SummaryTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Resumen rapido',
+                  'Resumen rápido',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 6),
                 Text('Uso de hoy: $todayMinutes minutos'),
-                Text('Sesiones ultimos 7 dias: $thisWeekSessions'),
+                Text('Sesiones últimos 7 días: $thisWeekSessions'),
               ],
             ),
           ),
@@ -461,9 +587,13 @@ class _SummaryTab extends StatelessWidget {
 }
 
 class _ReportsTab extends StatelessWidget {
-  const _ReportsTab({required this.controller});
+  const _ReportsTab({
+    required this.controller,
+    required this.onChildContextChanged,
+  });
 
   final AppController controller;
+  final Future<void> Function(String childId) onChildContextChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -475,6 +605,13 @@ class _ReportsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _ChildContextCard(
+          controller: controller,
+          onChildChanged: onChildContextChanged,
+          note:
+              'Por ahora, las métricas se calculan a nivel cuenta. El PDF por niño se habilitará en una siguiente fase.',
+        ),
+        const SizedBox(height: 10),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -482,7 +619,44 @@ class _ReportsTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Uso por dia (ultimos 7 dias)',
+                  'Exportar reporte',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final childName =
+                          controller.childProfile?.name.trim() ?? '';
+                      final target =
+                          childName.isEmpty ? 'el perfil activo' : childName;
+                      NebulaSnack.show(
+                        context,
+                        message:
+                            'La exportación PDF para $target estará disponible pronto.',
+                        ok: true,
+                      );
+                    },
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Exportar PDF'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Uso por día (últimos 7 días)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -517,7 +691,7 @@ class _ReportsTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Uso por hora (ultimos 14 dias)',
+                  'Uso por hora (últimos 14 días)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -557,14 +731,14 @@ class _ReportsTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Desempeno por habilidad (vista terapeuta)',
+                  'Desempeño por habilidad (vista terapeuta)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 8),
                 if (skillData.isEmpty)
-                  const Text('Aun no hay suficientes datos de sesiones.')
+                  const Text('Aún no hay suficientes datos de sesiones.')
                 else
                   ...skillData.entries.map((entry) {
                     final score = entry.value.$1;
@@ -675,13 +849,26 @@ class _ReportsTab extends StatelessWidget {
 }
 
 class _SkillsTab extends StatelessWidget {
-  const _SkillsTab();
+  const _SkillsTab({
+    required this.controller,
+    required this.onChildContextChanged,
+  });
+
+  final AppController controller;
+  final Future<void> Function(String childId) onChildContextChanged;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _ChildContextCard(
+          controller: controller,
+          onChildChanged: onChildContextChanged,
+          note:
+              'La descripcion de habilidades es comun; el contexto activo ayuda en la lectura de reportes.',
+        ),
+        const SizedBox(height: 10),
         Card(
           color: const Color(0xFFEAF3FF),
           child: Padding(
@@ -822,6 +1009,7 @@ class _ControlTab extends StatelessWidget {
     required this.endHour,
     required this.blockedGameKeys,
     required this.savingControl,
+    required this.onChildContextChanged,
     required this.onStartHourChanged,
     required this.onEndHourChanged,
     required this.onBlockedChanged,
@@ -834,6 +1022,7 @@ class _ControlTab extends StatelessWidget {
   final int endHour;
   final Set<String> blockedGameKeys;
   final bool savingControl;
+  final Future<void> Function(String childId) onChildContextChanged;
   final ValueChanged<int> onStartHourChanged;
   final ValueChanged<int> onEndHourChanged;
   final void Function(String gameKey, bool blocked) onBlockedChanged;
@@ -845,6 +1034,13 @@ class _ControlTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _ChildContextCard(
+          controller: controller,
+          onChildChanged: onChildContextChanged,
+          note:
+              'El control parental actual se aplica a toda la cuenta del cuidador.',
+        ),
+        const SizedBox(height: 10),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -1076,7 +1272,7 @@ class _AdminTab extends StatelessWidget {
                 if (loadingDashboard) const LinearProgressIndicator(),
                 const SizedBox(height: 8),
                 if (stats == null)
-                  const Text('Sin datos aun. Pulsa "Actualizar".')
+                  const Text('Sin datos aún. Pulsa "Actualizar".')
                 else ...[
                   Wrap(
                     spacing: 8,
@@ -1107,7 +1303,7 @@ class _AdminTab extends StatelessWidget {
                         value: '${stats.totalGameSessions}',
                       ),
                       _MetricChip(
-                        label: 'Sesiones 7 dias',
+                        label: 'Sesiones 7 días',
                         value: '${stats.sessionsLast7Days}',
                       ),
                       _MetricChip(
@@ -1140,7 +1336,7 @@ class _AdminTab extends StatelessWidget {
                   if (topGames.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Juegos con mas sesiones',
+                      'Juegos con más sesiones',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -1257,7 +1453,7 @@ class _AdminTab extends StatelessWidget {
                 TextField(
                   controller: minimumVersionController,
                   decoration: const InputDecoration(
-                    labelText: 'Version minima sugerida (ej: 1.2.0)',
+                    labelText: 'Versión mínima sugerida (ej: 1.2.0)',
                   ),
                 ),
               ],
@@ -1395,7 +1591,7 @@ class _AccountTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         NebulaSecondaryButton(
-          text: 'Configuracion del cuidador',
+          text: 'Configuración del cuidador',
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -1407,7 +1603,7 @@ class _AccountTab extends StatelessWidget {
         const SizedBox(height: 10),
         TextButton(
           onPressed: onLogout,
-          child: const Text('Cerrar sesion'),
+          child: const Text('Cerrar sesión'),
         ),
       ],
     );
@@ -1443,7 +1639,7 @@ class _AdminAccountTab extends StatelessWidget {
         const SizedBox(height: 10),
         TextButton(
           onPressed: onLogout,
-          child: const Text('Cerrar sesion'),
+          child: const Text('Cerrar sesión'),
         ),
       ],
     );

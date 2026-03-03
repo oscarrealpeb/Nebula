@@ -30,7 +30,7 @@ class ActionResult {
 
 class AppController extends ChangeNotifier {
   static const hiddenAdminEmail = 'admin@nebula.local';
-  static const hiddenAdminPassword = 'NebulaAdmin2026';
+  static const hiddenAdminPassword = '12345';
 
   AppController._(
     this._authService,
@@ -163,10 +163,37 @@ class AppController extends ChangeNotifier {
     _pendingHomeLevelUpPlanetName = null;
     return value;
   }
+
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
       _currentUser?.gameSessions ?? const <GameSessionRecord>[]);
   ParentalControl get parentalControl =>
       _currentUser?.parentalControl ?? const ParentalControl();
+  String get selectedNarratorId {
+    final childValue = childProfile?.selectedNarratorId.trim() ?? '';
+    if (childValue.isNotEmpty) return childValue;
+    return _currentUser?.selectedNarratorId ?? 'narrator_1';
+  }
+
+  bool get soundEffectsEnabled {
+    final child = childProfile;
+    if (child != null) return child.soundEffectsEnabled;
+    return _currentUser?.soundEffectsEnabled ?? true;
+  }
+
+  double get currentAccentHue {
+    final child = childProfile;
+    if (child != null) return child.accentHue;
+    return (_currentUser?.accentHue ?? 190).toDouble();
+  }
+
+  double get currentAccentIntensity {
+    final child = childProfile;
+    if (child != null) {
+      return child.accentIntensity.clamp(0.72, 1.0).toDouble();
+    }
+    return (_currentUser?.accentIntensity ?? 0.55).clamp(0.72, 1.0).toDouble();
+  }
+
   String get activeChildName {
     final name = childProfile?.name.trim() ?? '';
     if (name.isNotEmpty) return name;
@@ -192,10 +219,8 @@ class AppController extends ChangeNotifier {
   }
 
   Color get accentColor {
-    final user = _currentUser;
-    final hue = (user?.accentHue ?? 190).toDouble();
-    final intensity =
-        (user?.accentIntensity ?? 0.55).clamp(0.72, 1.0).toDouble();
+    final hue = currentAccentHue;
+    final intensity = currentAccentIntensity;
     return HSVColor.fromAHSV(1, hue, 0.71, intensity).toColor();
   }
 
@@ -305,7 +330,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El acceso directo de niño ya no esta disponible. Entra con la cuenta del cuidador y luego elige el perfil del niño.',
+          'El acceso directo de niño ya no está disponible. Entra con la cuenta del cuidador y luego elige el perfil del niño.',
     );
   }
 
@@ -315,7 +340,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'Sin internet. Para entrar con Google, revisa tu conexion e intenta de nuevo.',
+            'Sin internet. Para entrar con Google, revisa tu conexión e intenta de nuevo.',
       );
     }
     final result = await _authService.loginWithGoogle();
@@ -412,7 +437,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> enterChildPortal(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     if (isAdmin) {
       return const ActionResult(
@@ -458,7 +483,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     if (isAdmin) {
       _activePortalRole = PortalRole.admin;
@@ -482,6 +507,55 @@ class AppController extends ChangeNotifier {
     await _authService.persistPortalRole(PortalRole.caregiver);
     notifyListeners();
     return const ActionResult(ok: true, message: 'Portal cuidador listo.');
+  }
+
+  Future<ActionResult> setCaregiverChildContext(String childId) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    if (isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'El admin no usa perfiles de niño.',
+      );
+    }
+    final targetId = childId.trim();
+    if (targetId.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Selecciona un perfil de niño.',
+      );
+    }
+    final list = childProfiles;
+    final exists = list.any((item) => item.id == targetId);
+    if (!exists) {
+      return const ActionResult(
+        ok: false,
+        message: 'Ese perfil de niño no existe.',
+      );
+    }
+
+    final selectedChild = list.firstWhere((item) => item.id == targetId);
+    _activeChildProfileId = targetId;
+    final nextPrimary = user.copyWith(
+      childProfile: selectedChild,
+      childProfiles: list,
+    );
+    final saved = await _authService.updateUser(nextPrimary);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: targetId,
+      );
+      notifyListeners();
+      return const ActionResult(
+        ok: true,
+        message: 'Perfil activo actualizado.',
+      );
+    }
+    return ActionResult(ok: false, message: saved.message);
   }
 
   void markPortalSelectionPending() {
@@ -514,7 +588,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'Solo el admin puede modificar esta configuracion.',
+        message: 'Solo el admin puede modificar esta configuración.',
       );
     }
     final result = await _authService.saveAppAdminConfig(config);
@@ -651,7 +725,7 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
-  /// Mantiene compatibilidad, pero el cambio en-app esta deshabilitado.
+  /// Mantiene compatibilidad, pero el cambio en-app está deshabilitado.
   Future<ActionResult> changePasswordImproved({
     String currentPassword = '',
     required String newPassword,
@@ -660,7 +734,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseña en la app esta deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseña en la app está deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -702,7 +776,7 @@ class AppController extends ChangeNotifier {
         !_authService.isValidEmailFormat(normalized)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo valido.',
+        message: 'Escribe un correo válido.',
       );
     }
 
@@ -723,6 +797,50 @@ class AppController extends ChangeNotifier {
     _cooldownService.start(key, const Duration(minutes: 2));
     return const ActionResult(
         ok: true, message: 'Listo. Revisa tu correo.', remainingSeconds: 120);
+  }
+
+  Future<ActionResult> resendLoginVerificationEmail({
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (!_authService.isValidEmailFormat(normalizedEmail)) {
+      return const ActionResult(
+        ok: false,
+        message: 'Escribe un correo válido para reenviar verificación.',
+      );
+    }
+    if (password.trim().isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Escribe la contraseña para reenviar verificación.',
+      );
+    }
+
+    final key = 'verify_resend_$normalizedEmail';
+    final remaining = _cooldownService.remainingSeconds(key);
+    if (remaining > 0) {
+      return ActionResult(
+        ok: false,
+        message: 'Espera $remaining segundos antes de reenviar.',
+        remainingSeconds: remaining,
+      );
+    }
+
+    final result = await _authService.resendVerificationEmailForCredentials(
+      email: normalizedEmail,
+      password: password,
+    );
+    if (!result.ok) {
+      return ActionResult(ok: false, message: result.message);
+    }
+
+    _cooldownService.start(key, const Duration(minutes: 1));
+    return const ActionResult(
+      ok: true,
+      message: 'Reenvío solicitado. Revisa tu correo.',
+      remainingSeconds: 60,
+    );
   }
 
   Future<ActionResult> requestProfilePasswordReset() async {
@@ -755,7 +873,7 @@ class AppController extends ChangeNotifier {
   }) async {
     return const ActionResult(
       ok: false,
-      message: 'El cambio de correo desde la app esta deshabilitado.',
+      message: 'El cambio de correo desde la app está deshabilitado.',
     );
   }
 
@@ -767,7 +885,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseña en la app esta deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseña en la app está deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -972,10 +1090,24 @@ class AppController extends ChangeNotifier {
   Future<void> setNarrator(String narratorId) async {
     final user = _currentUser;
     if (user == null) return;
-    final next = user.copyWith(selectedNarratorId: narratorId);
+    final normalizedNarrator = narratorId.trim();
+    if (normalizedNarrator.isEmpty) return;
+
+    var next = user.copyWith(selectedNarratorId: normalizedNarrator);
+    final active = childProfile;
+    if (active != null && !isAdmin) {
+      final updatedChild = active.copyWith(
+        selectedNarratorId: normalizedNarrator,
+      );
+      next = _upsertChildProfile(next, updatedChild);
+    }
     final saved = await _authService.updateUser(next);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: _activeChildProfileId,
+      );
       notifyListeners();
     }
   }
@@ -983,10 +1115,22 @@ class AppController extends ChangeNotifier {
   Future<void> setSoundEffects(bool enabled) async {
     final user = _currentUser;
     if (user == null) return;
-    final next = user.copyWith(soundEffectsEnabled: enabled);
+
+    var next = user.copyWith(soundEffectsEnabled: enabled);
+    final active = childProfile;
+    if (active != null && !isAdmin) {
+      final updatedChild = active.copyWith(
+        soundEffectsEnabled: enabled,
+      );
+      next = _upsertChildProfile(next, updatedChild);
+    }
     final saved = await _authService.updateUser(next);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: _activeChildProfileId,
+      );
       notifyListeners();
     }
   }
@@ -997,41 +1141,116 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) return;
-    final next = user.copyWith(accentHue: hue, accentIntensity: intensity);
+    final safeIntensity = intensity.clamp(0.72, 1.0).toDouble();
+    final targetChildId = (childProfile?.id ?? '').trim();
+    var next = user.copyWith(accentHue: hue, accentIntensity: safeIntensity);
+    final active = childProfile;
+    if (active != null && !isAdmin) {
+      final updatedChild = active.copyWith(
+        accentHue: hue,
+        accentIntensity: safeIntensity,
+      );
+      next = _upsertChildProfile(next, updatedChild);
+    }
     _currentUser = next;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: _activeChildProfileId,
+    );
     notifyListeners();
 
     unawaited(() async {
       final saved = await _authService.updateUser(next);
       if (saved.ok && saved.data != null) {
         final current = _currentUser;
-        if (current == null || current.id != saved.data!.id) {
-          return;
+        if (current == null || current.id != saved.data!.id) return;
+
+        if (targetChildId.isEmpty) {
+          final hueMatches = (current.accentHue - hue).abs() < 0.0001;
+          final intensityMatches =
+              (current.accentIntensity - safeIntensity).abs() < 0.0001;
+          if (!hueMatches || !intensityMatches) return;
+        } else {
+          final currentProfiles = current.childProfiles.isNotEmpty
+              ? current.childProfiles
+              : (current.childProfile == null
+                  ? const <ChildProfile>[]
+                  : <ChildProfile>[current.childProfile!]);
+          ChildProfile? currentChild;
+          for (final profile in currentProfiles) {
+            if (profile.id != targetChildId) continue;
+            currentChild = profile;
+            break;
+          }
+          if (currentChild == null) return;
+          final hueMatches = (currentChild.accentHue - hue).abs() < 0.0001;
+          final intensityMatches =
+              (currentChild.accentIntensity - safeIntensity).abs() < 0.0001;
+          if (!hueMatches || !intensityMatches) return;
         }
-        final hueMatches = (current.accentHue - next.accentHue).abs() < 0.0001;
-        final intensityMatches =
-            (current.accentIntensity - next.accentIntensity).abs() < 0.0001;
-        if (!hueMatches || !intensityMatches) {
-          return;
-        }
+
         _currentUser = saved.data;
+        _activeChildProfileId = _resolveActiveChildId(
+          user: _currentUser,
+          requestedChildId: _activeChildProfileId,
+        );
         notifyListeners();
       }
     }());
   }
 
+  String? customImagePathFor({
+    required String key,
+    String childId = '',
+  }) {
+    final user = _currentUser;
+    if (user == null) return null;
+    final normalizedKey = key.trim().toLowerCase();
+    if (normalizedKey.isEmpty) return null;
+
+    final directChildId = childId.trim();
+    final activeId =
+        directChildId.isNotEmpty ? directChildId : _activeChildProfileId;
+    final childScopedKey = _scopedCustomImageKey(
+      baseKey: normalizedKey,
+      childId: activeId,
+    );
+    if (childScopedKey != null) {
+      final scoped = user.customImages[childScopedKey]?.trim() ?? '';
+      if (scoped.isNotEmpty) return scoped;
+    }
+
+    final global = user.customImages[normalizedKey]?.trim() ?? '';
+    if (global.isNotEmpty) return global;
+    return null;
+  }
+
   Future<void> updateCustomImage({
     required String key,
     required String imagePath,
+    String childId = '',
   }) async {
     final user = _currentUser;
     if (user == null) return;
+    final normalizedKey = key.trim().toLowerCase();
+    final normalizedPath = imagePath.trim();
+    if (normalizedKey.isEmpty || normalizedPath.isEmpty) return;
+
     final nextMap = Map<String, String>.from(user.customImages);
-    nextMap[key] = imagePath;
+    final targetKey = _scopedCustomImageKey(
+          baseKey: normalizedKey,
+          childId: childId.trim().isEmpty ? _activeChildProfileId : childId,
+        ) ??
+        normalizedKey;
+    nextMap[targetKey] = normalizedPath;
     final next = user.copyWith(customImages: nextMap);
     final saved = await _authService.updateUser(next);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: _activeChildProfileId,
+      );
       notifyListeners();
     }
   }
@@ -1045,7 +1264,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -1088,6 +1307,10 @@ class AppController extends ChangeNotifier {
               id: targetChildId,
               name: trimmedName,
               createdAtMillis: now,
+              selectedNarratorId: user.selectedNarratorId,
+              soundEffectsEnabled: user.soundEffectsEnabled,
+              accentHue: user.accentHue,
+              accentIntensity: user.accentIntensity,
             ))
         .copyWith(
       id: targetChildId,
@@ -1131,7 +1354,7 @@ class AppController extends ChangeNotifier {
       ParentalControl nextControl) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     final normalized = nextControl.copyWith(
       dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
@@ -1199,11 +1422,11 @@ class AppController extends ChangeNotifier {
   ActionResult canLaunchGame(String gameKey) {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     if (!isAdmin && _appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
-          ? 'La app esta en mantenimiento. Intenta mas tarde.'
+          ? 'La app está en mantenimiento. Intenta más tarde.'
           : _appAdminConfig.maintenanceMessage;
       return ActionResult(ok: false, message: message);
     }
@@ -1216,7 +1439,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin && globallyBlocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego esta deshabilitado por administracion.',
+        message: 'Este juego está deshabilitado por administración.',
       );
     }
     final blocked = control.blockedGameKeys.any(
@@ -1225,7 +1448,7 @@ class AppController extends ChangeNotifier {
     if (blocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego esta bloqueado por control parental.',
+        message: 'Este juego está bloqueado por control parental.',
       );
     }
 
@@ -1319,6 +1542,35 @@ class AppController extends ChangeNotifier {
 
   bool _sameLocalDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  NebulaUser _upsertChildProfile(NebulaUser user, ChildProfile updatedChild) {
+    final existing = user.childProfiles.isNotEmpty
+        ? List<ChildProfile>.from(user.childProfiles)
+        : (user.childProfile == null
+            ? <ChildProfile>[]
+            : <ChildProfile>[user.childProfile!]);
+    final index = existing.indexWhere((item) => item.id == updatedChild.id);
+    if (index >= 0) {
+      existing[index] = updatedChild;
+    } else {
+      existing.add(updatedChild);
+    }
+    return user.copyWith(
+      childProfile: updatedChild,
+      childProfiles: existing,
+    );
+  }
+
+  String? _scopedCustomImageKey({
+    required String baseKey,
+    required String childId,
+  }) {
+    final normalizedBase = baseKey.trim().toLowerCase();
+    if (normalizedBase.isEmpty) return null;
+    final normalizedChild = childId.trim();
+    if (normalizedChild.isEmpty) return null;
+    return 'child::$normalizedChild::$normalizedBase';
   }
 
   static String _resolveActiveChildId({
