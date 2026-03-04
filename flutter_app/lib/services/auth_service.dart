@@ -3065,13 +3065,26 @@ class AuthService {
           password: plainPassword,
         );
       } on FirebaseAuthException catch (e) {
-        if (e.code == 'user-not-found') {
-          credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-            email: localAdmin.email,
-            password: plainPassword,
-          );
-        } else if (e.code == 'wrong-password' ||
-            e.code == 'invalid-credential') {
+        if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+          try {
+            credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+              email: localAdmin.email,
+              password: plainPassword,
+            );
+          } on FirebaseAuthException catch (createError) {
+            if (createError.code == 'email-already-in-use') {
+              return const ServiceResult(
+                ok: false,
+                message: 'La contraseña de admin no coincide con Firebase.',
+              );
+            }
+            return ServiceResult(
+              ok: false,
+              message:
+                  'No pudimos crear la cuenta admin en Firebase: ${createError.message ?? createError.code}',
+            );
+          }
+        } else if (e.code == 'wrong-password') {
           return const ServiceResult(
             ok: false,
             message: 'La contraseña de admin no coincide con Firebase.',

@@ -30,7 +30,7 @@ class ActionResult {
 
 class AppController extends ChangeNotifier {
   static const hiddenAdminEmail = 'admin@nebula.local';
-  static const hiddenAdminPassword = '12345';
+  static const hiddenAdminPassword = '123456';
 
   AppController._(
     this._authService,
