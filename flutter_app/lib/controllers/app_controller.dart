@@ -10,6 +10,7 @@ import '../models/app_admin_config.dart';
 import '../models/game_content_config.dart';
 import '../models/nebula_user.dart';
 import '../models/portal_role.dart';
+import '../core/data/planet_ladder.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/cooldown_service.dart';
@@ -53,6 +54,8 @@ class AppController extends ChangeNotifier {
   bool _needsPortalSelection = false;
   bool _isOnline = true;
   StreamSubscription<bool>? _connectivitySub;
+  Future<void> _starUpdateQueue = Future<void>.value();
+  String? _pendingHomeLevelUpPlanetName;
 
   static Future<AppController> bootstrap({
     bool firebaseEnabled = false,
@@ -94,6 +97,9 @@ class AppController extends ChangeNotifier {
       (online) {
         if (controller._isOnline == online) return;
         controller._isOnline = online;
+        if (online) {
+          unawaited(controller._authService.syncCurrentUserToCloudBestEffort());
+        }
         controller.notifyListeners();
       },
     );
@@ -152,6 +158,11 @@ class AppController extends ChangeNotifier {
       _currentUser != null &&
       childProfiles.isNotEmpty &&
       _needsPortalSelection;
+  String? consumePendingHomeLevelUpPlanetName() {
+    final value = _pendingHomeLevelUpPlanetName;
+    _pendingHomeLevelUpPlanetName = null;
+    return value;
+  }
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
       _currentUser?.gameSessions ?? const <GameSessionRecord>[]);
   ParentalControl get parentalControl =>
@@ -933,14 +944,29 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> addStars(int value) async {
-    final user = _currentUser;
-    if (user == null) return;
-    final next = user.copyWith(stars: user.stars + value);
-    final saved = await _authService.updateUser(next);
-    if (saved.ok && saved.data != null) {
-      _currentUser = saved.data;
+    if (value == 0) return;
+    _starUpdateQueue = _starUpdateQueue.then((_) async {
+      final user = _currentUser;
+      if (user == null) return;
+      final previousStars = user.stars;
+      final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
+      final next = user.copyWith(stars: nextStars);
+      final previousPlanet = planetForStars(previousStars);
+      final nextPlanet = planetForStars(nextStars);
+      final previousIndex = planetLadder.indexOf(previousPlanet);
+      final nextIndex = planetLadder.indexOf(nextPlanet);
+      if (nextIndex > previousIndex) {
+        _pendingHomeLevelUpPlanetName = nextPlanet.name;
+      }
+      _currentUser = next;
       notifyListeners();
-    }
+      final saved = await _authService.updateUser(next);
+      if (saved.ok && saved.data != null) {
+        _currentUser = saved.data;
+        notifyListeners();
+      }
+    });
+    await _starUpdateQueue;
   }
 
   Future<void> setNarrator(String narratorId) async {

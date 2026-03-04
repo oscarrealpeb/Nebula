@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -3331,6 +3332,12 @@ class AuthService {
       updated.add(user);
     }
     await _store.writeUsers(updated);
+    unawaited(_syncCloudUserBestEffort(user));
+  }
+
+  Future<void> syncCurrentUserToCloudBestEffort() async {
+    final user = _currentUser;
+    if (user == null) return;
     await _syncCloudUserBestEffort(user);
   }
 

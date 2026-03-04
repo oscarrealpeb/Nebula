@@ -43,6 +43,7 @@ flutter:
     - assets/images/medio/
     - assets/images/dificil/
     - assets/images/conecta/
+    - assets/images/planets/
     - assets/sounds/
 
 flutter_launcher_icons:

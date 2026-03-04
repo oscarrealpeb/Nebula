@@ -381,6 +381,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
       setState(() {
         _showFeedback = true;
         _isCorrectFeedback = true;
+        _isFinishing = true; // 🔒 bloquear confirmar temporalmente
       });
 
       await Future.delayed(const Duration(milliseconds: 700));
@@ -394,6 +395,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
       if (_currentRound >= totalRounds) {
         await _finishGame();
       } else {
+        _isFinishing = false; // 🔓 desbloquear para la siguiente ronda
         _loadNextQuestion();
       }
     } else {
@@ -416,7 +418,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   }
 
   Future<void> _finishGame() async {
-    if (_isFinishing) return;
+    // if (_isFinishing) return;
     _isFinishing = true;
 
     int baseStars;

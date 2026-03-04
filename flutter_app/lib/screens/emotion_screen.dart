@@ -464,14 +464,13 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     if (selectedEmotion == null) return;
 
     if (selectedEmotion == currentQuestion!.correctEmotion) {
-      // 🔹 Mensaje positivo verde claro
       setState(() {
         feedbackMessage = "¡Muy bien!";
+        _isFinishing = true; // 🔒 bloquear confirmar
       });
 
       await Future.delayed(const Duration(milliseconds: 700));
 
-      // Si estaba en reviewPool y ahora acertó, la quitamos
       reviewPool.removeWhere((q) => q.imagePath == currentQuestion!.imagePath);
 
       currentRound++;
@@ -479,6 +478,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
       if (currentRound >= totalRounds) {
         await finishGame();
       } else {
+        _isFinishing = false; // 🔓 desbloquear para la siguiente ronda
         loadNextQuestion();
       }
     } else {
@@ -498,7 +498,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
   }
 
   Future<void> finishGame() async {
-    if (_isFinishing) return;
+    // if (_isFinishing) return;
     _isFinishing = true;
 
     int baseStars;

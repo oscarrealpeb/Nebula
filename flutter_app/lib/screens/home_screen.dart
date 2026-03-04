@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../core/data/avatar_catalog.dart';
@@ -27,6 +28,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _checkedChildProfile = false;
+  bool _levelUpDialogCheckQueued = false;
+  bool _levelUpDialogVisible = false;
+  static const double _levelUpDialogHeight = 520; // editable
+  static const double _levelUpDialogMaxWidth = 360; // editable
 
   @override
   void initState() {
@@ -140,10 +145,112 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _schedulePendingLevelUpDialogCheck() {
+    if (!mounted || _levelUpDialogVisible || _levelUpDialogCheckQueued) return;
+    _levelUpDialogCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _levelUpDialogCheckQueued = false;
+      if (!mounted || _levelUpDialogVisible) return;
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? false;
+      if (!isCurrentRoute) return;
+      final nextPlanetName = widget.controller.consumePendingHomeLevelUpPlanetName();
+      if (nextPlanetName == null || nextPlanetName.trim().isEmpty) return;
+      _levelUpDialogVisible = true;
+      final accent = widget.controller.accentButtonColor;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) {
+          final width = MediaQuery.sizeOf(context).width;
+          final dialogWidth = (width * 0.92).clamp(280.0, _levelUpDialogMaxWidth);
+          return Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: accent, width: 3),
+            ),
+            child: SizedBox(
+              width: dialogWidth,
+              height: _levelUpDialogHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+                child: Column(
+                  children: [
+                    const Text(
+                      '¡Felicidades!🏅',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF253760),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Has llegado a $nextPlanetName',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF253760),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: Lottie.asset(
+                        'assets/animations/niveles.json',
+                        fit: BoxFit.contain,
+                        repeat: true,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Revisa tus premios🎁',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF253760),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Center(
+                      child: SizedBox(
+                        width: 180,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accent,
+                            foregroundColor: Colors.white,
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text('Continuar'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      _levelUpDialogVisible = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
+    _schedulePendingLevelUpDialogCheck();
 
     final descubreLabel = widget.controller.gameLabelForKey('descubre_emocion');
     final conectaLabel = widget.controller.gameLabelForKey('conecta_sonidos');
@@ -481,7 +588,7 @@ class _WelcomeStatusCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         Text(
-                          '$stars estrellas',
+                          '$stars estrellas⭐',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                           ),

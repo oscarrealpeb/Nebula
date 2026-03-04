@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
@@ -36,6 +36,8 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   final List<Map<String, String>> _failedWords = [];
   static const int _maxRounds = 5;
   static const int _maxAttemptsPerWord = 3;
+  List<int> _errorIndexes = [];
+
 
   int _currentRound = 0;
   int _totalMistakes = 0;
@@ -47,42 +49,42 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   bool _completing = false;
 
   final List<Map<String, String>> _easyWords = [
-    {
-      'image': 'assets/images/conecta/gato.jpg',
-      'text': 'Gato',
-      'audio': 'sounds/gato.mp3',
-    },
-    // {
-    //   'image': 'assets/sol.png',
-    //   'text': 'sol',
-    //   'audio': 'sounds/sol.mp3',
-    // },
-  ];
+  {
+    'image': 'assets/images/conecta/gato.jpg',
+    'text': 'Gato',
+    'audio': 'sounds/gato.mp3',
+  },
+  // {
+  //   'image': 'assets/sol.png',
+  //   'text': 'sol',
+  //   'audio': 'sounds/sol.mp3',
+  // },
+];
 
-  final List<Map<String, String>> _mediumWords = [
-    {
-      'image': 'assets/images/conecta/elefante.jpg',
-      'text': 'elefante',
-      'audio': 'sounds/elefante.mp3',
-    },
-    // {
-    //   'image': 'assets/mesa.png',
-    //   'text': 'mesa',
-    //   'audio': 'sounds/mesa.mp3',
-    // },
-  ];
+final List<Map<String, String>> _mediumWords = [
+  {
+    'image': 'assets/images/conecta/elefante.jpg',
+    'text': 'Elefante',
+    'audio': 'sounds/elefante.mp3',
+  },
+  // {
+  //   'image': 'assets/mesa.png',
+  //   'text': 'mesa',
+  //   'audio': 'sounds/mesa.mp3',
+  // },
+];
 
-  final List<Map<String, String>> _hardWords = [
-    {
-      'image': 'assets/images/conecta/guitarra',
-      'text': 'guitarra',
-      'audio': 'sounds/guitarra.mp3',
-    },
-    // {
-    //   'image': 'assets/comer.png',
-    //   'text': 'quiero comer',
-    //   'audio': 'sounds/quiero_comer.mp3',
-    // },
+final List<Map<String, String>> _hardWords = [
+  {
+    'image': 'assets/images/conecta/guitarra',
+    'text': 'Guitarra',
+    'audio': 'sounds/guitarra.mp3',
+  },
+  // {
+  //   'image': 'assets/comer.png',
+  //   'text': 'quiero comer',
+  //   'audio': 'sounds/quiero_comer.mp3',
+  // },
   ];
 
   List<Map<String, String>> get _currentList {
@@ -102,63 +104,79 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   }
 
   Future<void> _toggleListening() async {
+  // if (!_speechAvailable) {
+  //   setState(() {
+  //     _feedbackMessage = 'Micrófono no disponible';
+  //   });
+  //   return;
+  // }
     if (!_speechAvailable) {
-      setState(() {
-        _feedbackMessage = 'Micrófono no disponible';
-      });
-      return;
-    }
+    await _showOfflineSpeechDialog();
+    return;
+  }
 
-    if (_isListening) {
-      await _speech.stop();
-      setState(() {
-        _isListening = false;
-      });
-      return;
-    }
-
+  if (_isListening) {
+    await _speech.stop();
     setState(() {
-      _recognizedText = '';
-      _feedbackMessage = null;
-      _isListening = true;
+      _isListening = false;
     });
+    return;
+  }
 
-    await _speech.listen(
-      localeId: _speechLocaleId,
-      listenFor: const Duration(seconds: 20),
-      pauseFor: const Duration(seconds: 8),
-      listenOptions: stt.SpeechListenOptions(
-        partialResults: false,
-        cancelOnError: true,
-        listenMode: stt.ListenMode.dictation,
-      ),
-      onResult: (result) async {
+  setState(() {
+    _recognizedText = '';
+    _feedbackMessage = null;
+    _isListening = true;
+  });
+
+  await _speech.listen(
+    localeId: _speechLocaleId,
+    listenFor: const Duration(seconds: 20),
+    pauseFor: const Duration(seconds: 8),
+    partialResults: false,
+    cancelOnError: true,
+    listenMode: stt.ListenMode.dictation,
+    onResult: (result) async {
+      if (!mounted) return;
+
+      setState(() {
+        _recognizedText = result.recognizedWords;
+      });
+
+      if (result.finalResult) {
+        await _speech.stop();
+
         if (!mounted) return;
 
         setState(() {
-          _recognizedText = result.recognizedWords;
+          _isListening = false;
         });
 
-        if (result.finalResult) {
-          await _speech.stop();
-
-          if (!mounted) return;
-
+        if (_recognizedText.trim().isEmpty) {
           setState(() {
-            _isListening = false;
+            _feedbackMessage = 'No escuché nada 😅';
           });
-
-          if (_recognizedText.trim().isEmpty) {
-            setState(() {
-              _feedbackMessage = 'No escuché nada 😅';
-            });
-          } else {
-            _evaluateAttempt();
-          }
+        } else {
+          _evaluateAttempt();
         }
-      },
-    );
-  }
+      }
+    },
+  );
+
+
+
+  _speech.errorListener = (error) async {
+  if (!mounted) return;
+
+  setState(() {
+    _isListening = false;
+  });
+
+  await _showOfflineSpeechDialog();
+};
+}
+
+
 
   Future<void> _playAudio() async {
     final audioPath = _currentItem['audio'];
@@ -179,18 +197,26 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     }
 
     _speechAvailable = await _speech.initialize(
-      onStatus: (status) {
-        debugPrint('Speech status: $status');
-      },
-      onError: (error) {
-        debugPrint('speech_to_text error: $error');
-      },
-    );
+  onStatus: (status) {
+    debugPrint('Speech status: $status');
+  },
+  onError: (error) async {
+    debugPrint('speech_to_text error: $error');
+
+    if (!mounted) return;
+
+    setState(() {
+      _isListening = false;
+    });
+
+    await _showOfflineSpeechDialog();
+  },
+);
 
     if (!_speechAvailable) return;
 
     final locales = await _speech.locales();
-
+    print(locales);
     for (var locale in locales) {
       if (locale.localeId.toLowerCase().startsWith('es')) {
         _speechLocaleId = locale.localeId;
@@ -208,108 +234,139 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     super.dispose();
   }
 
+
   int _levenshtein(String s, String t) {
-    final m = s.length;
-    final n = t.length;
+  final m = s.length;
+  final n = t.length;
 
-    if (m == 0) return n;
-    if (n == 0) return m;
+  if (m == 0) return n;
+  if (n == 0) return m;
 
-    List<List<int>> dp = List.generate(m + 1, (_) => List.filled(n + 1, 0));
+  List<List<int>> dp =
+      List.generate(m + 1, (_) => List.filled(n + 1, 0));
 
-    for (int i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-
-    for (int j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-
-    for (int i = 1; i <= m; i++) {
-      for (int j = 1; j <= n; j++) {
-        int cost = s[i - 1] == t[j - 1] ? 0 : 1;
-
-        dp[i][j] = [
-          dp[i - 1][j] + 1, // eliminación
-          dp[i][j - 1] + 1, // inserción
-          dp[i - 1][j - 1] + cost // sustitución
-        ].reduce((a, b) => a < b ? a : b);
-      }
-    }
-
-    return dp[m][n];
+  for (int i = 0; i <= m; i++) {
+    dp[i][0] = i;
   }
+
+  for (int j = 0; j <= n; j++) {
+    dp[0][j] = j;
+  }
+
+  for (int i = 1; i <= m; i++) {
+    for (int j = 1; j <= n; j++) {
+      int cost = s[i - 1] == t[j - 1] ? 0 : 1;
+
+      dp[i][j] = [
+        dp[i - 1][j] + 1,       // eliminación
+        dp[i][j - 1] + 1,       // inserción
+        dp[i - 1][j - 1] + cost // sustitución
+      ].reduce((a, b) => a < b ? a : b);
+    }
+  }
+
+  return dp[m][n];
+}
+
+
+List<int> _getErrorIndexes(String spoken, String correct) {
+  final List<int> errors = [];
+
+  final minLength = spoken.length < correct.length
+      ? spoken.length
+      : correct.length;
+
+  for (int i = 0; i < minLength; i++) {
+    if (spoken[i] != correct[i]) {
+      errors.add(i);
+    }
+  }
+
+  // Si faltan letras al final
+  if (correct.length > spoken.length) {
+    for (int i = spoken.length; i < correct.length; i++) {
+      errors.add(i);
+    }
+  }
+
+  return errors;
+}
+
 
   void _evaluateAttempt() {
-    final correctText = _normalize(_currentItem['text']!);
-    final spokenText = _normalize(_recognizedText);
+  final correctText = _normalize(_currentItem['text']!);
+  final spokenText = _normalize(_recognizedText);
 
-    int allowedErrors;
+  int allowedErrors;
 
-    if (widget.difficultyStars <= 1) {
-      allowedErrors = 2;
-    } else {
-      allowedErrors = 1;
-    }
-
-    final distance = _levenshtein(spokenText, correctText);
-    final isCorrect = distance <= allowedErrors;
-
-    if (isCorrect) {
-      _correctAnswers++;
-      _attemptsForCurrentWord = 0;
-
-      setState(() {
-        _feedbackMessage = '¡Muy bien!';
-      });
-
-      Future.delayed(const Duration(seconds: 1), _nextRound);
-    } else {
-      _totalMistakes++;
-      _attemptsForCurrentWord++;
-
-      if (_attemptsForCurrentWord >= _maxAttemptsPerWord) {
-        // Guardar palabra fallada para repetición espaciada
-        _failedWords.add(_currentItem);
-
-        setState(() {
-          _feedbackMessage = 'Pasamos a la siguiente 😊';
-        });
-
-        _attemptsForCurrentWord = 0;
-        Future.delayed(const Duration(seconds: 1), _nextRound);
-      } else {
-        setState(() {
-          _feedbackMessage = '¡Casi, prueba de nuevo!';
-        });
-      }
-    }
+  if (widget.difficultyStars <= 1) {
+    allowedErrors = 2;
+  } else {
+    allowedErrors = 1;
   }
 
-  String _normalize(String text) {
-    return text
-        .toLowerCase()
-        .trim()
-        .replaceAll(RegExp(r'[áàäâ]'), 'a')
-        .replaceAll(RegExp(r'[éèëê]'), 'e')
-        .replaceAll(RegExp(r'[íìïî]'), 'i')
-        .replaceAll(RegExp(r'[óòöô]'), 'o')
-        .replaceAll(RegExp(r'[úùüû]'), 'u')
-        .replaceAll(RegExp(r'\s+'), ' ');
-  }
+  final distance = _levenshtein(spokenText, correctText);
+  final isCorrect = distance <= allowedErrors;
 
-  void _nextRound() {
-    if (_currentRound >= _maxRounds - 1) {
-      _completeGame();
-      return;
-    }
+  if (isCorrect) {
+    _errorIndexes = [];
+
+    _correctAnswers++;
+    _attemptsForCurrentWord = 0;
 
     setState(() {
-      _currentRound++;
-      _feedbackMessage = null;
-      _recognizedText = '';
+      _feedbackMessage = '¡Muy bien!';
     });
+
+    Future.delayed(const Duration(seconds: 1), _nextRound);
+  } else {
+    _errorIndexes = _getErrorIndexes(spokenText, correctText);
+    _totalMistakes++;
+    _attemptsForCurrentWord++;
+
+    if (_attemptsForCurrentWord >= _maxAttemptsPerWord) {
+      // Guardar palabra fallada para repetición espaciada
+      _failedWords.add(_currentItem);
+
+      setState(() {
+        _feedbackMessage = 'Pasamos a la siguiente 😊';
+      });
+
+      _attemptsForCurrentWord = 0;
+      Future.delayed(const Duration(seconds: 1), _nextRound);
+    } else {
+      setState(() {
+        _feedbackMessage = '¡Casi, prueba de nuevo!';
+      });
+    }
   }
+}
+
+
+  String _normalize(String text) {
+  return text
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'[áàäâ]'), 'a')
+      .replaceAll(RegExp(r'[éèëê]'), 'e')
+      .replaceAll(RegExp(r'[íìïî]'), 'i')
+      .replaceAll(RegExp(r'[óòöô]'), 'o')
+      .replaceAll(RegExp(r'[úùüû]'), 'u')
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+  void _nextRound() {
+  if (_currentRound >= _maxRounds - 1) {
+    _completeGame();
+    return;
+  }
+
+  setState(() {
+    _currentRound++;
+    _feedbackMessage = null;
+    _recognizedText = '';
+  });
+}
 
   Future<void> _completeGame() async {
     if (_completing) return;
@@ -437,6 +494,70 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     return shouldExit ?? false;
   }
 
+
+
+  Future<void> _showOfflineSpeechDialog() async {
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: const Text(
+        'Necesitamos configurar algo antes de empezar 😊',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+        ),
+      ),
+      content: const SingleChildScrollView(
+        child: Text(
+          'Este juego necesita usar el micrófono sin internet.\n\n'
+          'Sigue estos pasos:\n\n'
+          '1. Ve a Ajustes\n'
+          '2. Busca "Idioma y entrada" o "Sistema"\n'
+          '3. Entra en "Reconocimiento de voz" o "Escritura por voz"\n'
+          '4. Selecciona "Reconocimiento sin conexión"\n'
+          '5. Descarga Español\n\n'
+          '──────────────\n'
+          'Sugerencia: si no encuentras la opción, usa el buscador de Ajustes '
+          'y escribe "reconocimiento de voz sin conexión" para ubicarla más rápido.',
+          style: TextStyle(
+            fontSize: 15.5, // un poquito más grande
+            height: 1.4,    // mejor espaciado
+          ),
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: const Color.fromARGB(255, 255, 255, 255), // texto 
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 12,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).pop(); // salir del juego
+          },
+          child: const Text(
+            'Entendido',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
@@ -487,12 +608,14 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                         child: Image.asset(
                           _currentItem['image']!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(Icons.broken_image_outlined)),
+                          errorBuilder: (_, __, ___) =>
+                              const Center(child: Icon(Icons.broken_image_outlined)),
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 6),
+
                     Text(
                       _currentItem['text']!,
                       textAlign: TextAlign.center,
@@ -530,17 +653,17 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                 ),
               ),
 
+
               if (_recognizedText.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _recognizedText,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.black54,
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    children: _buildColoredText(),
                   ),
                 ),
+              ),
 
               const SizedBox(height: 8),
               if (_feedbackMessage != null)
@@ -571,8 +694,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                 children: [
                   Expanded(
                     child: Material(
-                      color:
-                          widget.controller.accentColor.withValues(alpha: 0.55),
+                      color: widget.controller.accentColor.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -582,8 +704,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.volume_up_rounded,
-                                  color: Colors.white),
+                              Icon(Icons.volume_up_rounded, color: Colors.white),
                               SizedBox(width: 8),
                               Text(
                                 'Escuchar',
@@ -604,8 +725,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                     child: Material(
                       color: _isListening
                           ? widget.controller.accentColor
-                          : widget.controller.accentColor
-                              .withValues(alpha: 0.55),
+                          : widget.controller.accentColor.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -645,4 +765,29 @@ class _GamediloscreenState extends State<Gamediloscreen> {
       ),
     );
   }
+
+  List<TextSpan> _buildColoredText() {
+  final correctText = _normalize(_currentItem['text']!);
+  final spokenText = _normalize(_recognizedText);
+
+  final List<TextSpan> spans = [];
+
+  for (int i = 0; i < spokenText.length; i++) {
+    final bool isError =
+        i >= correctText.length || _errorIndexes.contains(i);
+
+    spans.add(
+      TextSpan(
+        text: spokenText[i],
+        style: TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.bold,
+          color: isError ? Colors.red : Colors.black,
+        ),
+      ),
+    );
+  }
+
+  return spans;
+}
 }
