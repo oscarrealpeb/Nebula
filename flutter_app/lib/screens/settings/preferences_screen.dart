@@ -28,10 +28,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   final _narrators = const [
     ('narrator_1', 'Leo'),
     ('narrator_2', 'Mateo'),
-    ('narrator_3', 'Bruno'),
+    ('narrator_3', 'Valeria'),
     ('narrator_4', 'Sofia'),
-    ('narrator_5', 'Valeria'),
-    ('narrator_6', 'Emma'),
   ];
 
   
@@ -184,7 +182,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Activar efectos divertidos'),
+                      title: const Text('Activar narrador de juegos'),
                       value: _soundEnabled,
                       onChanged: (value) {
                         setState(() => _soundEnabled = value);
