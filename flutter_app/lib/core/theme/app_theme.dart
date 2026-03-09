@@ -1,11 +1,12 @@
 ﻿import 'package:flutter/material.dart';
 
 ThemeData buildNebulaTheme(Color accentColor) {
-  final cheerfulSeed =
-      Color.lerp(accentColor, const Color(0xFF72D9FF), 0.32) ?? accentColor;
-  final scheme = ColorScheme.fromSeed(
-    seedColor: cheerfulSeed,
+  final baseScheme = ColorScheme.fromSeed(
+    seedColor: accentColor,
     brightness: Brightness.light,
+  );
+  final scheme = baseScheme.copyWith(
+    primary: accentColor,
   );
 
   return ThemeData(

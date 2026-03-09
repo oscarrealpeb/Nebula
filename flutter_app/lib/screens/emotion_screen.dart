@@ -56,6 +56,8 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
 
   int currentRound = 0;
   int totalMistakes = 0;
+  int perfectRounds = 0;
+  bool _roundHadMistake = false;
   final DateTime _startedAt = DateTime.now();
 
   String? feedbackMessage;
@@ -383,6 +385,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     selectedEmotion = null;
     disabledOptions.clear();
     feedbackMessage = null;
+    _roundHadMistake = false;
 
     setState(() {});
   }
@@ -464,6 +467,9 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     if (selectedEmotion == null) return;
 
     if (selectedEmotion == currentQuestion!.correctEmotion) {
+      if (!_roundHadMistake) {
+        perfectRounds++;
+      }
       setState(() {
         feedbackMessage = "¡Muy bien!";
         _isFinishing = true; // 🔒 bloquear confirmar
@@ -483,6 +489,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
       }
     } else {
       totalMistakes++;
+      _roundHadMistake = true;
 
       // 🔁 Agregar a revisión si no está ya
       if (!reviewPool.any((q) => q.imagePath == currentQuestion!.imagePath)) {
@@ -503,7 +510,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
 
     int baseStars;
     if (totalMistakes == 0) {
-      baseStars = 20;
+      baseStars = 300;
     } else if (totalMistakes <= 3) {
       baseStars = 15;
     } else {
@@ -520,6 +527,11 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
       await widget.controller
           .addStars(baseStars)
           .timeout(const Duration(seconds: 2));
+    } catch (e) {
+      debugPrint('finishGame/addStars error: $e');
+    }
+
+    try {
       await widget.controller.recordGameSession(
         gameKey: 'descubre_emocion',
         startedAt: _startedAt,
@@ -530,9 +542,10 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
         pointsEarned: baseStars,
         correctAnswers: totalRounds,
         totalAttempts: totalRounds + totalMistakes,
+        perfectRounds: perfectRounds,
       );
     } catch (e) {
-      debugPrint('finishGame/addStars error: $e');
+      debugPrint('finishGame/recordGameSession error: $e');
     }
 
     if (!mounted) return;
@@ -604,7 +617,7 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: const Text(
-          "Si sales ahora, perderás el progreso de esta partida.",
+          "Si sales ahora, perderás tus estrellas⭐.",
         ),
         actions: [
           TextButton(
@@ -632,6 +645,26 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     return shouldExit ?? false;
   }
 
+  Widget _buildRoundProgress() {
+    return Row(
+      children: List.generate(totalRounds, (index) {
+        final isCompleted = index <= currentRound;
+        return Expanded(
+          child: Container(
+            height: 6,
+            margin: EdgeInsets.only(right: index == totalRounds - 1 ? 0 : 8),
+            decoration: BoxDecoration(
+              color: isCompleted
+                  ? widget.controller.accentColor
+                  : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
@@ -651,6 +684,9 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              _buildRoundProgress(),
+              const SizedBox(height: 12),
+
               // 🔹 NUEVO TEXTO GUÍA
               const Text(
                 "Mira la imagen:",

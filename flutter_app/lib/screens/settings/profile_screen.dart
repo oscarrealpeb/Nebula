@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/app_controller.dart';
 import '../../core/data/avatar_catalog.dart';
 import '../../core/data/planet_ladder.dart';
-import '../../core/theme/color_utils.dart';
 import '../../models/portal_role.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
@@ -33,9 +32,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _avatarIndex = 0;
   int _remaining = 0;
   Timer? _timer;
+  Timer? _autoSaveTimer;
   bool _saving = false;
   bool _loggingOut = false;
+  bool _autoSaving = false;
   bool? _usernameValid = true;
+  late String _lastSavedName;
+  late String _lastSavedUsername;
+  late int _lastSavedAvatarIndex;
   bool get _isChildPortal =>
       widget.controller.activePortalRole == PortalRole.child;
 
@@ -50,6 +54,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _nameController = TextEditingController(text: initialName);
     _usernameController = TextEditingController(text: initialUsername);
     _avatarIndex = user.avatarIndex;
+    _lastSavedName = _nameController.text;
+    _lastSavedUsername = _usernameController.text;
+    _lastSavedAvatarIndex = _avatarIndex;
     _remaining = widget.controller.profileResetRemaining();
     _usernameValid = true;
     _startTickIfNeeded();
@@ -58,6 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _autoSaveTimer?.cancel();
     _nameController.dispose();
     _usernameController.dispose();
     super.dispose();
@@ -131,6 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted &&
           _usernameController.text.trim().toLowerCase() == normalizedTyped) {
         setState(() => _usernameValid = true);
+        _scheduleAutoSave();
       }
       return true;
     }
@@ -149,7 +158,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return isAvailable;
     }
     setState(() => _usernameValid = isAvailable);
+    if (isAvailable) _scheduleAutoSave();
     return isAvailable;
+  }
+
+  bool get _hasPendingProfileChanges {
+    return _nameController.text != _lastSavedName ||
+        _usernameController.text != _lastSavedUsername ||
+        _avatarIndex != _lastSavedAvatarIndex;
+  }
+
+  void _markCurrentValuesAsSaved() {
+    _lastSavedName = _nameController.text;
+    _lastSavedUsername = _usernameController.text;
+    _lastSavedAvatarIndex = _avatarIndex;
+  }
+
+  void _scheduleAutoSave({Duration delay = const Duration(milliseconds: 700)}) {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(delay, () {
+      _autoSaveProfile();
+    });
+  }
+
+  Future<ActionResult> _persistProfile() {
+    return _isChildPortal
+        ? _saveChildProfile()
+        : widget.controller.saveProfile(
+            name: _nameController.text,
+            username: _usernameController.text,
+            avatarIndex: _avatarIndex,
+          );
+  }
+
+  Future<void> _autoSaveProfile() async {
+    if (!mounted || _saving || _autoSaving) return;
+    if (!_hasPendingProfileChanges) return;
+    if (!_nameValid) return;
+    if (!_isChildPortal) {
+      if (!_usernameFormatValid) return;
+      if (_usernameValid != true) return;
+    }
+
+    _autoSaving = true;
+    final result = await _persistProfile();
+    if (!mounted) return;
+    if (result.ok) {
+      _markCurrentValuesAsSaved();
+    }
+    _autoSaving = false;
+
+    if (_hasPendingProfileChanges) {
+      _scheduleAutoSave();
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -168,14 +229,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
     setState(() => _saving = true);
-    final result = _isChildPortal
-        ? await _saveChildProfile()
-        : await widget.controller.saveProfile(
-            name: _nameController.text,
-            username: _usernameController.text,
-            avatarIndex: _avatarIndex,
-          );
+    final result = await _persistProfile();
     if (!mounted) return;
+    if (result.ok) {
+      _markCurrentValuesAsSaved();
+    }
     setState(() => _saving = false);
     _showSnack(result.message, ok: result.ok);
   }
@@ -640,7 +698,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final unlockedCount = unlockedAvatarCount(user.stars);
         final avatar =
             avatarCatalog[user.avatarIndex.clamp(0, avatarCatalog.length - 1)];
-        final primary = Theme.of(context).colorScheme.primary;
+        // final primary = Theme.of(context).colorScheme.primary;
+        final profileHeaderColor = widget.controller.accentColor;
 
         return Scaffold(
           appBar: AppBar(
@@ -657,14 +716,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Ink(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          tint(shiftHue(primary, -8), 0.15),
-                          tint(shiftHue(primary, 22), 0.18),
-                        ],
-                      ),
+                      color: profileHeaderColor,
                     ),
                     child: Row(
                       children: [
@@ -766,7 +818,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         NebulaTextField(
                           controller: _nameController,
                           label: 'Como te llamas?',
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) {
+                            setState(() {});
+                            _scheduleAutoSave();
+                          },
                         ),
                         if (!_isChildPortal) ...[
                           const SizedBox(height: 12),
@@ -781,6 +836,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 _usernameValid =
                                     _usernameFormatValid ? null : false;
                               });
+                              _scheduleAutoSave();
                             },
                           ),
                         ],
@@ -824,7 +880,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             final selected = index == _avatarIndex;
                             return InkWell(
                               onTap: unlocked
-                                  ? () => setState(() => _avatarIndex = index)
+                                  ? () {
+                                      setState(() => _avatarIndex = index);
+                                      _scheduleAutoSave(
+                                        delay: Duration.zero,
+                                      );
+                                    }
                                   : null,
                               borderRadius: BorderRadius.circular(16),
                               child: Ink(
@@ -916,9 +977,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
                 const SizedBox(height: 12),
-                NebulaPrimaryButton(
-                  text: _saving ? 'Guardando...' : 'Guardar cambios!',
-                  onPressed: _canSaveProfile ? _saveProfile : null,
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _canSaveProfile ? _saveProfile : null,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      backgroundColor: profileHeaderColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          profileHeaderColor.withValues(alpha: 0.45),
+                      disabledForegroundColor: Colors.white70,
+                      elevation: _canSaveProfile ? 2.5 : 0,
+                      shadowColor: profileHeaderColor.withValues(alpha: 0.30),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: Text(
+                      _saving ? 'Guardando...' : 'Guardar cambios!',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
                 ),
                 if (!_isChildPortal) ...[
                   const SizedBox(height: 12),

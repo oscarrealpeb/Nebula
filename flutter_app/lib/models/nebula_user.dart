@@ -118,6 +118,7 @@ class GameSessionRecord {
     required this.pointsEarned,
     this.correctAnswers = 0,
     this.totalAttempts = 0,
+    this.perfectRounds = 0,
   });
 
   final String id;
@@ -131,6 +132,7 @@ class GameSessionRecord {
   final int pointsEarned;
   final int correctAnswers;
   final int totalAttempts;
+  final int perfectRounds;
 
   Map<String, dynamic> toJson() {
     return {
@@ -145,6 +147,7 @@ class GameSessionRecord {
       'pointsEarned': pointsEarned,
       'correctAnswers': correctAnswers,
       'totalAttempts': totalAttempts,
+      'perfectRounds': perfectRounds,
     };
   }
 
@@ -161,6 +164,7 @@ class GameSessionRecord {
       pointsEarned: (json['pointsEarned'] as num?)?.toInt() ?? 0,
       correctAnswers: (json['correctAnswers'] as num?)?.toInt() ?? 0,
       totalAttempts: (json['totalAttempts'] as num?)?.toInt() ?? 0,
+      perfectRounds: (json['perfectRounds'] as num?)?.toInt() ?? 0,
     );
   }
 }

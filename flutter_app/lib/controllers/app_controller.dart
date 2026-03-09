@@ -166,6 +166,35 @@ class AppController extends ChangeNotifier {
 
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
       _currentUser?.gameSessions ?? const <GameSessionRecord>[]);
+
+  int maxUnlockedDifficultyByPerfectRounds({
+    required String gameKey,
+    int easyToMediumPerfectRounds = 15,
+    int mediumToHardPerfectRounds = 20,
+  }) {
+    final normalizedKey = gameKey.trim().toLowerCase();
+    if (normalizedKey.isEmpty) return 1;
+    final safeEasyTarget = easyToMediumPerfectRounds.clamp(1, 100000).toInt();
+    final safeMediumTarget =
+        mediumToHardPerfectRounds.clamp(1, 100000).toInt();
+
+    var easyPerfectRounds = 0;
+    var mediumPerfectRounds = 0;
+    for (final session in gameSessions) {
+      if (session.gameKey.trim().toLowerCase() != normalizedKey) continue;
+      final safePerfectRounds = session.perfectRounds.clamp(0, 500).toInt();
+      if (session.difficultyStars <= 1) {
+        easyPerfectRounds += safePerfectRounds;
+      } else if (session.difficultyStars == 2) {
+        mediumPerfectRounds += safePerfectRounds;
+      }
+    }
+
+    if (easyPerfectRounds < safeEasyTarget) return 1;
+    if (mediumPerfectRounds < safeMediumTarget) return 2;
+    return 3;
+  }
+
   ParentalControl get parentalControl =>
       _currentUser?.parentalControl ?? const ParentalControl();
   String get selectedNarratorId {
@@ -189,9 +218,9 @@ class AppController extends ChangeNotifier {
   double get currentAccentIntensity {
     final child = childProfile;
     if (child != null) {
-      return child.accentIntensity.clamp(0.72, 1.0).toDouble();
+      return child.accentIntensity.clamp(0.65, 1.0).toDouble();
     }
-    return (_currentUser?.accentIntensity ?? 0.55).clamp(0.72, 1.0).toDouble();
+    return (_currentUser?.accentIntensity ?? 0.55).clamp(0.65, 1.0).toDouble();
   }
 
   String get activeChildName {
@@ -221,7 +250,7 @@ class AppController extends ChangeNotifier {
   Color get accentColor {
     final hue = currentAccentHue;
     final intensity = currentAccentIntensity;
-    return HSVColor.fromAHSV(1, hue, 0.71, intensity).toColor();
+    return HSVColor.fromAHSV(1, hue, 0.60, intensity).toColor();
   }
 
   // Home UI token from merged branch; mapped to current dynamic accent.
@@ -1063,26 +1092,32 @@ class AppController extends ChangeNotifier {
 
   Future<void> addStars(int value) async {
     if (value == 0) return;
-    _starUpdateQueue = _starUpdateQueue.then((_) async {
-      final user = _currentUser;
-      if (user == null) return;
-      final previousStars = user.stars;
-      final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
-      final next = user.copyWith(stars: nextStars);
-      final previousPlanet = planetForStars(previousStars);
-      final nextPlanet = planetForStars(nextStars);
-      final previousIndex = planetLadder.indexOf(previousPlanet);
-      final nextIndex = planetLadder.indexOf(nextPlanet);
-      if (nextIndex > previousIndex) {
-        _pendingHomeLevelUpPlanetName = nextPlanet.name;
-      }
-      _currentUser = next;
-      notifyListeners();
-      final saved = await _authService.updateUser(next);
-      if (saved.ok && saved.data != null) {
-        _currentUser = saved.data;
+    _starUpdateQueue = _starUpdateQueue
+        .catchError((_) {})
+        .then((_) async {
+      try {
+        final user = _currentUser;
+        if (user == null) return;
+        final previousStars = user.stars;
+        final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
+        final next = user.copyWith(stars: nextStars);
+        final previousPlanet = planetForStars(previousStars);
+        final nextPlanet = planetForStars(nextStars);
+        final previousIndex = planetLadder.indexOf(previousPlanet);
+        final nextIndex = planetLadder.indexOf(nextPlanet);
+        if (nextIndex > previousIndex) {
+          _pendingHomeLevelUpPlanetName = nextPlanet.name;
+        }
+        _currentUser = next;
         notifyListeners();
-      }
+        final saved = await _authService
+            .updateUser(next)
+            .timeout(const Duration(seconds: 2));
+        if (saved.ok && saved.data != null) {
+          _currentUser = saved.data;
+          notifyListeners();
+        }
+      } catch (_) {}
     });
     await _starUpdateQueue;
   }
@@ -1141,7 +1176,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) return;
-    final safeIntensity = intensity.clamp(0.72, 1.0).toDouble();
+    final safeIntensity = intensity.clamp(0.65, 1.0).toDouble();
     final targetChildId = (childProfile?.id ?? '').trim();
     var next = user.copyWith(accentHue: hue, accentIntensity: safeIntensity);
     final active = childProfile;
@@ -1384,6 +1419,7 @@ class AppController extends ChangeNotifier {
     required int pointsEarned,
     int correctAnswers = 0,
     int totalAttempts = 0,
+    int perfectRounds = 0,
   }) async {
     final user = _currentUser;
     if (user == null) return;
@@ -1402,6 +1438,7 @@ class AppController extends ChangeNotifier {
       pointsEarned: pointsEarned.clamp(0, 1000000),
       correctAnswers: correctAnswers.clamp(0, 500),
       totalAttempts: totalAttempts.clamp(0, 1000),
+      perfectRounds: perfectRounds.clamp(0, 500),
     );
     final nextSessions = <GameSessionRecord>[
       ...user.gameSessions,

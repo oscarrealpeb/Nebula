@@ -15,6 +15,7 @@ import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
 import 'portal_entry_screen.dart';
+import 'settings/profile_screen.dart';
 import 'settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -83,7 +84,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final allowed = await _guardGameAccess(context, gameKey: gameKey);
     if (!context.mounted || !allowed) return;
 
-    final stars = await showStarDifficultySheet(context);
+    int maxEnabledStars;
+    switch (gameKey) {
+      case 'descubre_emocion':
+      case 'conecta_sonidos':
+        try {
+          maxEnabledStars = widget.controller.maxUnlockedDifficultyByPerfectRounds(
+            gameKey: gameKey,
+          );
+        } catch (_) {
+          maxEnabledStars = 1;
+        }
+        break;
+      default:
+        maxEnabledStars = 3;
+    }
+
+    final stars = await showStarDifficultySheet(
+      context,
+      maxEnabledStars: maxEnabledStars,
+    );
     if (!context.mounted || stars == null) return;
 
     Widget screen;
@@ -369,6 +389,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               },
+              onAvatarTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ProfileScreen(
+                      controller: widget.controller,
+                      showSecurity: false,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 14),
             const _SectionHeader(
@@ -511,6 +541,7 @@ class _WelcomeStatusCard extends StatelessWidget {
     required this.progress,
     required this.remaining,
     required this.onPlanetTap,
+    required this.onAvatarTap,
     required this.accentColor,
   });
 
@@ -522,6 +553,7 @@ class _WelcomeStatusCard extends StatelessWidget {
   final double progress;
   final int remaining;
   final VoidCallback onPlanetTap;
+  final VoidCallback onAvatarTap;
   final Color accentColor;
 
   @override
@@ -538,12 +570,16 @@ class _WelcomeStatusCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    avatar,
-                    style: const TextStyle(fontSize: 24),
+                InkWell(
+                  borderRadius: BorderRadius.circular(28),
+                  onTap: onAvatarTap,
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      avatar,
+                      style: const TextStyle(fontSize: 24),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),

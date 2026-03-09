@@ -102,20 +102,21 @@ int starsToNextPlanet(int stars) {
 }
 
 int unlockedAvatarCount(int stars) {
-  final currentPlanet = planetForStars(stars);
-  final index = planetLadder.indexOf(currentPlanet);
+  final completedLevels = planetLadder
+      .where((planet) => stars >= planet.maxStars)
+      .length;
 
   int count = 3; // empieza con 3
 
-  if (index <= 6) {
+  if (completedLevels <= 7) {
     // Mercurio hasta Urano -> +1 por nivel
-    count += (index + 1);
+    count += completedLevels;
   } else {
     // Primero sumamos los 7 niveles que daban 1 cada uno
     count += 7;
 
     // Desde Neptuno en adelante -> +2 por nivel
-    final extraLevels = index - 6;
+    final extraLevels = completedLevels - 7;
     count += extraLevels * 2;
   }
 
@@ -126,6 +127,7 @@ int unlockedAvatarCount(int stars) {
 
 List<String> avatarsUnlockedAtLevel(int levelIndex) {
   if (levelIndex < 0) return [];
+  if (levelIndex >= planetLadder.length) return [];
 
   int previousCount;
   int currentCount;
@@ -134,12 +136,12 @@ List<String> avatarsUnlockedAtLevel(int levelIndex) {
     previousCount = 3;
   } else {
     previousCount = unlockedAvatarCount(
-      planetLadder[levelIndex - 1].minStars,
+      planetLadder[levelIndex - 1].maxStars,
     );
   }
 
   currentCount = unlockedAvatarCount(
-    planetLadder[levelIndex].minStars,
+    planetLadder[levelIndex].maxStars,
   );
 
   return avatarCatalog.sublist(
