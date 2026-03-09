@@ -45,6 +45,10 @@ flutter:
     - assets/images/conecta/
     - assets/images/planets/
     - assets/sounds/
+    - assets/images/cards/animales/
+    - assets/images/cards/frutas/
+    - assets/images/cards/instrumentos/
+    - assets/images/cards/transporte/
 
 flutter_launcher_icons:
   android: true
