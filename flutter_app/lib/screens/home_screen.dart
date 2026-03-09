@@ -30,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _checkedChildProfile = false;
   bool _levelUpDialogCheckQueued = false;
   bool _levelUpDialogVisible = false;
+  bool _achievementDialogCheckQueued = false;
+  bool _achievementDialogVisible = false;
   static const double _levelUpDialogHeight = 520; // editable
   static const double _levelUpDialogMaxWidth = 360; // editable
 
@@ -248,11 +250,73 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _schedulePendingAchievementDialogCheck() {
+    if (!mounted ||
+        _achievementDialogVisible ||
+        _achievementDialogCheckQueued) {
+      return;
+    }
+    _achievementDialogCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _achievementDialogCheckQueued = false;
+      if (!mounted || _achievementDialogVisible || _levelUpDialogVisible) {
+        return;
+      }
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? false;
+      if (!isCurrentRoute) return;
+      final unlocked = widget.controller.consumePendingAchievementUnlocks();
+      if (unlocked.isEmpty) return;
+      _achievementDialogVisible = true;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            unlocked.length == 1
+                ? '¡Nuevo logro desbloqueado!'
+                : '¡Nuevos logros desbloqueados!',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: unlocked.take(4).map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Icon(item.icon, color: item.iconColor),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      );
+      _achievementDialogVisible = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
     _schedulePendingLevelUpDialogCheck();
+    _schedulePendingAchievementDialogCheck();
 
     final descubreLabel = widget.controller.gameLabelForKey('descubre_emocion');
     final conectaLabel = widget.controller.gameLabelForKey('conecta_sonidos');

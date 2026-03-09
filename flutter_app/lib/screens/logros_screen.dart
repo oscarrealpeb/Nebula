@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../controllers/app_controller.dart';
+import '../core/data/achievement_catalog.dart';
 import 'planet_ladder_screen.dart';
 
 class LogrosScreen extends StatelessWidget {
@@ -11,8 +13,11 @@ class LogrosScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
-
     final accent = controller.accentColor;
+    final unlocked = user.unlockedAchievementIds.toSet();
+    final unlockedCount = achievementCatalog
+        .where((achievement) => unlocked.contains(achievement.id))
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -20,6 +25,32 @@ class LogrosScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.emoji_events_rounded,
+                      color: accent,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Desbloqueados: $unlockedCount de ${achievementCatalog.length}',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(18),
@@ -27,24 +58,20 @@ class LogrosScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
-                childAspectRatio: 0.85,
+                childAspectRatio: 0.86,
               ),
-              itemCount: achievements.length,
+              itemCount: achievementCatalog.length,
               itemBuilder: (context, index) {
-                final achievement = achievements[index];
-
-                final unlocked = user.stars >= achievement.requiredStars;
-
+                final achievement = achievementCatalog[index];
+                final isUnlocked = unlocked.contains(achievement.id);
                 return _AchievementCard(
                   achievement: achievement,
-                  unlocked: unlocked,
+                  unlocked: isUnlocked,
                   accent: accent,
                 );
               },
             ),
           ),
-
-          /// BOTONES INFERIORES
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
@@ -61,14 +88,14 @@ class LogrosScreen extends StatelessWidget {
                     );
                   },
                   child: _BottomTabButton(
-                    label: "Planetas",
+                    label: 'Planetas',
                     selected: false,
                     color: accent,
                   ),
                 ),
                 const SizedBox(width: 12),
                 _BottomTabButton(
-                  label: "Logros",
+                  label: 'Logros',
                   selected: true,
                   color: accent,
                 ),
@@ -81,125 +108,6 @@ class LogrosScreen extends StatelessWidget {
   }
 }
 
-/// MODELO SIMPLE
-class Achievement {
-  final String title;
-  final String description;
-  final int requiredStars;
-
-  Achievement({
-    required this.title,
-    required this.description,
-    required this.requiredStars,
-  });
-}
-
-/// LISTA DE 20 LOGROS
-final List<Achievement> achievements = [
-
-  Achievement(
-    title: "Primer Paso",
-    description: "Completa tu primera actividad.",
-    requiredStars: 50,
-  ),
-  Achievement(
-    title: "Explorador Curioso",
-    description: "Descubre 5 cartas nuevas.",
-    requiredStars: 150,
-  ),
-  Achievement(
-    title: "Concentración Nivel 1",
-    description: "Mantente enfocado en una actividad completa.",
-    requiredStars: 250,
-  ),
-  Achievement(
-    title: "Amigo de los Animales",
-    description: "Desbloquea 3 cartas de animales.",
-    requiredStars: 400,
-  ),
-  Achievement(
-    title: "Valiente",
-    description: "Intenta una actividad nueva.",
-    requiredStars: 600,
-  ),
-  Achievement(
-    title: "Memoria Activa",
-    description: "Completa 3 actividades seguidas sin errores.",
-    requiredStars: 800,
-  ),
-  Achievement(
-    title: "Observador Estelar",
-    description: "Explora un planeta completo.",
-    requiredStars: 1200,
-  ),
-  Achievement(
-    title: "Comunicación Pro",
-    description: "Usa correctamente 5 cartas de comunicación.",
-    requiredStars: 1500,
-  ),
-  Achievement(
-    title: "Maestro del Juego",
-    description: "Completa 10 actividades.",
-    requiredStars: 1800,
-  ),
-  Achievement(
-    title: "Control Emocional",
-    description: "Termina una actividad difícil con calma.",
-    requiredStars: 2100,
-  ),
-  Achievement(
-    title: "Pensador Lógico",
-    description: "Resuelve 5 actividades de secuencia.",
-    requiredStars: 2500,
-  ),
-  Achievement(
-    title: "Gran Explorador",
-    description: "Viaja a un nuevo planeta.",
-    requiredStars: 3000,
-  ),
-  Achievement(
-    title: "Atención Máxima",
-    description: "Mantente concentrado durante 10 minutos.",
-    requiredStars: 3500,
-  ),
-  Achievement(
-    title: "Super Memoria",
-    description: "Completa una actividad avanzada.",
-    requiredStars: 4000,
-  ),
-  Achievement(
-    title: "Coleccionista",
-    description: "Desbloquea 10 cartas.",
-    requiredStars: 4500,
-  ),
-  Achievement(
-    title: "Pensamiento Flexible",
-    description: "Resuelve una actividad con más de una solución.",
-    requiredStars: 5000,
-  ),
-  Achievement(
-    title: "Explorador Galáctico",
-    description: "Completa 5 planetas.",
-    requiredStars: 6000,
-  ),
-  Achievement(
-    title: "Comunicación Estrella",
-    description: "Usa correctamente 10 cartas sociales.",
-    requiredStars: 6500,
-  ),
-  Achievement(
-    title: "Constancia Total",
-    description: "Juega durante 7 días seguidos.",
-    requiredStars: 7500,
-  ),
-  Achievement(
-    title: "Campeón del Universo",
-    description: "Alcanza el máximo nivel.",
-    requiredStars: 9000,
-  ),
-];
-
-/// CARD
 class _AchievementCard extends StatelessWidget {
   const _AchievementCard({
     required this.achievement,
@@ -207,18 +115,22 @@ class _AchievementCard extends StatelessWidget {
     required this.accent,
   });
 
-  final Achievement achievement;
+  final AchievementDefinition achievement;
   final bool unlocked;
   final Color accent;
 
   @override
   Widget build(BuildContext context) {
+    final tone = unlocked ? achievement.iconColor : Colors.grey.shade500;
+
     return Card(
-      color: unlocked ? accent.withOpacity(0.08) : Colors.white,
+      color: unlocked
+          ? achievement.iconColor.withValues(alpha: 0.09)
+          : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: unlocked ? accent : Colors.grey,
+          color: unlocked ? achievement.iconColor : Colors.grey.shade400,
           width: 1.5,
         ),
       ),
@@ -228,9 +140,9 @@ class _AchievementCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.emoji_events,
+              achievement.icon,
               size: 40,
-              color: unlocked ? accent : Colors.grey,
+              color: tone,
             ),
             const SizedBox(height: 10),
             Text(
@@ -239,7 +151,7 @@ class _AchievementCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: unlocked ? Colors.black : Colors.grey,
+                color: unlocked ? Colors.black : Colors.grey.shade700,
               ),
             ),
             const SizedBox(height: 6),
@@ -251,6 +163,24 @@ class _AchievementCard extends StatelessWidget {
                 color: unlocked ? Colors.black87 : Colors.grey,
               ),
             ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: unlocked
+                    ? achievement.iconColor.withValues(alpha: 0.16)
+                    : Colors.grey.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                unlocked ? 'Desbloqueado' : 'Bloqueado',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: unlocked ? Colors.black87 : Colors.grey.shade700,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -258,7 +188,6 @@ class _AchievementCard extends StatelessWidget {
   }
 }
 
-/// BOTÓN INFERIOR
 class _BottomTabButton extends StatelessWidget {
   const _BottomTabButton({
     required this.label,
@@ -279,7 +208,7 @@ class _BottomTabButton extends StatelessWidget {
         minHeight: 50,
       ),
       decoration: BoxDecoration(
-        color: selected ? color : color.withOpacity(0.2),
+        color: selected ? color : color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/admin_dashboard_models.dart';
+import '../core/data/achievement_catalog.dart';
 import '../core/data/skill_catalog.dart';
 import '../models/app_admin_config.dart';
 import '../models/game_content_config.dart';
@@ -56,6 +57,7 @@ class AppController extends ChangeNotifier {
   StreamSubscription<bool>? _connectivitySub;
   Future<void> _starUpdateQueue = Future<void>.value();
   String? _pendingHomeLevelUpPlanetName;
+  final List<String> _pendingAchievementUnlockIds = <String>[];
 
   static Future<AppController> bootstrap({
     bool firebaseEnabled = false,
@@ -90,6 +92,10 @@ class AppController extends ChangeNotifier {
     if (contentResult.data != null) {
       controller._gameContentConfig = contentResult.data!;
     }
+    await controller._syncAchievementsFromProgress(
+      queueNotification: false,
+      notifyUi: false,
+    );
     await controller._runThemeMigrationIfNeeded();
     await controller.refreshOnlineStatus();
     controller._connectivitySub =
@@ -162,6 +168,28 @@ class AppController extends ChangeNotifier {
     final value = _pendingHomeLevelUpPlanetName;
     _pendingHomeLevelUpPlanetName = null;
     return value;
+  }
+
+  List<AchievementDefinition> consumePendingAchievementUnlocks() {
+    if (_pendingAchievementUnlockIds.isEmpty) {
+      return const <AchievementDefinition>[];
+    }
+    final ids = List<String>.from(_pendingAchievementUnlockIds);
+    _pendingAchievementUnlockIds.clear();
+    final result = <AchievementDefinition>[];
+    for (final id in ids) {
+      final definition = achievementById(id);
+      if (definition != null) {
+        result.add(definition);
+      }
+    }
+    return result;
+  }
+
+  bool isAchievementUnlocked(String achievementId) {
+    final user = _currentUser;
+    if (user == null) return false;
+    return user.unlockedAchievementIds.any((id) => id == achievementId);
   }
 
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
@@ -253,6 +281,10 @@ class AppController extends ChangeNotifier {
         requestedChildId: '',
       );
       _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await _syncAchievementsFromProgress(
+        queueNotification: false,
+        notifyUi: false,
+      );
       await reloadGameContentConfig(notify: false);
       notifyListeners();
     }
@@ -285,6 +317,10 @@ class AppController extends ChangeNotifier {
       requestedChildId: '',
     );
     _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+    await _syncAchievementsFromProgress(
+      queueNotification: false,
+      notifyUi: false,
+    );
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
     notifyListeners();
@@ -316,6 +352,10 @@ class AppController extends ChangeNotifier {
       requestedChildId: '',
     );
     _needsPortalSelection = false;
+    await _syncAchievementsFromProgress(
+      queueNotification: false,
+      notifyUi: false,
+    );
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
     await reloadAdminDashboard(notify: false);
@@ -352,6 +392,10 @@ class AppController extends ChangeNotifier {
         requestedChildId: '',
       );
       _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await _syncAchievementsFromProgress(
+        queueNotification: false,
+        notifyUi: false,
+      );
       await reloadAppAdminConfig(notify: false);
       await reloadGameContentConfig(notify: false);
       notifyListeners();
@@ -375,6 +419,10 @@ class AppController extends ChangeNotifier {
         requestedChildId: '',
       );
       _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await _syncAchievementsFromProgress(
+        queueNotification: false,
+        notifyUi: false,
+      );
       await reloadAppAdminConfig(notify: false);
       await reloadGameContentConfig(notify: false);
       notifyListeners();
@@ -406,6 +454,10 @@ class AppController extends ChangeNotifier {
         requestedChildId: '',
       );
       _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await _syncAchievementsFromProgress(
+        queueNotification: false,
+        notifyUi: false,
+      );
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -429,6 +481,10 @@ class AppController extends ChangeNotifier {
         requestedChildId: '',
       );
       _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      await _syncAchievementsFromProgress(
+        queueNotification: false,
+        notifyUi: false,
+      );
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -1083,6 +1139,7 @@ class AppController extends ChangeNotifier {
         _currentUser = saved.data;
         notifyListeners();
       }
+      await _syncAchievementsFromProgress();
     });
     await _starUpdateQueue;
   }
@@ -1374,6 +1431,153 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: false, message: saved.message);
   }
 
+  Future<ActionResult> seedDemoChildForReports() async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    if (isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'El perfil demo solo está disponible para cuentas de cuidador.',
+      );
+    }
+
+    final now = DateTime.now();
+    final nowMillis = now.millisecondsSinceEpoch;
+    final demoChildId = 'child_${user.id}_demo_reports';
+    final existingProfiles = List<ChildProfile>.from(childProfiles);
+    final existingIndex =
+        existingProfiles.indexWhere((item) => item.id == demoChildId);
+
+    final birthDate = DateTime(now.year - 8, now.month, now.day);
+    final baseChild = existingIndex >= 0
+        ? existingProfiles[existingIndex]
+        : ChildProfile(
+            id: demoChildId,
+            name: 'Perfil demo',
+            createdAtMillis: nowMillis,
+            selectedNarratorId: user.selectedNarratorId,
+            soundEffectsEnabled: user.soundEffectsEnabled,
+            accentHue: user.accentHue,
+            accentIntensity: user.accentIntensity,
+          );
+
+    final demoChild = baseChild.copyWith(
+      id: demoChildId,
+      name: 'Perfil demo',
+      age: 8,
+      birthDateMillis: birthDate.millisecondsSinceEpoch,
+      active: true,
+      createdAtMillis:
+          baseChild.createdAtMillis > 0 ? baseChild.createdAtMillis : nowMillis,
+    );
+
+    if (existingIndex >= 0) {
+      existingProfiles[existingIndex] = demoChild;
+    } else {
+      existingProfiles.add(demoChild);
+    }
+
+    final keptSessions = user.gameSessions.where((session) {
+      final isDemoSession = session.id.startsWith('demo_session_');
+      return !(session.childId == demoChildId && isDemoSession);
+    }).toList();
+
+    final gameSeeds = <Map<String, dynamic>>[
+      {'key': 'descubre_emocion', 'accuracy': 0.90},
+      {'key': 'conecta_sonidos', 'accuracy': 0.76},
+      {'key': 'di_palabra', 'accuracy': 0.58},
+      {'key': 'explora_aprende', 'accuracy': 0.80},
+      {'key': 'cartas_gemelas', 'accuracy': 0.72},
+      {'key': 'que_sigue', 'accuracy': 0.63},
+      {'key': 'donde_va', 'accuracy': 0.68},
+      {'key': 'arma_imagen', 'accuracy': 0.84},
+    ];
+
+    final generated = <GameSessionRecord>[];
+    const totalSessions = 24;
+    for (var i = 0; i < totalSessions; i++) {
+      final seed = gameSeeds[i % gameSeeds.length];
+      final gameKey = (seed['key'] as String).trim();
+      final baseAccuracy = (seed['accuracy'] as double);
+      final jitter = ((i % 5) - 2) * 0.025;
+      final accuracy = (baseAccuracy + jitter).clamp(0.45, 0.97).toDouble();
+      final rounds = 8 + (i % 5);
+      final totalAttempts = rounds;
+      final correctAnswers = (rounds * accuracy).round().clamp(0, rounds);
+      final mistakes = (totalAttempts - correctAnswers).clamp(0, totalAttempts);
+      final durationSeconds = (rounds * 20) + (mistakes * 9) + (i % 33);
+
+      final startedAt = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        8 + ((i * 2) % 11),
+        (i * 11) % 60,
+      ).subtract(Duration(days: totalSessions - i));
+      final endedAt = startedAt.add(Duration(seconds: durationSeconds));
+
+      generated.add(
+        GameSessionRecord(
+          id: 'demo_session_${i + 1}',
+          gameKey: gameKey,
+          startedAtMillis: startedAt.millisecondsSinceEpoch,
+          endedAtMillis: endedAt.millisecondsSinceEpoch,
+          durationSeconds: durationSeconds,
+          difficultyStars: (1 + (i % 3)).clamp(1, 3),
+          rounds: rounds,
+          mistakes: mistakes,
+          pointsEarned: (correctAnswers * 12) - (mistakes * 2),
+          correctAnswers: correctAnswers,
+          totalAttempts: totalAttempts,
+          childId: demoChildId,
+        ),
+      );
+    }
+
+    final nextSessions = <GameSessionRecord>[
+      ...keptSessions,
+      ...generated,
+    ];
+    nextSessions.sort((a, b) => a.startedAtMillis.compareTo(b.startedAtMillis));
+    if (nextSessions.length > 1500) {
+      nextSessions.removeRange(0, nextSessions.length - 1500);
+    }
+
+    final next = user.copyWith(
+      childProfile: demoChild,
+      childProfiles: existingProfiles,
+      gameSessions: nextSessions,
+    );
+    final saved = await _authService.updateUser(next);
+    if (!saved.ok || saved.data == null) {
+      return ActionResult(
+        ok: false,
+        message: saved.message.trim().isEmpty
+            ? 'No se pudo crear el perfil de ejemplo.'
+            : saved.message,
+      );
+    }
+
+    _currentUser = saved.data;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: demoChild.id,
+    );
+    _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+    notifyListeners();
+    await _syncAchievementsFromProgress();
+
+    return ActionResult(
+      ok: true,
+      message: existingIndex >= 0
+          ? 'Perfil demo actualizado con datos de ejemplo.'
+          : 'Perfil demo creado con datos de ejemplo.',
+    );
+  }
+
   Future<void> recordGameSession({
     required String gameKey,
     required DateTime startedAt,
@@ -1384,12 +1588,16 @@ class AppController extends ChangeNotifier {
     required int pointsEarned,
     int correctAnswers = 0,
     int totalAttempts = 0,
+    String childId = '',
   }) async {
     final user = _currentUser;
     if (user == null) return;
     final safeEnd = endedAt.isBefore(startedAt) ? startedAt : endedAt;
     final duration =
         safeEnd.difference(startedAt).inSeconds.clamp(0, 24 * 3600);
+    final normalizedChildId = childId.trim().isNotEmpty
+        ? childId.trim()
+        : _activeChildProfileId.trim();
     final session = GameSessionRecord(
       id: 'sess_${DateTime.now().millisecondsSinceEpoch}',
       gameKey: gameKey.trim().isEmpty ? 'unknown_game' : gameKey.trim(),
@@ -1402,6 +1610,7 @@ class AppController extends ChangeNotifier {
       pointsEarned: pointsEarned.clamp(0, 1000000),
       correctAnswers: correctAnswers.clamp(0, 500),
       totalAttempts: totalAttempts.clamp(0, 1000),
+      childId: normalizedChildId,
     );
     final nextSessions = <GameSessionRecord>[
       ...user.gameSessions,
@@ -1416,6 +1625,7 @@ class AppController extends ChangeNotifier {
       _currentUser = saved.data;
       notifyListeners();
     }
+    await _syncAchievementsFromProgress();
   }
 
   ActionResult canLaunchGame(String gameKey) {
@@ -1480,8 +1690,11 @@ class AppController extends ChangeNotifier {
     return const ActionResult(ok: true, message: 'OK');
   }
 
-  int usedMinutesOn(DateTime day) {
-    final sessions = _currentUser?.gameSessions ?? const <GameSessionRecord>[];
+  int usedMinutesOn(
+    DateTime day, {
+    String childId = '',
+  }) {
+    final sessions = _sessionsForScope(childId: childId);
     var total = 0;
     for (final session in sessions) {
       final started =
@@ -1493,24 +1706,29 @@ class AppController extends ChangeNotifier {
     return total ~/ 60;
   }
 
-  List<GameSessionRecord> sessionsForLastDays(int days) {
-    final user = _currentUser;
-    if (user == null) return const <GameSessionRecord>[];
+  List<GameSessionRecord> sessionsForLastDays(
+    int days, {
+    String childId = '',
+  }) {
     final safeDays = days.clamp(1, 365);
     final from = DateTime.now().subtract(Duration(days: safeDays));
-    return user.gameSessions.where((session) {
+    final sessions = _sessionsForScope(childId: childId);
+    return sessions.where((session) {
       final started =
           DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
-      return started.isAfter(from);
+      return started.isAfter(from) || started.isAtSameMomentAs(from);
     }).toList();
   }
 
-  Map<int, int> usageMinutesByHour({int days = 14}) {
+  Map<int, int> usageMinutesByHour({
+    int days = 14,
+    String childId = '',
+  }) {
     final result = <int, int>{};
     for (var h = 0; h < 24; h++) {
       result[h] = 0;
     }
-    final sessions = sessionsForLastDays(days);
+    final sessions = sessionsForLastDays(days, childId: childId);
     for (final session in sessions) {
       final started =
           DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
@@ -1518,6 +1736,124 @@ class AppController extends ChangeNotifier {
       result[started.hour] = (result[started.hour] ?? 0) + minutes;
     }
     return result;
+  }
+
+  List<GameSessionRecord> _sessionsForScope({String childId = ''}) {
+    final user = _currentUser;
+    if (user == null) return const <GameSessionRecord>[];
+    final sessions = user.gameSessions;
+    final scopedChildId = _resolveMetricsChildId(childId);
+    if (scopedChildId.isEmpty) {
+      return sessions;
+    }
+    final includeUnassigned = _shouldIncludeUnassignedSessions(scopedChildId);
+    return sessions.where((session) {
+      final sessionChildId = session.childId.trim();
+      if (sessionChildId == scopedChildId) return true;
+      if (includeUnassigned && sessionChildId.isEmpty) return true;
+      return false;
+    }).toList();
+  }
+
+  String _resolveMetricsChildId(String explicitChildId) {
+    final normalized = explicitChildId.trim();
+    if (normalized.isNotEmpty) return normalized;
+    if (isAdmin) return '';
+    return _activeChildProfileId.trim();
+  }
+
+  bool _shouldIncludeUnassignedSessions(String childId) {
+    final children = childProfiles;
+    if (children.length != 1) return false;
+    return children.first.id == childId;
+  }
+
+  Future<void> _syncAchievementsFromProgress({
+    bool queueNotification = true,
+    bool notifyUi = true,
+  }) async {
+    final user = _currentUser;
+    if (user == null) return;
+
+    final unlocked = user.unlockedAchievementIds
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+    final sessions = user.gameSessions;
+
+    final sessionsByGame = <String, int>{};
+    var perfectSessions = 0;
+    var totalMinutes = 0;
+    for (final session in sessions) {
+      final key = session.gameKey.trim().toLowerCase();
+      if (key.isNotEmpty) {
+        sessionsByGame[key] = (sessionsByGame[key] ?? 0) + 1;
+      }
+      final rounds = session.rounds.clamp(0, 10000);
+      final mistakes = session.mistakes.clamp(0, 10000);
+      if (rounds > 0 && mistakes == 0) {
+        perfectSessions += 1;
+      }
+      totalMinutes += (session.durationSeconds.clamp(0, 24 * 3600) ~/ 60);
+    }
+    final distinctGames = sessionsByGame.keys.length;
+
+    final newlyUnlocked = <String>[];
+    for (final achievement in achievementCatalog) {
+      if (unlocked.contains(achievement.id)) continue;
+      var reached = false;
+      switch (achievement.ruleType) {
+        case AchievementRuleType.totalStars:
+          reached = user.stars >= achievement.target;
+          break;
+        case AchievementRuleType.totalSessions:
+          reached = sessions.length >= achievement.target;
+          break;
+        case AchievementRuleType.distinctGames:
+          reached = distinctGames >= achievement.target;
+          break;
+        case AchievementRuleType.perfectSessions:
+          reached = perfectSessions >= achievement.target;
+          break;
+        case AchievementRuleType.totalMinutes:
+          reached = totalMinutes >= achievement.target;
+          break;
+        case AchievementRuleType.gameSessions:
+          final key = achievement.gameKey.trim().toLowerCase();
+          reached = (sessionsByGame[key] ?? 0) >= achievement.target;
+          break;
+      }
+      if (!reached) continue;
+      unlocked.add(achievement.id);
+      newlyUnlocked.add(achievement.id);
+    }
+
+    if (newlyUnlocked.isEmpty) return;
+
+    final ordered = achievementCatalog
+        .map((item) => item.id)
+        .where((id) => unlocked.contains(id))
+        .toList();
+    final updated = user.copyWith(unlockedAchievementIds: ordered);
+    _currentUser = updated;
+
+    if (queueNotification) {
+      for (final id in newlyUnlocked) {
+        if (_pendingAchievementUnlockIds.contains(id)) continue;
+        _pendingAchievementUnlockIds.add(id);
+      }
+    }
+    if (notifyUi) {
+      notifyListeners();
+    }
+
+    final saved = await _authService.updateUser(updated);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      if (notifyUi) {
+        notifyListeners();
+      }
+    }
   }
 
   // Usado solo por pruebas/manual.

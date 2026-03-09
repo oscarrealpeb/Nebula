@@ -118,6 +118,7 @@ class GameSessionRecord {
     required this.pointsEarned,
     this.correctAnswers = 0,
     this.totalAttempts = 0,
+    this.childId = '',
   });
 
   final String id;
@@ -131,6 +132,7 @@ class GameSessionRecord {
   final int pointsEarned;
   final int correctAnswers;
   final int totalAttempts;
+  final String childId;
 
   Map<String, dynamic> toJson() {
     return {
@@ -145,6 +147,7 @@ class GameSessionRecord {
       'pointsEarned': pointsEarned,
       'correctAnswers': correctAnswers,
       'totalAttempts': totalAttempts,
+      'childId': childId,
     };
   }
 
@@ -161,6 +164,7 @@ class GameSessionRecord {
       pointsEarned: (json['pointsEarned'] as num?)?.toInt() ?? 0,
       correctAnswers: (json['correctAnswers'] as num?)?.toInt() ?? 0,
       totalAttempts: (json['totalAttempts'] as num?)?.toInt() ?? 0,
+      childId: (json['childId'] as String?) ?? '',
     );
   }
 }
@@ -240,6 +244,7 @@ class NebulaUser {
     this.childProfiles = const [],
     this.gameSessions = const [],
     this.parentalControl = const ParentalControl(),
+    this.unlockedAchievementIds = const [],
   });
 
   final String id;
@@ -260,6 +265,7 @@ class NebulaUser {
   final List<ChildProfile> childProfiles;
   final List<GameSessionRecord> gameSessions;
   final ParentalControl parentalControl;
+  final List<String> unlockedAchievementIds;
 
   NebulaUser copyWith({
     String? name,
@@ -280,6 +286,7 @@ class NebulaUser {
     List<ChildProfile>? childProfiles,
     List<GameSessionRecord>? gameSessions,
     ParentalControl? parentalControl,
+    List<String>? unlockedAchievementIds,
   }) {
     return NebulaUser(
       id: id,
@@ -301,6 +308,8 @@ class NebulaUser {
       childProfiles: childProfiles ?? this.childProfiles,
       gameSessions: gameSessions ?? this.gameSessions,
       parentalControl: parentalControl ?? this.parentalControl,
+      unlockedAchievementIds:
+          unlockedAchievementIds ?? this.unlockedAchievementIds,
     );
   }
 
@@ -324,6 +333,7 @@ class NebulaUser {
       'childProfiles': childProfiles.map((item) => item.toJson()).toList(),
       'gameSessions': gameSessions.map((item) => item.toJson()).toList(),
       'parentalControl': parentalControl.toJson(),
+      'unlockedAchievementIds': unlockedAchievementIds,
     };
   }
 
@@ -381,6 +391,9 @@ class NebulaUser {
               Map<String, dynamic>.from(json['parentalControl'] as Map),
             )
           : const ParentalControl(),
+      unlockedAchievementIds: List<String>.from(
+        json['unlockedAchievementIds'] as List? ?? const <String>[],
+      ),
     );
   }
 }

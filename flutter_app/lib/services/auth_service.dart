@@ -1770,6 +1770,7 @@ class AuthService {
           childProfiles: localUser.childProfiles,
           gameSessions: localUser.gameSessions,
           parentalControl: localUser.parentalControl,
+          unlockedAchievementIds: localUser.unlockedAchievementIds,
         );
 
         final nextUsers = users
@@ -1914,6 +1915,9 @@ class AuthService {
                   Map<String, dynamic>.from(cloud!['parentalControl'] as Map),
                 )
               : const ParentalControl(),
+          unlockedAchievementIds: List<String>.from(
+            cloud?['unlockedAchievementIds'] as List? ?? const <String>[],
+          ),
         );
         await _upsertLocal(newUser);
         signedUser = newUser;
@@ -2814,6 +2818,7 @@ class AuthService {
         childProfiles: localUser.childProfiles,
         gameSessions: localUser.gameSessions,
         parentalControl: localUser.parentalControl,
+        unlockedAchievementIds: localUser.unlockedAchievementIds,
       );
 
       final nextUsers = users
@@ -3008,6 +3013,9 @@ class AuthService {
                 Map<String, dynamic>.from(cloud!['parentalControl'] as Map),
               )
             : const ParentalControl(),
+        unlockedAchievementIds: List<String>.from(
+          cloud?['unlockedAchievementIds'] as List? ?? const <String>[],
+        ),
       );
 
       await _upsertLocal(restored);
@@ -3672,6 +3680,7 @@ class AuthService {
       childProfiles: user.childProfiles,
       gameSessions: user.gameSessions,
       parentalControl: user.parentalControl,
+      unlockedAchievementIds: user.unlockedAchievementIds,
     );
   }
 
@@ -3697,6 +3706,7 @@ class AuthService {
       'childProfiles': user.childProfiles.map((item) => item.toJson()).toList(),
       'gameSessions': user.gameSessions.map((item) => item.toJson()).toList(),
       'parentalControl': user.parentalControl.toJson(),
+      'unlockedAchievementIds': user.unlockedAchievementIds,
     };
   }
 

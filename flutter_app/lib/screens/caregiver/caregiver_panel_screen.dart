@@ -14,6 +14,7 @@ import '../child_profile_setup_screen.dart';
 import '../portal_entry_screen.dart';
 import '../settings/personalization_screen.dart';
 import '../welcome_screen.dart';
+import 'report_pdf_preview_screen.dart';
 
 String _roleLabel(String role) {
   switch (role.trim().toLowerCase()) {
@@ -597,10 +598,19 @@ class _ReportsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = controller.sessionsForLastDays(30);
-    final dayData = _dailyMinutes(controller);
-    final hourly = controller.usageMinutesByHour(days: 14);
+    final activeChildId = controller.childProfile?.id.trim() ?? '';
+    final sessions = controller.sessionsForLastDays(30, childId: activeChildId);
+    final dayData = _dailyMinutes(controller, childId: activeChildId);
+    final hourly =
+        controller.usageMinutesByHour(days: 14, childId: activeChildId);
     final skillData = _skillScores(sessions);
+    final pdfData = _buildPdfData(
+      controller: controller,
+      sessions: sessions,
+      dayData: dayData,
+      hourly: hourly,
+      skillData: skillData,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -609,7 +619,52 @@ class _ReportsTab extends StatelessWidget {
           controller: controller,
           onChildChanged: onChildContextChanged,
           note:
-              'Por ahora, las métricas se calculan a nivel cuenta. El PDF por niño se habilitará en una siguiente fase.',
+              'Las métricas de esta vista se calculan para el niño seleccionado.',
+        ),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Datos de ejemplo',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Crea un perfil demo con sesiones simuladas para previsualizar reportes.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final result = await controller.seedDemoChildForReports();
+                      if (result.ok) {
+                        final demoChildId = controller.activeChildProfileId;
+                        if (demoChildId.trim().isNotEmpty) {
+                          await onChildContextChanged(demoChildId);
+                        }
+                      }
+                      if (!context.mounted) return;
+                      await NebulaSnack.show(
+                        context,
+                        message: result.message,
+                        ok: result.ok,
+                      );
+                    },
+                    icon: const Icon(Icons.science_outlined),
+                    label: const Text('Cargar perfil demo'),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 10),
         Card(
@@ -627,22 +682,22 @@ class _ReportsTab extends StatelessWidget {
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
+                  child: ElevatedButton.icon(
                     onPressed: () {
-                      final childName =
-                          controller.childProfile?.name.trim() ?? '';
-                      final target =
-                          childName.isEmpty ? 'el perfil activo' : childName;
-                      NebulaSnack.show(
-                        context,
-                        message:
-                            'La exportación PDF para $target estará disponible pronto.',
-                        ok: true,
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReportPdfPreviewScreen(data: pdfData),
+                        ),
                       );
                     },
                     icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('Exportar PDF'),
+                    label: const Text('Vista previa y exportación PDF'),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Desde la vista previa puedes guardar o compartir el PDF.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -801,16 +856,90 @@ class _ReportsTab extends StatelessWidget {
     );
   }
 
-  Map<String, int> _dailyMinutes(AppController controller) {
+  Map<String, int> _dailyMinutes(
+    AppController controller, {
+    String childId = '',
+  }) {
     final now = DateTime.now();
     final result = <String, int>{};
     for (var i = 6; i >= 0; i--) {
       final day =
           DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
       final key = '${day.day}/${day.month}';
-      result[key] = controller.usedMinutesOn(day);
+      result[key] = controller.usedMinutesOn(day, childId: childId);
     }
     return result;
+  }
+
+  ChildReportPdfData _buildPdfData({
+    required AppController controller,
+    required List<GameSessionRecord> sessions,
+    required Map<String, int> dayData,
+    required Map<int, int> hourly,
+    required Map<String, (double, int)> skillData,
+  }) {
+    final childName = controller.childProfile?.name.trim() ?? '';
+    final caregiverName = controller.currentUser?.name.trim() ?? '';
+    final activeChildId = controller.childProfile?.id.trim() ?? '';
+    const periodDays = 30;
+
+    final currentFrom =
+        DateTime.now().subtract(const Duration(days: periodDays));
+    final previousFrom =
+        DateTime.now().subtract(const Duration(days: periodDays * 2));
+    final trailingSessions =
+        controller.sessionsForLastDays(periodDays * 2, childId: activeChildId);
+    final previousSessions = trailingSessions.where((session) {
+      final started =
+          DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
+      final inPreviousWindow = (started.isAfter(previousFrom) ||
+              started.isAtSameMomentAs(previousFrom)) &&
+          started.isBefore(currentFrom);
+      return inPreviousWindow;
+    }).toList();
+
+    final previousSkillData = _skillScores(previousSessions);
+    final errorRateBySkill = _errorRateBySkill(sessions);
+    final allSkillIds = <String>{...skillData.keys};
+
+    final skillRows = allSkillIds.map((skillId) {
+      final skill = skillById(skillId);
+      final current = skillData[skillId];
+      final previous = previousSkillData[skillId];
+      return ReportSkillMetric(
+        id: skillId,
+        title: skill?.title ?? skillId,
+        score: current?.$1 ?? 0.0,
+        previousScore: previous?.$1 ?? -1.0,
+        evidenceSessions: current?.$2 ?? 0,
+        errorRatePercent: errorRateBySkill[skillId] ?? 0.0,
+      );
+    }).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    final sortedSessions = List<GameSessionRecord>.from(sessions)
+      ..sort((a, b) => b.startedAtMillis.compareTo(a.startedAtMillis));
+    final sessionRows = sortedSessions.map((session) {
+      return ReportSessionEntry(
+        gameLabel: controller.gameLabelForKey(session.gameKey),
+        startedAtMillis: session.startedAtMillis,
+        durationMinutes: session.durationSeconds ~/ 60,
+        correctAnswers: session.correctAnswers,
+        totalAttempts: session.totalAttempts,
+        mistakes: session.mistakes,
+      );
+    }).toList();
+
+    return ChildReportPdfData(
+      caregiverName: caregiverName.isEmpty ? 'Cuidador' : caregiverName,
+      childName: childName.isEmpty ? 'Niño' : childName,
+      generatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      periodDays: periodDays,
+      dailyMinutes: dayData,
+      hourlyMinutes: hourly,
+      skills: skillRows,
+      sessions: sessionRows,
+    );
   }
 
   Map<String, (double, int)> _skillScores(List<GameSessionRecord> sessions) {
@@ -846,6 +975,39 @@ class _ReportsTab extends StatelessWidget {
     });
     return result;
   }
+
+  Map<String, double> _errorRateBySkill(List<GameSessionRecord> sessions) {
+    final attemptsBySkill = <String, int>{};
+    final mistakesBySkill = <String, int>{};
+
+    for (final session in sessions) {
+      final skillIds = gameToSkillIds[session.gameKey] ?? const <String>[];
+      if (skillIds.isEmpty) continue;
+
+      final attempts =
+          (session.totalAttempts > 0 ? session.totalAttempts : session.rounds)
+              .clamp(0, 10000);
+      final mistakes = session.mistakes.clamp(0, 10000);
+
+      for (final skillId in skillIds) {
+        attemptsBySkill[skillId] = (attemptsBySkill[skillId] ?? 0) + attempts;
+        mistakesBySkill[skillId] = (mistakesBySkill[skillId] ?? 0) + mistakes;
+      }
+    }
+
+    final result = <String, double>{};
+    for (final entry in attemptsBySkill.entries) {
+      final skillId = entry.key;
+      final attempts = entry.value;
+      final mistakes = mistakesBySkill[skillId] ?? 0;
+      if (attempts <= 0) {
+        result[skillId] = 0;
+      } else {
+        result[skillId] = ((mistakes * 100.0) / attempts).clamp(0.0, 100.0);
+      }
+    }
+    return result;
+  }
 }
 
 class _SkillsTab extends StatelessWidget {
@@ -866,7 +1028,7 @@ class _SkillsTab extends StatelessWidget {
           controller: controller,
           onChildChanged: onChildContextChanged,
           note:
-              'La descripcion de habilidades es comun; el contexto activo ayuda en la lectura de reportes.',
+              'La descripción de habilidades es común; el contexto activo ayuda en la lectura de reportes.',
         ),
         const SizedBox(height: 10),
         Card(
@@ -1037,8 +1199,7 @@ class _ControlTab extends StatelessWidget {
         _ChildContextCard(
           controller: controller,
           onChildChanged: onChildContextChanged,
-          note:
-              'El control parental actual se aplica a toda la cuenta del cuidador.',
+          note: 'El control parental se aplica al perfil de niño activo.',
         ),
         const SizedBox(height: 10),
         Card(
