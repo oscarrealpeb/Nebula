@@ -58,7 +58,7 @@ class LogrosScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
-                childAspectRatio: 0.86,
+                childAspectRatio: 0.80,
               ),
               itemCount: achievementCatalog.length,
               itemBuilder: (context, index) {
@@ -148,6 +148,8 @@ class _AchievementCard extends StatelessWidget {
             Text(
               achievement.title,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -158,6 +160,8 @@ class _AchievementCard extends StatelessWidget {
             Text(
               achievement.description,
               textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
                 color: unlocked ? Colors.black87 : Colors.grey,
