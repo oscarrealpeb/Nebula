@@ -50,6 +50,8 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
   int _correctIndex = -1;
 
   int _currentRound = 0;
+  int _perfectRounds = 0;
+  bool _roundHadMistake = false;
 
   int? _selectedIndex;
   final Set<int> _disabledIndexes = {};
@@ -269,6 +271,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
       _selectedIndex = null;
       _disabledIndexes.clear();
       _showFeedback = false;
+      _roundHadMistake = false;
     });
     Future.microtask(() => _playSound());
   }
@@ -378,6 +381,9 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     if (_selectedIndex == null || _currentItem == null) return;
 
     if (_selectedIndex == _correctIndex) {
+      if (!_roundHadMistake) {
+        _perfectRounds++;
+      }
       setState(() {
         _showFeedback = true;
         _isCorrectFeedback = true;
@@ -405,6 +411,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         _showFeedback = true;
         _isCorrectFeedback = false;
         _totalMistakes++;
+        _roundHadMistake = true;
       });
 
       final reviewPool = _reviewPoolByDifficulty[widget.difficulty]!;
@@ -443,6 +450,9 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
       await widget.controller
           .addStars(total)
           .timeout(const Duration(seconds: 2));
+    } catch (_) {}
+
+    try {
       final difficultyStars = switch (widget.difficulty) {
         GameDifficulty.easy => 1,
         GameDifficulty.medium => 2,
@@ -458,6 +468,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         pointsEarned: total,
         correctAnswers: totalRounds,
         totalAttempts: totalRounds + _totalMistakes,
+        perfectRounds: _perfectRounds,
       );
     } catch (_) {}
 
@@ -535,7 +546,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: const Text(
-          "Si sales ahora, perderás el progreso de esta partida.",
+          "Si sales ahora, perderás tus estrellas⭐.",
         ),
         actions: [
           TextButton(
@@ -568,6 +579,26 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     return shouldExit ?? false;
   }
 
+  Widget _buildRoundProgress() {
+    return Row(
+      children: List.generate(totalRounds, (index) {
+        final isCompleted = index <= _currentRound;
+        return Expanded(
+          child: Container(
+            height: 6,
+            margin: EdgeInsets.only(right: index == totalRounds - 1 ? 0 : 8),
+            decoration: BoxDecoration(
+              color: isCompleted
+                  ? widget.controller.accentColor
+                  : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final options = _currentOptions;
@@ -590,6 +621,9 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              _buildRoundProgress(),
+              const SizedBox(height: 12),
+
               /// 🔹 TÍTULO SUPERIOR
               const Text(
                 "Escucha el sonido",

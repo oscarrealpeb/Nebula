@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
-Future<int?> showStarDifficultySheet(BuildContext context) {
+Future<int?> showStarDifficultySheet(
+  BuildContext context, {
+  int maxEnabledStars = 3,
+}) {
+  final safeMaxEnabledStars = maxEnabledStars.clamp(1, 3);
   return showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true, // permite que ocupe más altura
@@ -32,10 +36,13 @@ Future<int?> showStarDifficultySheet(BuildContext context) {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(3, (index) {
                   final value = index + 1;
+                  final isEnabled = value <= safeMaxEnabledStars;
 
                   // Colores por cantidad de estrellas
                   Color bgColor;
-                  if (value == 1) {
+                  if (!isEnabled) {
+                    bgColor = Colors.grey.shade300;
+                  } else if (value == 1) {
                     bgColor = const Color.fromARGB(233, 129, 199, 132);
                   } else if (value == 2) {
                     bgColor = const Color.fromARGB(237, 255, 184, 77);
@@ -45,7 +52,7 @@ Future<int?> showStarDifficultySheet(BuildContext context) {
 
                   return Expanded(
                     child: GestureDetector(
-                      onTap: () => Navigator.of(context).pop(value),
+                      onTap: isEnabled ? () => Navigator.of(context).pop(value) : null,
                       child: Container(
                         height: 60,
                         margin: EdgeInsets.only(right: value < 3 ? 12 : 0),
@@ -62,7 +69,11 @@ Future<int?> showStarDifficultySheet(BuildContext context) {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
                             value,
-                            (_) => const Icon(Icons.star, size: 20, color: Colors.white),
+                            (_) => Icon(
+                              Icons.star,
+                              size: 20,
+                              color: isEnabled ? Colors.white : Colors.grey.shade600,
+                            ),
                           ),
                         ),
                       ),

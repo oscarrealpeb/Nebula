@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/app_controller.dart';
 import '../../widgets/cosmic_background.dart';
-import '../../widgets/nebula_button.dart';
 import '../../widgets/nebula_snack.dart';
 
 class PreferencesScreen extends StatefulWidget {
@@ -17,6 +16,9 @@ class PreferencesScreen extends StatefulWidget {
 }
 
 class _PreferencesScreenState extends State<PreferencesScreen> {
+  static const double _minIntensity = 0.70;
+  static const double _maxIntensity = 0.85;
+
   late String _narratorId;
   late bool _soundEnabled;
   late double _hue;
@@ -26,13 +28,15 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   final _narrators = const [
     ('narrator_1', 'Leo'),
     ('narrator_2', 'Mateo'),
-    ('narrator_3', 'Bruno'),
+    ('narrator_3', 'Valeria'),
     ('narrator_4', 'Sofia'),
-    ('narrator_5', 'Valeria'),
-    ('narrator_6', 'Emma'),
   ];
 
-  final _hues = const [196.0, 212.0, 228.0, 172.0, 35.0, 330.0];
+  
+  // final _hues = const [345.0, 285.0, 255.0, 210.0, 180.0, 135.0];
+
+  final _hues = const [196.0, 215.0, 255.0, 345.0, 35.0, 290.0];
+
 
   @override
   void initState() {
@@ -40,8 +44,9 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     _narratorId = widget.controller.selectedNarratorId;
     _soundEnabled = widget.controller.soundEffectsEnabled;
     _hue = widget.controller.currentAccentHue;
-    _intensity =
-        widget.controller.currentAccentIntensity.clamp(0.72, 1.0).toDouble();
+    _intensity = widget.controller.currentAccentIntensity
+        .clamp(_minIntensity, _maxIntensity)
+        .toDouble();
   }
 
   @override
@@ -49,7 +54,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     if (_themeSyncTimer?.isActive ?? false) {
       widget.controller.setThemeColor(
         hue: _hue,
-        intensity: _intensity.clamp(0.72, 1.0).toDouble(),
+        intensity: _intensity.clamp(_minIntensity, _maxIntensity).toDouble(),
       );
     }
     _themeSyncTimer?.cancel();
@@ -57,8 +62,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   }
 
   Color _colorFromHue(double hue) {
-    final value = _intensity.clamp(0.72, 1.0).toDouble();
-    return HSVColor.fromAHSV(1, hue, 0.78, value).toColor();
+    final value = _intensity.clamp(_minIntensity, _maxIntensity).toDouble();
+    return HSVColor.fromAHSV(1, hue, 0.60, value).toColor();
   }
 
   void _applyThemeRealtime() {
@@ -66,7 +71,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     _themeSyncTimer = Timer(const Duration(milliseconds: 70), () {
       widget.controller.setThemeColor(
         hue: _hue,
-        intensity: _intensity.clamp(0.72, 1.0).toDouble(),
+        intensity: _intensity.clamp(_minIntensity, _maxIntensity).toDouble(),
       );
     });
   }
@@ -74,7 +79,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void _showSavedSnack() {
     widget.controller.setThemeColor(
       hue: _hue,
-      intensity: _intensity.clamp(0.72, 1.0).toDouble(),
+      intensity: _intensity.clamp(_minIntensity, _maxIntensity).toDouble(),
     );
     NebulaSnack.show(
       context,
@@ -177,7 +182,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Activar efectos divertidos'),
+                      title: const Text('Activar narrador de juegos'),
                       value: _soundEnabled,
                       onChanged: (value) {
                         setState(() => _soundEnabled = value);
@@ -248,8 +253,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     ),
                     Slider(
                       value: _intensity,
-                      min: 0.72,
-                      max: 1.0,
+                      min: _minIntensity,
+                      max: _maxIntensity,
                       onChanged: (value) {
                         setState(() => _intensity = value);
                         _applyThemeRealtime();
@@ -260,8 +265,24 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            NebulaPrimaryButton(
-                text: 'Listo, me gusta asi', onPressed: _showSavedSnack),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _showSavedSnack,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  backgroundColor: _colorFromHue(_hue),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: const Text(
+                  'Listo, me gusta asi',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
           ],
         ),
       ),
