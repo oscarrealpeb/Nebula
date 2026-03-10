@@ -44,6 +44,7 @@ flutter:
     - assets/images/dificil/
     - assets/images/conecta/
     - assets/images/planets/
+    - assets/images/puzzles/
     - assets/sounds/
 
 flutter_launcher_icons:

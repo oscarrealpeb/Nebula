@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
+import 'puzzle_screen.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
@@ -13,28 +14,47 @@ class MinigamesScreen extends StatelessWidget {
 
   final AppController controller;
 
+  /// Maneja apertura de juegos
   Future<void> _openGame(
     BuildContext context, {
     required String gameName,
     required String gameKey,
   }) async {
+
     final check = controller.canLaunchGame(gameKey);
+
     if (!check.ok) {
-      await NebulaSnack.show(context, message: check.message, ok: false);
+      await NebulaSnack.show(
+        context,
+        message: check.message,
+        ok: false,
+      );
       return;
     }
 
     final sync = await controller.syncGlobalGameContentForPlay();
+
     if (!context.mounted) return;
+
     if (!sync.ok) {
-      await NebulaSnack.show(context, message: sync.message, ok: false);
+      await NebulaSnack.show(
+        context,
+        message: sync.message,
+        ok: false,
+      );
       return;
     }
 
     if (!context.mounted) return;
+
     final stars = await showStarDifficultySheet(context);
+
     if (!context.mounted || stars == null) return;
 
+    /// Si el juego es PUZZLE abre su pantalla real
+    
+
+    /// Otros juegos siguen usando placeholder
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GamePlaceholderScreen(
@@ -49,13 +69,17 @@ class MinigamesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     final cartasLabel = controller.gameLabelForKey('cartas_gemelas');
     final queLabel = controller.gameLabelForKey('que_sigue');
     final dondeLabel = controller.gameLabelForKey('donde_va');
     final armaLabel = controller.gameLabelForKey('arma_imagen');
+
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
+        leading: BackButton(
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(controller.gameLabelForKey('minijuegos')),
       ),
       backgroundColor: backgroundLilac,
@@ -65,20 +89,25 @@ class MinigamesScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+
               Text(
                 'Elige un minijuego',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: const Color(0xFF253760),
                     ),
               ),
+
               const SizedBox(height: 4),
+
               Text(
                 'Retos cortos para jugar y aprender con alegria.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF617298),
                     ),
               ),
+
               const SizedBox(height: 14),
+
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.all(8),
@@ -95,12 +124,14 @@ class MinigamesScreen extends StatelessWidget {
                   ),
                   child: Stack(
                     children: [
+
                       GridView.count(
                         crossAxisCount: 2,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
                         childAspectRatio: 1.04,
                         children: [
+
                           _MiniGameCard(
                             title: cartasLabel,
                             imagePath:
@@ -112,9 +143,11 @@ class MinigamesScreen extends StatelessWidget {
                             ),
                             accentColor: controller.accentColor,
                           ),
+
                           _MiniGameCard(
                             title: queLabel,
-                            imagePath: 'assets/images/games/que_sigue1.png',
+                            imagePath:
+                                'assets/images/games/que_sigue1.png',
                             onTap: () => _openGame(
                               context,
                               gameName: queLabel,
@@ -122,9 +155,11 @@ class MinigamesScreen extends StatelessWidget {
                             ),
                             accentColor: controller.accentColor,
                           ),
+
                           _MiniGameCard(
                             title: dondeLabel,
-                            imagePath: 'assets/images/games/donde_va1.png',
+                            imagePath:
+                                'assets/images/games/donde_va1.png',
                             onTap: () => _openGame(
                               context,
                               gameName: dondeLabel,
@@ -132,19 +167,24 @@ class MinigamesScreen extends StatelessWidget {
                             ),
                             accentColor: controller.accentColor,
                           ),
+
                           _MiniGameCard(
-                            title: armaLabel,
-                            imagePath:
-                                'assets/images/games/arma_la_imagen1.png',
-                            onTap: () => _openGame(
-                              context,
-                              gameName: armaLabel,
-                              gameKey: 'arma_imagen',
-                            ),
-                            accentColor: controller.accentColor,
-                          ),
+  title: armaLabel,
+  imagePath: 'assets/images/games/arma_la_imagen1.png',
+  onTap: () {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const PuzzleScreen(stars: 1),
+      ),
+    );
+  },
+  accentColor: controller.accentColor,
+),
+
+                          
                         ],
                       ),
+
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -158,6 +198,7 @@ class MinigamesScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+
                     ],
                   ),
                 ),
@@ -185,6 +226,7 @@ class _MiniGameCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return Card(
       elevation: 0,
       color: accentColor,
@@ -195,10 +237,14 @@ class _MiniGameCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 6,
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+
               Expanded(
                 flex: 4,
                 child: Image.asset(
@@ -210,7 +256,9 @@ class _MiniGameCard extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 8),
+
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -221,6 +269,7 @@ class _MiniGameCard extends StatelessWidget {
                   fontSize: 15,
                 ),
               ),
+
             ],
           ),
         ),

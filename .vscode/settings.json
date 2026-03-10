@@ -1,3 +1,4 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "cmake.sourceDirectory": "C:/Users/Jimmy/OneDrive - Universidad de Nariño/Documentos/Clon/Nebula/flutter_app/linux"
 }
