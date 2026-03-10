@@ -177,26 +177,39 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
 } else {
   columns = 2; // 6 filas
 }
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Text(
+          "¡Toca dos cartas y descubre si son pareja 🧠!",
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: widget.controller.accentColor,
+          ),
+        ),
+        const SizedBox(height: 0),
+  
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
         childAspectRatio: widget.difficultyStars == 1
-            ? 0.9
+            ? 0.90
             : widget.difficultyStars == 2
-                ? 1.2
-                : 1.6,
+                ? 1.18
+                : 1.55,
       ),
       itemCount: cards.length,
       itemBuilder: (context, index) {
         final visible = flipped[index] || matched[index];
 
-        return AspectRatio(
-          aspectRatio: 1,
-          child: GestureDetector(
+        return GestureDetector(
             onTapDown: (_) {
               setState(() {
                 pressedIndex = index;
@@ -265,8 +278,11 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
               ),
                        ),
           ),
-        ));
+        );
       },
-    );
+    ),
+),
+],
+);
   }
 }

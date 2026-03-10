@@ -5,6 +5,7 @@ import '../widgets/cosmic_background.dart';
 //import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import 'cartas_gemelas_game.dart';
+import 'package:lottie/lottie.dart';
 
 class GamePlaceholderScreen extends StatefulWidget {
   const GamePlaceholderScreen({
@@ -55,6 +56,51 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
     );
 
     if (!mounted) return;
+    if (widget.gameKey == 'cartas_gemelas') {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Ganaste $earnedStars estrellas ⭐",
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 18),
+
+                SizedBox(
+                  height: 160,
+                  child: Lottie.asset(
+                    'assets/animations/estrellas.json',
+                    repeat: true,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  await Future.delayed(const Duration(seconds: 3));
+  if (!mounted) return;
+
+  Navigator.of(context, rootNavigator: true).pop(); // cerrar diálogo
+  Navigator.pop(context); // volver a minijuegos
+  } else {
     await NebulaSnack.show(
       context,
       message: 'Genial, ganaste $earnedStars estrellas.',
@@ -63,7 +109,8 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
     );
 
     if (!mounted) return;
-    Navigator.of(context).pop();
+    Navigator.pop(context); // volver a minijuegos
+  }
     
     if (!mounted) return;
     setState(() => _completing = false);
