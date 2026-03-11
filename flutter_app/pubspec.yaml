@@ -45,6 +45,10 @@ flutter:
     - assets/images/medio/
     - assets/images/dificil/
     - assets/images/conecta/
+    - assets/images/cards/animales/
+    - assets/images/cards/frutas/
+    - assets/images/cards/instrumentos/
+    - assets/images/cards/transporte/
     - assets/images/puzzles/
     - assets/images/planets/
     - assets/sounds/

@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
+import 'cartas_gemelas_game.dart';
 import 'game_placeholder_screen1.dart';
 import 'puzzle_screen.dart';
 
@@ -35,6 +36,18 @@ class MinigamesScreen extends StatelessWidget {
     if (!context.mounted) return;
     final stars = await showStarDifficultySheet(context);
     if (!context.mounted || stars == null) return;
+
+    if (gameKey == 'cartas_gemelas') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CartasGemelasGame(
+            controller: controller,
+            difficultyStars: stars,
+          ),
+        ),
+      );
+      return;
+    }
 
     if (gameKey == 'arma_imagen') {
       await Navigator.of(context).push(
