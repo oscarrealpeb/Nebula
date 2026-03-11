@@ -356,9 +356,24 @@ class AuthService {
           ),
         )
         .toList();
+    final puzzles = config.puzzleItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty && item.imageSource.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            imageSource: item.imageSource.trim(),
+            width: item.width.clamp(0, 4096),
+            height: item.height.clamp(0, 4096),
+          ),
+        )
+        .take(10)
+        .toList();
     final normalized = GameContentConfig(
       emotionItems: emotions,
       soundItems: sounds,
+      puzzleItems: puzzles,
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
 

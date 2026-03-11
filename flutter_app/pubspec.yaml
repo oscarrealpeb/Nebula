@@ -45,6 +45,7 @@ flutter:
     - assets/images/medio/
     - assets/images/dificil/
     - assets/images/conecta/
+    - assets/images/puzzles/
     - assets/images/planets/
     - assets/sounds/
 

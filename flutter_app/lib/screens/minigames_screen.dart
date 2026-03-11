@@ -5,6 +5,7 @@ import '../controllers/app_controller.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'game_placeholder_screen1.dart';
+import 'puzzle_screen.dart';
 
 const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255);
 
@@ -34,6 +35,18 @@ class MinigamesScreen extends StatelessWidget {
     if (!context.mounted) return;
     final stars = await showStarDifficultySheet(context);
     if (!context.mounted || stars == null) return;
+
+    if (gameKey == 'arma_imagen') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PuzzleScreen(
+            controller: controller,
+            stars: stars,
+          ),
+        ),
+      );
+      return;
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute(

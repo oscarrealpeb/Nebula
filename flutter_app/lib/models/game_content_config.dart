@@ -108,25 +108,81 @@ class SoundContentItem {
   }
 }
 
+class PuzzleContentItem {
+  const PuzzleContentItem({
+    required this.id,
+    required this.imageSource,
+    this.width = 0,
+    this.height = 0,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String imageSource;
+  final int width;
+  final int height;
+  final bool enabled;
+
+  PuzzleContentItem copyWith({
+    String? id,
+    String? imageSource,
+    int? width,
+    int? height,
+    bool? enabled,
+  }) {
+    return PuzzleContentItem(
+      id: id ?? this.id,
+      imageSource: imageSource ?? this.imageSource,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'imageSource': imageSource,
+      'width': width,
+      'height': height,
+      'enabled': enabled,
+    };
+  }
+
+  factory PuzzleContentItem.fromJson(Map<String, dynamic> json) {
+    return PuzzleContentItem(
+      id: (json['id'] as String?) ?? '',
+      imageSource: (json['imageSource'] as String?) ?? '',
+      width: (json['width'] as num?)?.toInt() ?? 0,
+      height: (json['height'] as num?)?.toInt() ?? 0,
+      enabled: (json['enabled'] as bool?) ?? true,
+    );
+  }
+}
+
 class GameContentConfig {
   const GameContentConfig({
     this.emotionItems = const [],
     this.soundItems = const [],
+    this.puzzleItems = const [],
     this.updatedAtMillis = 0,
   });
 
   final List<EmotionContentItem> emotionItems;
   final List<SoundContentItem> soundItems;
+  final List<PuzzleContentItem> puzzleItems;
   final int updatedAtMillis;
 
   GameContentConfig copyWith({
     List<EmotionContentItem>? emotionItems,
     List<SoundContentItem>? soundItems,
+    List<PuzzleContentItem>? puzzleItems,
     int? updatedAtMillis,
   }) {
     return GameContentConfig(
       emotionItems: emotionItems ?? this.emotionItems,
       soundItems: soundItems ?? this.soundItems,
+      puzzleItems: puzzleItems ?? this.puzzleItems,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
     );
   }
@@ -135,6 +191,7 @@ class GameContentConfig {
     return {
       'emotionItems': emotionItems.map((item) => item.toJson()).toList(),
       'soundItems': soundItems.map((item) => item.toJson()).toList(),
+      'puzzleItems': puzzleItems.map((item) => item.toJson()).toList(),
       'updatedAtMillis': updatedAtMillis,
     };
   }
@@ -153,6 +210,14 @@ class GameContentConfig {
           .whereType<Map>()
           .map(
             (item) => SoundContentItem.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(),
+      puzzleItems: (json['puzzleItems'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => PuzzleContentItem.fromJson(
               Map<String, dynamic>.from(item),
             ),
           )

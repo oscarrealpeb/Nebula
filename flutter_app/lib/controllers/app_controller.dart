@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../models/admin_dashboard_models.dart';
 import '../core/data/achievement_catalog.dart';
+import '../core/data/puzzle_catalog.dart';
 import '../core/data/skill_catalog.dart';
 import '../models/app_admin_config.dart';
 import '../models/game_content_config.dart';
@@ -116,6 +117,22 @@ class AppController extends ChangeNotifier {
   PortalRole get activePortalRole => _activePortalRole;
   AppAdminConfig get appAdminConfig => _appAdminConfig;
   GameContentConfig get gameContentConfig => _gameContentConfig;
+  List<String> get puzzleImageSources {
+    final fromAdmin = _gameContentConfig.puzzleItems
+        .where((item) => item.enabled)
+        .map((item) => item.imageSource.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (fromAdmin.isEmpty) {
+      return List<String>.from(defaultPuzzleImageSources);
+    }
+    final merged = <String>[
+      ...fromAdmin,
+      ...defaultPuzzleImageSources.where((item) => !fromAdmin.contains(item)),
+    ];
+    return merged;
+  }
+
   AdminDashboardStats get adminDashboardStats => _adminDashboardStats;
   List<DeletedAccountRecord> get deletedAccounts =>
       List.unmodifiable(_deletedAccounts);
