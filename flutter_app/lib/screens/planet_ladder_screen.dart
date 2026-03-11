@@ -32,7 +32,7 @@ class PlanetLadderScreen extends StatelessWidget {
         if (user == null) return const SizedBox.shrink();
 
         final accent = controller.accentColor;
-        final paleAccent = accent.withOpacity(0.08);
+        final paleAccent = accent.withValues(alpha: 0.08);
 
         final currentPlanet = planetForStars(user.stars);
         final progress = planetProgress(user.stars);
@@ -95,7 +95,8 @@ class PlanetLadderScreen extends StatelessWidget {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => LogrosScreen(controller: controller),
+                            builder: (_) =>
+                                LogrosScreen(controller: controller),
                           ),
                         );
                       },
@@ -189,7 +190,7 @@ class _PlanetCard extends StatelessWidget {
 
     if (completed && !isCurrent) {
       return Card(
-        color: Colors.green.withOpacity(0.08),
+        color: Colors.green.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
           side: const BorderSide(color: Colors.green, width: 1.5),
@@ -212,8 +213,7 @@ class _PlanetCard extends StatelessWidget {
               const Divider(),
               const SizedBox(height: 6),
               const Text("Premios obtenidos",
-                  style:
-                      TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               if (rewardAvatars.isNotEmpty)
                 Text(
@@ -233,8 +233,7 @@ class _PlanetCard extends StatelessWidget {
       );
     }
 
-    final percent =
-        (progress * 100).clamp(0, 100).toStringAsFixed(0);
+    final percent = (progress * 100).clamp(0, 100).toStringAsFixed(0);
 
     return Card(
       color: paleAccent,
@@ -321,7 +320,7 @@ class _BottomTabButton extends StatelessWidget {
         minHeight: 50,
       ),
       decoration: BoxDecoration(
-        color: selected ? color : color.withOpacity(0.2),
+        color: selected ? color : color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

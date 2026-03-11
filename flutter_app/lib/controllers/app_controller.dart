@@ -1147,31 +1147,26 @@ class AppController extends ChangeNotifier {
 
   Future<void> addStars(int value) async {
     if (value == 0) return;
-    _starUpdateQueue = _starUpdateQueue.catchError((_) {}).then((_) async {
-      try {
-        final user = _currentUser;
-        if (user == null) return;
-        final previousStars = user.stars;
-        final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
-        final next = user.copyWith(stars: nextStars);
-        final previousPlanet = planetForStars(previousStars);
-        final nextPlanet = planetForStars(nextStars);
-        final previousIndex = planetLadder.indexOf(previousPlanet);
-        final nextIndex = planetLadder.indexOf(nextPlanet);
-        if (nextIndex > previousIndex) {
-          _pendingHomeLevelUpPlanetName = nextPlanet.name;
-        }
-        _currentUser = next;
+    _starUpdateQueue = _starUpdateQueue.then((_) async {
+      final user = _currentUser;
+      if (user == null) return;
+      final previousStars = user.stars;
+      final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
+      final next = user.copyWith(stars: nextStars);
+      final previousPlanet = planetForStars(previousStars);
+      final nextPlanet = planetForStars(nextStars);
+      final previousIndex = planetLadder.indexOf(previousPlanet);
+      final nextIndex = planetLadder.indexOf(nextPlanet);
+      if (nextIndex > previousIndex) {
+        _pendingHomeLevelUpPlanetName = nextPlanet.name;
+      }
+      _currentUser = next;
+      notifyListeners();
+      final saved = await _authService.updateUser(next);
+      if (saved.ok && saved.data != null) {
+        _currentUser = saved.data;
         notifyListeners();
-        final saved = await _authService
-            .updateUser(next)
-            .timeout(const Duration(seconds: 2));
-        if (saved.ok && saved.data != null) {
-          _currentUser = saved.data;
-          notifyListeners();
-        }
-      } catch (_) {}
-      await _syncAchievementsFromProgress();
+      }
     });
     await _starUpdateQueue;
   }
