@@ -392,6 +392,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
       pointsEarned: _totalStarsEarned,
       correctAnswers: _correctAnswers,
       totalAttempts: _correctAnswers + _totalMistakes,
+      perfectRounds: _totalMistakes == 0 ? 1 : 0,
     );
 
     if (!mounted) return;

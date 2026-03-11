@@ -214,8 +214,8 @@ class AppController extends ChangeNotifier {
 
   int maxUnlockedDifficultyByPerfectRounds({
     required String gameKey,
-    int easyToMediumPerfectRounds = 15,
-    int mediumToHardPerfectRounds = 20,
+    int easyToMediumPerfectRounds = 10,
+    int mediumToHardPerfectRounds = 15,
   }) {
     final normalizedKey = gameKey.trim().toLowerCase();
     if (normalizedKey.isEmpty) return 1;

@@ -19,8 +19,11 @@ class PuzzleController extends ChangeNotifier {
   int size = 2;
   int moves = 0;
   bool isSolved = false;
+  int? _selectedTileIndex;
   String? puzzleImageSource;
   ImageProvider<Object>? puzzleImageProvider;
+
+  int? get selectedTileIndex => _selectedTileIndex;
 
   void setImageSources(List<String> imageSources) {
     final normalized = imageSources
@@ -37,10 +40,11 @@ class PuzzleController extends ChangeNotifier {
     size = safeStars + 1;
 
     _selectPuzzleImage();
-    _createSolvableBoard();
+    _createShuffledBoard();
 
     moves = 0;
     isSolved = false;
+    _selectedTileIndex = null;
     notifyListeners();
   }
 
@@ -48,29 +52,31 @@ class PuzzleController extends ChangeNotifier {
     generatePuzzle(size - 1);
   }
 
-  void moveTile(int index) {
+  void tapTile(int index) {
     if (isSolved || index < 0 || index >= tiles.length) return;
-    final emptyIndex = tiles.indexOf(0);
-    if (emptyIndex < 0) return;
-    if (!_isAdjacent(index, emptyIndex)) return;
+
+    if (_selectedTileIndex == null) {
+      _selectedTileIndex = index;
+      notifyListeners();
+      return;
+    }
+
+    if (_selectedTileIndex == index) {
+      _selectedTileIndex = null;
+      notifyListeners();
+      return;
+    }
 
     final nextTiles = List<int>.from(tiles);
+    final firstIndex = _selectedTileIndex!;
     final temp = nextTiles[index];
-    nextTiles[index] = nextTiles[emptyIndex];
-    nextTiles[emptyIndex] = temp;
+    nextTiles[index] = nextTiles[firstIndex];
+    nextTiles[firstIndex] = temp;
     tiles = nextTiles;
+    _selectedTileIndex = null;
     moves += 1;
     _checkSolved();
     notifyListeners();
-  }
-
-  bool _isAdjacent(int index, int emptyIndex) {
-    final row = index ~/ size;
-    final col = index % size;
-    final emptyRow = emptyIndex ~/ size;
-    final emptyCol = emptyIndex % size;
-    return (row == emptyRow && (col - emptyCol).abs() == 1) ||
-        (col == emptyCol && (row - emptyRow).abs() == 1);
   }
 
   void _selectPuzzleImage() {
@@ -93,42 +99,15 @@ class PuzzleController extends ChangeNotifier {
     puzzleImageProvider = null;
   }
 
-  void _createSolvableBoard() {
+  void _createShuffledBoard() {
     final total = size * size;
-    final solved = List<int>.generate(total, (index) => index);
-    final nextTiles = List<int>.from(solved);
+    final nextTiles = List<int>.generate(total, (index) => index);
 
-    var empty = 0;
-    final shuffleMoves = max(40, total * 14);
-    for (var step = 0; step < shuffleMoves; step++) {
-      final neighbors = _neighborsOf(empty);
-      final swapIndex = neighbors[_random.nextInt(neighbors.length)];
-      final temp = nextTiles[swapIndex];
-      nextTiles[swapIndex] = nextTiles[empty];
-      nextTiles[empty] = temp;
-      empty = swapIndex;
-    }
-
-    if (_isSolvedState(nextTiles)) {
-      final neighbors = _neighborsOf(empty);
-      final swapIndex = neighbors.first;
-      final temp = nextTiles[swapIndex];
-      nextTiles[swapIndex] = nextTiles[empty];
-      nextTiles[empty] = temp;
-    }
+    do {
+      nextTiles.shuffle(_random);
+    } while (_isSolvedState(nextTiles));
 
     tiles = nextTiles;
-  }
-
-  List<int> _neighborsOf(int emptyIndex) {
-    final row = emptyIndex ~/ size;
-    final col = emptyIndex % size;
-    final neighbors = <int>[];
-    if (row > 0) neighbors.add((row - 1) * size + col);
-    if (row < size - 1) neighbors.add((row + 1) * size + col);
-    if (col > 0) neighbors.add(row * size + col - 1);
-    if (col < size - 1) neighbors.add(row * size + col + 1);
-    return neighbors;
   }
 
   bool _isSolvedState(List<int> state) {

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../controllers/puzzle_controller.dart';
@@ -30,7 +31,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
   bool _dialogOpen = false;
   bool _sessionRecorded = false;
   int _lastEarnedStars = 0;
-  int _lastMistakes = 0;
 
   @override
   void initState() {
@@ -60,50 +60,62 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
 
   Future<void> _handleSolvedPuzzle() async {
     _dialogOpen = true;
-    if (!_sessionRecorded) {
-      await _saveSessionAndReward();
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Rompecabezas completado'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Movimientos: ${_puzzleController.moves}'),
-            const SizedBox(height: 8),
-            Text('Errores estimados: $_lastMistakes'),
-            const SizedBox(height: 8),
-            Text('Ganaste $_lastEarnedStars estrellas'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _startPuzzle(_selectedStars);
-            },
-            child: const Text('Repetir'),
+    try {
+      if (!_sessionRecorded) {
+        await _saveSessionAndReward();
+      }
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          if (_selectedStars < 3)
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _startPuzzle(_selectedStars + 1);
-              },
-              child: const Text('Subir dificultad'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Ganaste $_lastEarnedStars estrellas ⭐',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  height: 140,
+                  child: Lottie.asset(
+                    'assets/animations/estrellas.json',
+                    repeat: true,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ],
             ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cerrar'),
           ),
-        ],
-      ),
-    );
-    _dialogOpen = false;
+        ),
+      );
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      if (rootNavigator.canPop()) {
+        rootNavigator.pop();
+      }
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+        return;
+      }
+      _startPuzzle(_selectedStars);
+    } finally {
+      _dialogOpen = false;
+    }
   }
 
   Future<void> _saveSessionAndReward() async {
@@ -113,7 +125,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
     final earned = _rewardForDifficulty(_selectedStars);
 
     _lastEarnedStars = earned;
-    _lastMistakes = mistakes;
 
     await widget.controller.addStars(earned);
     await widget.controller.recordGameSession(
@@ -133,11 +144,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
   int _rewardForDifficulty(int stars) {
     switch (stars) {
       case 1:
-        return 120;
+        return 20;
       case 2:
-        return 150;
+        return 25;
       default:
-        return 180;
+        return 30;
     }
   }
 
@@ -147,7 +158,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
       _startedAt = DateTime.now();
       _sessionRecorded = false;
       _lastEarnedStars = 0;
-      _lastMistakes = 0;
     });
     _puzzleController.setImageSources(widget.controller.puzzleImageSources);
     _puzzleController.generatePuzzle(_selectedStars);
@@ -182,6 +192,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
                           Text('$_selectedStars estrella(s)'),
                           const SizedBox(height: 8),
                           Text('Movimientos: ${_puzzleController.moves}'),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Toca una ficha y luego otra para intercambiarlas.',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ],
                       ),
                     ),
@@ -207,26 +222,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _startPuzzle(_selectedStars),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Reiniciar'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _selectedStars >= 3
-                        ? null
-                        : () => _startPuzzle(_selectedStars + 1),
-                    icon: const Icon(Icons.trending_up),
-                    label: const Text('Subir nivel'),
-                  ),
-                ),
-              ],
+            OutlinedButton.icon(
+              onPressed: () => _startPuzzle(_selectedStars),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Reiniciar'),
             ),
           ],
         ),

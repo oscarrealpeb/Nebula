@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
@@ -93,7 +94,6 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
   bool _canTap = true;
   bool _finishing = false;
   int _mistakes = 0;
-  int _moves = 0;
 
   @override
   void initState() {
@@ -118,7 +118,6 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
     _canTap = true;
     _finishing = false;
     _mistakes = 0;
-    _moves = 0;
     setState(() {});
   }
 
@@ -136,11 +135,11 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
   int _starsReward(int stars) {
     switch (stars) {
       case 1:
-        return 110;
+        return 20;
       case 2:
-        return 145;
+        return 25;
       default:
-        return 175;
+        return 30;
     }
   }
 
@@ -161,7 +160,6 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
 
     _secondIndex = index;
     _canTap = false;
-    _moves += 1;
 
     final first = _firstIndex!;
     final second = _secondIndex!;
@@ -216,43 +214,56 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
     );
 
     if (!mounted) return;
-    await showDialog<void>(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Excelente memoria'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Dificultad: $_difficultyStars estrella(s)'),
-            const SizedBox(height: 6),
-            Text('Movimientos: $_moves'),
-            const SizedBox(height: 6),
-            Text('Errores: $_mistakes'),
-            const SizedBox(height: 6),
-            Text('Ganaste $earned estrellas'),
-          ],
+      builder: (_) => Dialog(
+        backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _startNewGame();
-            },
-            child: const Text('Jugar de nuevo'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ganaste $earned estrellas ⭐',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                height: 140,
+                child: Lottie.asset(
+                  'assets/animations/estrellas.json',
+                  repeat: true,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
+        ),
       ),
     );
+
+    await Future<void>.delayed(const Duration(seconds: 3));
     if (!mounted) return;
-    setState(() {
-      _finishing = false;
-    });
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    if (rootNavigator.canPop()) {
+      rootNavigator.pop();
+    }
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    _finishing = false;
+    _startNewGame();
   }
 
   @override
@@ -278,11 +289,6 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
                     fontWeight: FontWeight.w700,
                     color: widget.controller.accentColor,
                   ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Errores: $_mistakes   |   Movimientos: $_moves',
-              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 8),
             Expanded(

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/nebula_button.dart';
-import '../widgets/nebula_snack.dart';
 
 class GamePlaceholderScreen extends StatefulWidget {
   const GamePlaceholderScreen({
@@ -27,32 +27,88 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
   final DateTime _startedAt = DateTime.now();
   bool _completing = false;
 
+  int _starsForDifficulty(int stars) {
+    switch (stars) {
+      case 1:
+        return 20;
+      case 2:
+        return 25;
+      default:
+        return 30;
+    }
+  }
+
   Future<void> _completeGame() async {
     if (_completing) return;
     setState(() => _completing = true);
 
-    const earnedStars = 120;
-    await widget.controller.addStars(earnedStars);
-    await widget.controller.recordGameSession(
-      gameKey: widget.gameKey,
-      startedAt: _startedAt,
-      endedAt: DateTime.now(),
-      difficultyStars: widget.difficultyStars,
-      rounds: 5,
-      mistakes: 0,
-      pointsEarned: earnedStars,
-      correctAnswers: 5,
-      totalAttempts: 5,
-    );
+    try {
+      final earnedStars = _starsForDifficulty(widget.difficultyStars);
+      await widget.controller.addStars(earnedStars);
+      await widget.controller.recordGameSession(
+        gameKey: widget.gameKey,
+        startedAt: _startedAt,
+        endedAt: DateTime.now(),
+        difficultyStars: widget.difficultyStars,
+        rounds: 5,
+        mistakes: 0,
+        pointsEarned: earnedStars,
+        correctAnswers: 5,
+        totalAttempts: 5,
+      );
 
-    if (!mounted) return;
-    await NebulaSnack.show(
-      context,
-      message: 'Genial, ganaste $earnedStars estrellas.',
-      ok: true,
-    );
-    if (!mounted) return;
-    setState(() => _completing = false);
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Dialog(
+          backgroundColor: const Color.fromARGB(255, 211, 237, 213),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Ganaste $earnedStars estrellas ⭐',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  height: 140,
+                  child: Lottie.asset(
+                    'assets/animations/estrellas.json',
+                    repeat: true,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      if (rootNavigator.canPop()) {
+        rootNavigator.pop();
+      }
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _completing = false);
+      }
+    }
   }
 
   @override
@@ -107,7 +163,7 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
               NebulaPrimaryButton(
                 text: _completing
                     ? 'Completando...'
-                    : 'Completar reto (+120 estrellas)',
+                    : 'Completar reto (+${_starsForDifficulty(widget.difficultyStars)} estrellas)',
                 onPressed: _completing ? null : _completeGame,
               ),
             ],

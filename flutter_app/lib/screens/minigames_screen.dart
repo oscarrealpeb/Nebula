@@ -34,7 +34,10 @@ class MinigamesScreen extends StatelessWidget {
     }
 
     if (!context.mounted) return;
-    final stars = await showStarDifficultySheet(context);
+    final stars = await showStarDifficultySheet(
+      context,
+      maxEnabledStars: 3,
+    );
     if (!context.mounted || stars == null) return;
 
     if (gameKey == 'cartas_gemelas') {

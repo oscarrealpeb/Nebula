@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
@@ -90,9 +90,12 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (gameKey) {
       case 'descubre_emocion':
       case 'conecta_sonidos':
+      case 'di_palabra':
         try {
           maxEnabledStars = widget.controller.maxUnlockedDifficultyByPerfectRounds(
             gameKey: gameKey,
+            easyToMediumPerfectRounds: 10,
+            mediumToHardPerfectRounds: 15,
           );
         } catch (_) {
           maxEnabledStars = 1;
@@ -201,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      '¡Felicidades!🏅',
+                      'Â¡Felicidades!ðŸ…',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 22,
@@ -229,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Revisa tus premios🎁',
+                      'Revisa tus premiosðŸŽ',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 18,
@@ -290,42 +293,89 @@ class _HomeScreenState extends State<HomeScreen> {
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            unlocked.length == 1
-                ? '¡Nuevo logro desbloqueado!'
-                : '¡Nuevos logros desbloqueados!',
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: unlocked.take(4).map((item) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: [
-                    Icon(item.icon, color: item.iconColor),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Continuar'),
+        builder: (_) {
+          final accent = widget.controller.accentButtonColor;
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
             ),
-          ],
-        ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.emoji_events_rounded,
+                          color: accent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          unlocked.length == 1
+                              ? 'Nuevo logro desbloqueado'
+                              : 'Nuevos logros desbloqueados',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...unlocked.take(4).map((item) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.iconColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: item.iconColor.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(item.icon, color: item.iconColor),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Continuar'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
       _achievementDialogVisible = false;
     });
@@ -690,7 +740,7 @@ class _WelcomeStatusCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         Text(
-                          '$stars estrellas⭐',
+                          '$stars estrellas ⭐',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                           ),
@@ -774,3 +824,4 @@ class _GameCard extends StatelessWidget {
     );
   }
 }
+

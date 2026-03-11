@@ -61,8 +61,6 @@ class PuzzleBoard extends StatelessWidget {
           child: Stack(
             children: List.generate(controller.tiles.length, (index) {
               final value = controller.tiles[index];
-              if (value == 0) return const SizedBox.shrink();
-
               final row = index ~/ controller.size;
               final col = index % controller.size;
 
@@ -78,7 +76,8 @@ class PuzzleBoard extends StatelessWidget {
                   size: controller.size,
                   imageProvider: provider,
                   borderRadius: borderRadius,
-                  onTap: () => controller.moveTile(index),
+                  isSelected: controller.selectedTileIndex == index,
+                  onTap: () => controller.tapTile(index),
                 ),
               );
             }),
@@ -95,6 +94,7 @@ class _PuzzleTile extends StatelessWidget {
     required this.size,
     required this.imageProvider,
     required this.borderRadius,
+    required this.isSelected,
     required this.onTap,
   });
 
@@ -102,11 +102,12 @@ class _PuzzleTile extends StatelessWidget {
   final int size;
   final ImageProvider<Object> imageProvider;
   final double borderRadius;
+  final bool isSelected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final imageIndex = value - 1;
+    final imageIndex = value;
     final row = imageIndex ~/ size;
     final col = imageIndex % size;
     final horizontal = size <= 1 ? 0.0 : (-1 + (2 * col) / (size - 1));
@@ -131,7 +132,10 @@ class _PuzzleTile extends StatelessWidget {
             DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(borderRadius),
-                border: Border.all(color: Colors.black12),
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF1E88E5) : Colors.black12,
+                  width: isSelected ? 3 : 1,
+                ),
               ),
             ),
           ],
