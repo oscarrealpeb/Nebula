@@ -174,6 +174,26 @@ class AppController extends ChangeNotifier {
     return profiles.first;
   }
 
+  int get progressStars {
+    final user = _currentUser;
+    if (user == null) return 0;
+    if (isAdmin) return user.stars;
+    final activeChild = childProfile;
+    if (activeChild != null) return activeChild.stars;
+    return user.stars;
+  }
+
+  List<String> get progressUnlockedAchievementIds {
+    final user = _currentUser;
+    if (user == null) return const <String>[];
+    if (isAdmin) return List<String>.unmodifiable(user.unlockedAchievementIds);
+    final activeChild = childProfile;
+    if (activeChild != null) {
+      return List<String>.unmodifiable(activeChild.unlockedAchievementIds);
+    }
+    return List<String>.unmodifiable(user.unlockedAchievementIds);
+  }
+
   bool get hasChildProfile => childProfile != null;
   bool get needsChildOnboarding => !isAdmin && childProfiles.isEmpty;
   bool get needsPortalSelection =>
@@ -204,9 +224,7 @@ class AppController extends ChangeNotifier {
   }
 
   bool isAchievementUnlocked(String achievementId) {
-    final user = _currentUser;
-    if (user == null) return false;
-    return user.unlockedAchievementIds.any((id) => id == achievementId);
+    return progressUnlockedAchievementIds.any((id) => id == achievementId);
   }
 
   List<GameSessionRecord> get gameSessions => List.unmodifiable(
@@ -224,7 +242,8 @@ class AppController extends ChangeNotifier {
 
     var easyPerfectRounds = 0;
     var mediumPerfectRounds = 0;
-    for (final session in gameSessions) {
+    final sessions = _sessionsForScope();
+    for (final session in sessions) {
       if (session.gameKey.trim().toLowerCase() != normalizedKey) continue;
       final safePerfectRounds = session.perfectRounds.clamp(0, 500).toInt();
       if (session.difficultyStars <= 1) {
@@ -1167,11 +1186,35 @@ class AppController extends ChangeNotifier {
     _starUpdateQueue = _starUpdateQueue.then((_) async {
       final user = _currentUser;
       if (user == null) return;
-      final previousStars = user.stars;
-      final nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
-      final next = user.copyWith(stars: nextStars);
+      var next = user;
+      var previousStars = user.stars;
+      var nextStars = (user.stars + value).clamp(0, 1000000000).toInt();
+
+      if (!isAdmin) {
+        final active = childProfile;
+        if (active != null) {
+          previousStars = active.stars;
+          nextStars = (active.stars + value).clamp(0, 1000000000).toInt();
+          final updatedChild = active.copyWith(stars: nextStars);
+          next = _upsertChildProfile(next, updatedChild);
+          final aggregateStars = next.childProfiles.fold<int>(
+            0,
+            (acc, item) => acc + item.stars.clamp(0, 1000000000).toInt(),
+          );
+          next = next.copyWith(stars: aggregateStars);
+        } else {
+          next = next.copyWith(stars: nextStars);
+        }
+      } else {
+        next = next.copyWith(stars: nextStars);
+      }
+
+      next = _syncLegacyProgressFromChildren(next);
+      final currentProgressStars = (!isAdmin && childProfile != null)
+          ? nextStars
+          : next.stars;
       final previousPlanet = planetForStars(previousStars);
-      final nextPlanet = planetForStars(nextStars);
+      final nextPlanet = planetForStars(currentProgressStars);
       final previousIndex = planetLadder.indexOf(previousPlanet);
       final nextIndex = planetLadder.indexOf(nextPlanet);
       if (nextIndex > previousIndex) {
@@ -1475,23 +1518,23 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: false, message: saved.message);
   }
 
-  Future<ActionResult> seedDemoChildForReports() async {
-    final user = _currentUser;
-    if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
-    }
-    if (isAdmin) {
-      return const ActionResult(
-        ok: false,
-        message:
-            'El perfil demo solo está disponible para cuentas de cuidador.',
-      );
-    }
-
-    final now = DateTime.now();
+  ({
+    NebulaUser user,
+    ChildProfile demoChild,
+    bool existed,
+  }) _buildDemoSeededUser(
+    NebulaUser user, {
+    DateTime? referenceNow,
+  }) {
+    final now = referenceNow ?? DateTime.now();
     final nowMillis = now.millisecondsSinceEpoch;
     final demoChildId = 'child_${user.id}_demo_reports';
-    final existingProfiles = List<ChildProfile>.from(childProfiles);
+    final sourceProfiles = user.childProfiles.isNotEmpty
+        ? user.childProfiles
+        : (user.childProfile == null
+            ? const <ChildProfile>[]
+            : <ChildProfile>[user.childProfile!]);
+    final existingProfiles = List<ChildProfile>.from(sourceProfiles);
     final existingIndex =
         existingProfiles.indexWhere((item) => item.id == demoChildId);
 
@@ -1595,7 +1638,24 @@ class AppController extends ChangeNotifier {
       childProfiles: existingProfiles,
       gameSessions: nextSessions,
     );
-    final saved = await _authService.updateUser(next);
+    return (user: next, demoChild: demoChild, existed: existingIndex >= 0);
+  }
+
+  Future<ActionResult> seedDemoChildForReports() async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    if (isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'El perfil demo solo está disponible para cuentas de cuidador.',
+      );
+    }
+
+    final seeded = _buildDemoSeededUser(user);
+    final saved = await _authService.updateUser(seeded.user);
     if (!saved.ok || saved.data == null) {
       return ActionResult(
         ok: false,
@@ -1608,7 +1668,7 @@ class AppController extends ChangeNotifier {
     _currentUser = saved.data;
     _activeChildProfileId = _resolveActiveChildId(
       user: _currentUser,
-      requestedChildId: demoChild.id,
+      requestedChildId: seeded.demoChild.id,
     );
     _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
     notifyListeners();
@@ -1616,9 +1676,77 @@ class AppController extends ChangeNotifier {
 
     return ActionResult(
       ok: true,
-      message: existingIndex >= 0
+      message: seeded.existed
           ? 'Perfil demo actualizado con datos de ejemplo.'
           : 'Perfil demo creado con datos de ejemplo.',
+    );
+  }
+
+  Future<ActionResult> seedDemoChildForReportsForAllUsers() async {
+    final current = _currentUser;
+    if (current == null) {
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+    }
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'Solo el admin puede aplicar datos demo a todos los usuarios.',
+      );
+    }
+
+    final usersResult = await _authService.listLocalUsers();
+    if (!usersResult.ok || usersResult.data == null) {
+      return ActionResult(
+        ok: false,
+        message: usersResult.message.trim().isEmpty
+            ? 'No se pudieron leer los usuarios.'
+            : usersResult.message,
+      );
+    }
+
+    final caregivers = usersResult.data!
+        .where((item) => item.role.trim().toLowerCase() != UserRole.admin)
+        .toList();
+    if (caregivers.isEmpty) {
+      return const ActionResult(
+        ok: true,
+        message: 'No hay cuentas de cuidador para actualizar.',
+      );
+    }
+
+    final now = DateTime.now();
+    final seededUsers = <NebulaUser>[];
+    var createdCount = 0;
+    var updatedCount = 0;
+
+    for (final user in caregivers) {
+      final seeded = _buildDemoSeededUser(user, referenceNow: now);
+      seededUsers.add(seeded.user);
+      if (seeded.existed) {
+        updatedCount += 1;
+      } else {
+        createdCount += 1;
+      }
+    }
+
+    final saveResult = await _authService.upsertUsersSilently(seededUsers);
+    if (!saveResult.ok) {
+      return ActionResult(
+        ok: false,
+        message: saveResult.message.trim().isEmpty
+            ? 'No se pudieron aplicar los datos demo.'
+            : saveResult.message,
+      );
+    }
+
+    await reloadAdminDashboard();
+    notifyListeners();
+
+    final total = saveResult.data ?? seededUsers.length;
+    return ActionResult(
+      ok: true,
+      message:
+          'Perfil demo aplicado en $total cuentas ($createdCount creadas, $updatedCount actualizadas).',
     );
   }
 
@@ -1746,7 +1874,7 @@ class AppController extends ChangeNotifier {
       final started =
           DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
       if (_sameLocalDay(started, day)) {
-        total += session.durationSeconds;
+        total += _effectiveSessionDurationSeconds(session);
       }
     }
     return total ~/ 60;
@@ -1778,10 +1906,22 @@ class AppController extends ChangeNotifier {
     for (final session in sessions) {
       final started =
           DateTime.fromMillisecondsSinceEpoch(session.startedAtMillis);
-      final minutes = (session.durationSeconds / 60).round();
+      final minutes = (_effectiveSessionDurationSeconds(session) / 60).round();
       result[started.hour] = (result[started.hour] ?? 0) + minutes;
     }
     return result;
+  }
+
+  int _effectiveSessionDurationSeconds(GameSessionRecord session) {
+    final stored = session.durationSeconds.clamp(0, 24 * 3600);
+    if (stored > 0) return stored;
+
+    final startedAt = session.startedAtMillis;
+    final endedAt = session.endedAtMillis;
+    if (startedAt <= 0 || endedAt <= startedAt) return 0;
+
+    final inferred = ((endedAt - startedAt) ~/ 1000).clamp(0, 24 * 3600);
+    return inferred;
   }
 
   List<GameSessionRecord> _sessionsForScope({String childId = ''}) {
@@ -1820,12 +1960,16 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) return;
-
-    final unlocked = user.unlockedAchievementIds
+    final activeChild = !isAdmin ? childProfile : null;
+    final scopedChildId = activeChild?.id.trim() ?? '';
+    final unlocked = (activeChild?.unlockedAchievementIds ?? user.unlockedAchievementIds)
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toSet();
-    final sessions = user.gameSessions;
+    final sessions = scopedChildId.isEmpty
+        ? user.gameSessions
+        : _sessionsForScope(childId: scopedChildId);
+    final starsForRules = activeChild?.stars ?? user.stars;
 
     final sessionsByGame = <String, int>{};
     var perfectSessions = 0;
@@ -1840,7 +1984,7 @@ class AppController extends ChangeNotifier {
       if (rounds > 0 && mistakes == 0) {
         perfectSessions += 1;
       }
-      totalMinutes += (session.durationSeconds.clamp(0, 24 * 3600) ~/ 60);
+      totalMinutes += (_effectiveSessionDurationSeconds(session) ~/ 60);
     }
     final distinctGames = sessionsByGame.keys.length;
 
@@ -1850,7 +1994,7 @@ class AppController extends ChangeNotifier {
       var reached = false;
       switch (achievement.ruleType) {
         case AchievementRuleType.totalStars:
-          reached = user.stars >= achievement.target;
+          reached = starsForRules >= achievement.target;
           break;
         case AchievementRuleType.totalSessions:
           reached = sessions.length >= achievement.target;
@@ -1876,11 +2020,17 @@ class AppController extends ChangeNotifier {
 
     if (newlyUnlocked.isEmpty) return;
 
-    final ordered = achievementCatalog
-        .map((item) => item.id)
-        .where((id) => unlocked.contains(id))
-        .toList();
-    final updated = user.copyWith(unlockedAchievementIds: ordered);
+    final ordered = _orderedAchievementIds(unlocked);
+    NebulaUser updated;
+    if (activeChild != null) {
+      final updatedChild = activeChild.copyWith(
+        unlockedAchievementIds: ordered,
+      );
+      updated = _upsertChildProfile(user, updatedChild);
+      updated = _syncLegacyProgressFromChildren(updated);
+    } else {
+      updated = user.copyWith(unlockedAchievementIds: ordered);
+    }
     _currentUser = updated;
 
     if (queueNotification) {
@@ -1923,6 +2073,33 @@ class AppController extends ChangeNotifier {
 
   bool _sameLocalDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  List<String> _orderedAchievementIds(Iterable<String> ids) {
+    final normalized = ids
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+    return achievementCatalog
+        .map((item) => item.id)
+        .where((id) => normalized.contains(id))
+        .toList();
+  }
+
+  NebulaUser _syncLegacyProgressFromChildren(NebulaUser user) {
+    if (user.childProfiles.isEmpty) return user;
+    final aggregateStars = user.childProfiles.fold<int>(
+      0,
+      (acc, item) => acc + item.stars.clamp(0, 1000000000).toInt(),
+    );
+    final aggregateAchievements = <String>{};
+    for (final child in user.childProfiles) {
+      aggregateAchievements.addAll(child.unlockedAchievementIds);
+    }
+    return user.copyWith(
+      stars: aggregateStars,
+      unlockedAchievementIds: _orderedAchievementIds(aggregateAchievements),
+    );
   }
 
   NebulaUser _upsertChildProfile(NebulaUser user, ChildProfile updatedChild) {

@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      'Â¡Felicidades!ðŸ…',
+                      '¡Felicidades! 🏅',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 22,
@@ -232,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Revisa tus premiosðŸŽ',
+                      'Revisa tus premios 🎁',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 18,
@@ -394,9 +394,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final exploraLabel = widget.controller.gameLabelForKey('explora_aprende');
     final miniLabel = widget.controller.gameLabelForKey('minijuegos');
     final color = widget.controller.accentButtonColor;
-    final planet = planetForStars(user.stars);
-    final progress = planetProgress(user.stars);
-    final remaining = starsToNextPlanet(user.stars);
+    final progressStars = widget.controller.progressStars;
+    final planet = planetForStars(progressStars);
+    final progress = planetProgress(progressStars);
+    final remaining = starsToNextPlanet(progressStars);
     final avatarIndex =
         user.avatarIndex.clamp(0, avatarCatalog.length - 1).toInt();
     final avatar = avatarCatalog[avatarIndex];
@@ -492,7 +493,7 @@ class _HomeScreenState extends State<HomeScreen> {
               avatar: avatar,
               isOnline: widget.controller.isOnline,
               planetName: planet.name,
-              stars: user.stars,
+              stars: progressStars,
               progress: progress,
               remaining: remaining,
               onPlanetTap: () {

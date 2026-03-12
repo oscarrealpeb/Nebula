@@ -692,10 +692,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final child = widget.controller.childProfile;
         final profileHeaderUsername =
             _isChildPortal && child != null ? child.name : user.username;
+        final progressStars = widget.controller.progressStars;
 
-        final planet = planetForStars(user.stars);
-        final progress = planetProgress(user.stars);
-        final unlockedCount = unlockedAvatarCount(user.stars);
+        final planet = planetForStars(progressStars);
+        final progress = planetProgress(progressStars);
+        final unlockedCount = unlockedAvatarCount(progressStars);
         final avatar =
             avatarCatalog[user.avatarIndex.clamp(0, avatarCatalog.length - 1)];
         // final primary = Theme.of(context).colorScheme.primary;
@@ -740,7 +741,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               Text(
-                                'Planeta ${planet.name}  |  ${user.stars} estrellas',
+                                'Planeta ${planet.name}  |  $progressStars estrellas',
                                 style: const TextStyle(
                                   color: Color(0xFF3A4B74),
                                 ),

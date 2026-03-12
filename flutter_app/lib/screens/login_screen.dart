@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -544,7 +544,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       const SizedBox(height: 8),
                       Text(
-                        'No tienes cuenta? Creala.',
+                        '¿No tienes cuenta? Créala.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: const Color(0xFF4F628A),
                               fontWeight: FontWeight.w600,
@@ -566,3 +566,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

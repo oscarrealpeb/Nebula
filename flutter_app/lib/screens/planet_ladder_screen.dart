@@ -33,10 +33,11 @@ class PlanetLadderScreen extends StatelessWidget {
 
         final accent = controller.accentColor;
         final paleAccent = accent.withValues(alpha: 0.08);
+        final progressStars = controller.progressStars;
 
-        final currentPlanet = planetForStars(user.stars);
-        final progress = planetProgress(user.stars);
-        final remaining = starsToNextPlanet(user.stars);
+        final currentPlanet = planetForStars(progressStars);
+        final progress = planetProgress(progressStars);
+        final remaining = starsToNextPlanet(progressStars);
 
         return Scaffold(
           appBar: AppBar(
@@ -52,8 +53,8 @@ class PlanetLadderScreen extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final planet = planetLadder[index];
 
-                    final locked = user.stars < planet.minStars;
-                    final completed = user.stars >= planet.maxStars;
+                    final locked = progressStars < planet.minStars;
+                    final completed = progressStars >= planet.maxStars;
                     final isCurrent = planet.name == currentPlanet.name;
 
                     final nextPlanetName = index < planetLadder.length - 1
@@ -70,7 +71,7 @@ class PlanetLadderScreen extends StatelessWidget {
                         locked: locked,
                         completed: completed,
                         isCurrent: isCurrent,
-                        userStars: user.stars,
+                        userStars: progressStars,
                         progress: progress,
                         remaining: remaining,
                         nextPlanetName: nextPlanetName,

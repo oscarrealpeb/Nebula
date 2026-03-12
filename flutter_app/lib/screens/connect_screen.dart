@@ -428,23 +428,13 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     // if (_isFinishing) return;
     _isFinishing = true;
 
-    int baseStars;
-
-    if (_totalMistakes == 0) {
-      baseStars = 20;
-    } else if (_totalMistakes <= 3) {
-      baseStars = 15;
-    } else {
-      baseStars = 10;
-    }
-
     int difficultyBonus = switch (widget.difficulty) {
-      GameDifficulty.easy => 0,
-      GameDifficulty.medium => 5,
-      GameDifficulty.hard => 10,
+      GameDifficulty.easy => 20,
+      GameDifficulty.medium => 25,
+      GameDifficulty.hard => 30,
     };
-
-    final total = baseStars + difficultyBonus;
+    final penalty = _totalMistakes > 3 ? 10 : 0;
+    final total = (difficultyBonus - penalty).clamp(0, 30).toInt();
 
     try {
       await widget.controller

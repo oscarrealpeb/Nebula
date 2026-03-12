@@ -14,7 +14,7 @@ class LogrosScreen extends StatelessWidget {
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
     final accent = controller.accentColor;
-    final unlocked = user.unlockedAchievementIds.toSet();
+    final unlocked = controller.progressUnlockedAchievementIds.toSet();
     final unlockedCount = achievementCatalog
         .where((achievement) => unlocked.contains(achievement.id))
         .length;

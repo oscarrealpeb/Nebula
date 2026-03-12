@@ -363,21 +363,13 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     if (_completing) return;
     setState(() => _completing = true);
 
-    // Misma logica de estrellas que emotion_screen.
-    int earnedStars;
-    if (_totalMistakes == 0) {
-      earnedStars = 20;
-    } else if (_totalMistakes <= 3) {
-      earnedStars = 15;
-    } else {
-      earnedStars = 10;
-    }
-
-    if (widget.difficultyStars == 2) {
-      earnedStars += 5;
-    } else if (widget.difficultyStars == 3) {
-      earnedStars += 10;
-    }
+    final baseByDifficulty = switch (widget.difficultyStars.clamp(1, 3)) {
+      1 => 20,
+      2 => 25,
+      _ => 30,
+    };
+    final penalty = _totalMistakes > 3 ? 10 : 0;
+    final earnedStars = (baseByDifficulty - penalty).clamp(0, 30).toInt();
     _totalStarsEarned = earnedStars;
 
     await widget.controller.addStars(_totalStarsEarned);

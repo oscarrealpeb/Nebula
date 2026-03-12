@@ -27,6 +27,46 @@ String _roleLabel(String role) {
   }
 }
 
+String _shortMonthEs(int month) {
+  const names = <String>[
+    '',
+    'ene',
+    'feb',
+    'mar',
+    'abr',
+    'may',
+    'jun',
+    'jul',
+    'ago',
+    'sep',
+    'oct',
+    'nov',
+    'dic',
+  ];
+  if (month < 1 || month > 12) return 'mes';
+  return names[month];
+}
+
+String _dayLabel(DateTime day) {
+  final dayNumber = day.day.toString().padLeft(2, '0');
+  return '$dayNumber-${_shortMonthEs(day.month)}';
+}
+
+int _effectiveDurationSeconds(GameSessionRecord session) {
+  final stored = session.durationSeconds.clamp(0, 24 * 3600);
+  if (stored > 0) return stored;
+  if (session.endedAtMillis <= session.startedAtMillis) return 0;
+  return ((session.endedAtMillis - session.startedAtMillis) ~/ 1000)
+      .clamp(0, 24 * 3600);
+}
+
+String _durationLabel(GameSessionRecord session) {
+  final seconds = _effectiveDurationSeconds(session);
+  if (seconds <= 0) return '0 min';
+  final minutes = (seconds / 60).ceil();
+  return '$minutes min';
+}
+
 class CaregiverPanelScreen extends StatefulWidget {
   const CaregiverPanelScreen({super.key, required this.controller});
 
@@ -636,7 +676,9 @@ class _ReportsTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Crea un perfil demo con sesiones simuladas para previsualizar reportes.',
+                  controller.isAdmin
+                      ? 'Carga/actualiza un perfil demo con sesiones simuladas para todas las cuentas de cuidador.'
+                      : 'Crea un perfil demo con sesiones simuladas para previsualizar reportes.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 10),
@@ -644,8 +686,10 @@ class _ReportsTab extends StatelessWidget {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      final result = await controller.seedDemoChildForReports();
-                      if (result.ok) {
+                      final result = controller.isAdmin
+                          ? await controller.seedDemoChildForReportsForAllUsers()
+                          : await controller.seedDemoChildForReports();
+                      if (result.ok && !controller.isAdmin) {
                         final demoChildId = controller.activeChildProfileId;
                         if (demoChildId.trim().isNotEmpty) {
                           await onChildContextChanged(demoChildId);
@@ -659,7 +703,11 @@ class _ReportsTab extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.science_outlined),
-                    label: const Text('Cargar perfil demo'),
+                    label: Text(
+                      controller.isAdmin
+                          ? 'Cargar demo en todos los usuarios'
+                          : 'Cargar perfil demo',
+                    ),
                   ),
                 ),
               ],
@@ -774,6 +822,10 @@ class _ReportsTab extends StatelessWidget {
                 const SizedBox(height: 6),
                 const Text(
                     '0h                                12h                                23h'),
+                const SizedBox(height: 4),
+                const Text(
+                  'Cada barra representa minutos acumulados en sesiones iniciadas en esa hora (ultimos 14 dias).',
+                ),
               ],
             ),
           ),
@@ -841,10 +893,11 @@ class _ReportsTab extends StatelessWidget {
                       session.startedAtMillis,
                     );
                     final label = controller.gameLabelForKey(session.gameKey);
+                    final dateLabel = _dayLabel(started);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
-                        '${started.day}/${started.month} ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}  |  $label  |  ${session.durationSeconds ~/ 60} min',
+                        '$dateLabel ${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}  |  $label  |  ${_durationLabel(session)}',
                       ),
                     );
                   }),
@@ -865,7 +918,7 @@ class _ReportsTab extends StatelessWidget {
     for (var i = 6; i >= 0; i--) {
       final day =
           DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
-      final key = '${day.day}/${day.month}';
+      final key = _dayLabel(day);
       result[key] = controller.usedMinutesOn(day, childId: childId);
     }
     return result;
@@ -920,10 +973,12 @@ class _ReportsTab extends StatelessWidget {
     final sortedSessions = List<GameSessionRecord>.from(sessions)
       ..sort((a, b) => b.startedAtMillis.compareTo(a.startedAtMillis));
     final sessionRows = sortedSessions.map((session) {
+      final durationSeconds = _effectiveDurationSeconds(session);
       return ReportSessionEntry(
         gameLabel: controller.gameLabelForKey(session.gameKey),
         startedAtMillis: session.startedAtMillis,
-        durationMinutes: session.durationSeconds ~/ 60,
+        durationMinutes:
+            durationSeconds <= 0 ? 0 : (durationSeconds / 60).ceil(),
         correctAnswers: session.correctAnswers,
         totalAttempts: session.totalAttempts,
         mistakes: session.mistakes,
@@ -961,9 +1016,10 @@ class _ReportsTab extends StatelessWidget {
         final accuracy = ((rounds - safeMistakes) / rounds).clamp(0.0, 1.0);
         final independence =
             (1 - (safeMistakes / (safeMistakes + rounds))).clamp(0.0, 1.0);
-        final speedRaw = item.durationSeconds <= 0
+        final durationSeconds = _effectiveDurationSeconds(item);
+        final speedRaw = durationSeconds <= 0
             ? 1.0
-            : (rounds * 20.0 / item.durationSeconds).clamp(0.0, 1.0);
+            : (rounds * 20.0 / durationSeconds).clamp(0.0, 1.0);
         final consistency = 0.7 + ((item.difficultyStars - 1) * 0.1);
         final score = (accuracy * 0.45) +
             (independence * 0.25) +

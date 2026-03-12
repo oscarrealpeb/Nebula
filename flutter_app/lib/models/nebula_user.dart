@@ -18,6 +18,8 @@ class ChildProfile {
     this.accentIntensity = 0.55,
     this.loginUsername = '',
     this.loginPinHash = '',
+    this.stars = 0,
+    this.unlockedAchievementIds = const [],
   });
 
   final String id;
@@ -33,6 +35,8 @@ class ChildProfile {
   final double accentIntensity;
   final String loginUsername;
   final String loginPinHash;
+  final int stars;
+  final List<String> unlockedAchievementIds;
 
   ChildProfile copyWith({
     String? id,
@@ -48,6 +52,8 @@ class ChildProfile {
     double? accentIntensity,
     String? loginUsername,
     String? loginPinHash,
+    int? stars,
+    List<String>? unlockedAchievementIds,
   }) {
     return ChildProfile(
       id: id ?? this.id,
@@ -63,6 +69,9 @@ class ChildProfile {
       accentIntensity: accentIntensity ?? this.accentIntensity,
       loginUsername: loginUsername ?? this.loginUsername,
       loginPinHash: loginPinHash ?? this.loginPinHash,
+      stars: stars ?? this.stars,
+      unlockedAchievementIds:
+          unlockedAchievementIds ?? this.unlockedAchievementIds,
     );
   }
 
@@ -82,6 +91,8 @@ class ChildProfile {
       'loginUsername': loginUsername,
       'loginUsernameLower': loginUsername.trim().toLowerCase(),
       'loginPinHash': loginPinHash,
+      'stars': stars,
+      'unlockedAchievementIds': unlockedAchievementIds,
     };
   }
 
@@ -101,6 +112,10 @@ class ChildProfile {
       accentIntensity: (json['accentIntensity'] as num?)?.toDouble() ?? 0.55,
       loginUsername: (json['loginUsername'] as String?) ?? '',
       loginPinHash: (json['loginPinHash'] as String?) ?? '',
+      stars: (json['stars'] as num?)?.toInt() ?? 0,
+      unlockedAchievementIds: List<String>.from(
+        json['unlockedAchievementIds'] as List? ?? const <String>[],
+      ),
     );
   }
 }
@@ -360,8 +375,35 @@ class NebulaUser {
         : (legacyChildProfile == null
             ? const <ChildProfile>[]
             : <ChildProfile>[legacyChildProfile]);
+    final globalStars = (json['stars'] as num?)?.toInt() ?? 0;
+    final globalUnlockedAchievementIds = List<String>.from(
+      json['unlockedAchievementIds'] as List? ?? const <String>[],
+    );
+    var normalizedChildProfiles = List<ChildProfile>.from(resolvedChildProfiles);
+    if (normalizedChildProfiles.isNotEmpty) {
+      final targetChildId =
+          (legacyChildProfile?.id ?? normalizedChildProfiles.first.id).trim();
+      final hasChildStars = normalizedChildProfiles.any((item) => item.stars > 0);
+      final hasChildAchievements = normalizedChildProfiles.any(
+        (item) => item.unlockedAchievementIds.isNotEmpty,
+      );
+      if (!hasChildStars && globalStars > 0) {
+        normalizedChildProfiles = normalizedChildProfiles.map((item) {
+          if (item.id != targetChildId) return item;
+          return item.copyWith(stars: globalStars);
+        }).toList();
+      }
+      if (!hasChildAchievements && globalUnlockedAchievementIds.isNotEmpty) {
+        normalizedChildProfiles = normalizedChildProfiles.map((item) {
+          if (item.id != targetChildId) return item;
+          return item.copyWith(
+            unlockedAchievementIds: globalUnlockedAchievementIds,
+          );
+        }).toList();
+      }
+    }
     final resolvedPrimaryChild = legacyChildProfile ??
-        (resolvedChildProfiles.isEmpty ? null : resolvedChildProfiles.first);
+        (normalizedChildProfiles.isEmpty ? null : normalizedChildProfiles.first);
 
     return NebulaUser(
       id: json['id'] as String,
@@ -370,7 +412,7 @@ class NebulaUser {
       email: json['email'] as String,
       password: json['password'] as String,
       parentalPinHash: (json['parentalPinHash'] as String?) ?? '',
-      stars: (json['stars'] as num?)?.toInt() ?? 0,
+      stars: globalStars,
       avatarIndex: (json['avatarIndex'] as num?)?.toInt() ?? 0,
       selectedNarratorId: json['selectedNarratorId'] as String? ?? 'narrator_1',
       soundEffectsEnabled: json['soundEffectsEnabled'] as bool? ?? true,
@@ -381,7 +423,7 @@ class NebulaUser {
       ),
       role: (json['role'] as String?) ?? UserRole.caregiver,
       childProfile: resolvedPrimaryChild,
-      childProfiles: resolvedChildProfiles,
+      childProfiles: normalizedChildProfiles,
       gameSessions: (json['gameSessions'] as List? ?? const [])
           .whereType<Map>()
           .map(
@@ -395,9 +437,7 @@ class NebulaUser {
               Map<String, dynamic>.from(json['parentalControl'] as Map),
             )
           : const ParentalControl(),
-      unlockedAchievementIds: List<String>.from(
-        json['unlockedAchievementIds'] as List? ?? const <String>[],
-      ),
+      unlockedAchievementIds: globalUnlockedAchievementIds,
     );
   }
 }

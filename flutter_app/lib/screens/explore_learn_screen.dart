@@ -14,7 +14,8 @@ class ExploreLearnScreen extends StatelessWidget {
     final user = controller.currentUser;
     if (user == null) return const SizedBox.shrink();
 
-    final planetIndex = planetLadder.indexOf(planetForStars(user.stars));
+    final progressStars = controller.progressStars;
+    final planetIndex = planetLadder.indexOf(planetForStars(progressStars));
     final unlockedByPlanet = 3 + planetIndex;
 
     final animals = [

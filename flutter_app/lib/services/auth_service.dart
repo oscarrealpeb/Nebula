@@ -1373,6 +1373,71 @@ class AuthService {
     );
   }
 
+  Future<ServiceResult<List<NebulaUser>>> listLocalUsers() async {
+    try {
+      final users = await _store.readUsers();
+      return ServiceResult(
+        ok: true,
+        message: 'Usuarios locales cargados.',
+        data: users,
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos leer usuarios locales: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<int>> upsertUsersSilently(List<NebulaUser> users) async {
+    if (users.isEmpty) {
+      return const ServiceResult(
+        ok: true,
+        message: 'Sin usuarios para actualizar.',
+        data: 0,
+      );
+    }
+
+    try {
+      final uniqueById = <String, NebulaUser>{};
+      for (final user in users) {
+        if (user.id.trim().isEmpty) continue;
+        uniqueById[user.id] = user;
+      }
+
+      final currentUserId = _currentUser?.id.trim() ?? '';
+      NebulaUser? refreshedCurrent;
+      var updatedCount = 0;
+
+      for (final user in uniqueById.values) {
+        await _upsertLocal(user);
+        updatedCount += 1;
+        if (currentUserId.isNotEmpty && user.id == currentUserId) {
+          refreshedCurrent = user;
+        }
+      }
+
+      if (refreshedCurrent != null) {
+        _currentUser = refreshedCurrent;
+        await _persistSessionState(
+          refreshedCurrent,
+          requestedRole: _activePortalRole,
+        );
+      }
+
+      return ServiceResult(
+        ok: true,
+        message: 'Usuarios actualizados.',
+        data: updatedCount,
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos actualizar usuarios: $e',
+      );
+    }
+  }
+
   Future<ServiceResult<NebulaUser>> updateProfile({
     required String userId,
     required String name,
