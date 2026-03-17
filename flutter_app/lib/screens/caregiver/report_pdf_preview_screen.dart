@@ -49,6 +49,8 @@ class ChildReportPdfData {
     required this.childName,
     required this.generatedAtMillis,
     required this.periodDays,
+    required this.dailyWindowDays,
+    required this.hourlyWindowDays,
     required this.dailyMinutes,
     required this.hourlyMinutes,
     required this.skills,
@@ -59,6 +61,8 @@ class ChildReportPdfData {
   final String childName;
   final int generatedAtMillis;
   final int periodDays;
+  final int dailyWindowDays;
+  final int hourlyWindowDays;
   final Map<String, int> dailyMinutes;
   final Map<int, int> hourlyMinutes;
   final List<ReportSkillMetric> skills;
@@ -188,16 +192,34 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
             1: pw.FlexColumnWidth(1.7),
           },
           data: [
-            ['Sesiones en el periodo', data.sessions.length.toString()],
-            ['Minutos totales', totalMinutes.toString()],
-            ['Dias con uso', activeDays.toString()],
-            ['Promedio diario', '${avgDailyMinutes.toStringAsFixed(1)} min'],
             [
-              'Promedio por sesion',
+              'Sesiones registradas (ultimos ${data.periodDays} dias)',
+              '${data.sessions.length} sesiones',
+            ],
+            [
+              'Minutos totales acumulados (ultimos ${data.periodDays} dias)',
+              '$totalMinutes min',
+            ],
+            [
+              'Dias con uso (ultimos ${data.dailyWindowDays} dias)',
+              '$activeDays dias',
+            ],
+            [
+              'Promedio diario (base ${data.periodDays} dias)',
+              '${avgDailyMinutes.toStringAsFixed(1)} min/dia'
+            ],
+            [
+              'Promedio por sesion (ultimos ${data.periodDays} dias)',
               '${avgSessionMinutes.toStringAsFixed(1)} min'
             ],
-            ['Franja horaria dominante', _formatHourLabel(dominantHour)],
-            ['Precision promedio', '${avgAccuracy.toStringAsFixed(1)}%'],
+            [
+              'Franja horaria dominante (ultimos ${data.hourlyWindowDays} dias)',
+              _formatHourLabel(dominantHour),
+            ],
+            [
+              'Precision promedio (ultimos ${data.periodDays} dias)',
+              '${avgAccuracy.toStringAsFixed(1)}%'
+            ],
           ],
         ),
         pw.SizedBox(height: 12),

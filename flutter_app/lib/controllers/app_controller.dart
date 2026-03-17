@@ -1493,6 +1493,93 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: false, message: saved.message);
   }
 
+  Future<ActionResult> deleteChildProfile(String childId) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+    }
+
+    final targetChildId = childId.trim();
+    if (targetChildId.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'No se pudo identificar el perfil a eliminar.',
+      );
+    }
+
+    final existingProfiles = List<ChildProfile>.from(childProfiles);
+    final index =
+        existingProfiles.indexWhere((item) => item.id.trim() == targetChildId);
+    if (index < 0) {
+      return const ActionResult(
+        ok: false,
+        message: 'Ese perfil ya no existe o no esta disponible.',
+      );
+    }
+
+    final removingOnlyChild = existingProfiles.length == 1;
+    existingProfiles.removeAt(index);
+
+    final nextSessions = user.gameSessions.where((session) {
+      final sessionChildId = session.childId.trim();
+      if (sessionChildId == targetChildId) return false;
+      if (removingOnlyChild && sessionChildId.isEmpty) return false;
+      return true;
+    }).toList();
+
+    final scopedPrefix = 'child::${targetChildId.toLowerCase()}::';
+    final nextCustomImages = Map<String, String>.from(user.customImages)
+      ..removeWhere(
+        (key, _) => key.trim().toLowerCase().startsWith(scopedPrefix),
+      );
+
+    final previousPrimaryId = user.childProfile?.id.trim() ?? '';
+    final shouldReplacePrimary =
+        previousPrimaryId.isEmpty || previousPrimaryId == targetChildId;
+    ChildProfile? nextPrimary;
+    if (existingProfiles.isNotEmpty) {
+      if (!shouldReplacePrimary) {
+        for (final item in existingProfiles) {
+          if (item.id == previousPrimaryId) {
+            nextPrimary = item;
+            break;
+          }
+        }
+      }
+      nextPrimary ??= existingProfiles.first;
+    }
+
+    var next = user.copyWith(
+      childProfile: nextPrimary,
+      childProfiles: existingProfiles,
+      gameSessions: nextSessions,
+      customImages: nextCustomImages,
+    );
+
+    if (existingProfiles.isEmpty) {
+      next = next.copyWith(stars: 0, unlockedAchievementIds: const <String>[]);
+    } else {
+      next = _syncLegacyProgressFromChildren(next);
+    }
+
+    final saved = await _authService.updateUser(next);
+    if (saved.ok && saved.data != null) {
+      _currentUser = saved.data;
+      _activeChildProfileId = _resolveActiveChildId(
+        user: _currentUser,
+        requestedChildId: nextPrimary?.id ?? '',
+      );
+      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      notifyListeners();
+      return const ActionResult(
+        ok: true,
+        message: 'Perfil del nino eliminado correctamente.',
+      );
+    }
+
+    return ActionResult(ok: false, message: saved.message);
+  }
+
   Future<ActionResult> updateParentalControl(
       ParentalControl nextControl) async {
     final user = _currentUser;

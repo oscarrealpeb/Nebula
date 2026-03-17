@@ -67,6 +67,16 @@ String _durationLabel(GameSessionRecord session) {
   return '$minutes min';
 }
 
+int _hourlyChartScaleMax(Map<int, int> hourly) {
+  final rawMax = hourly.values.fold<int>(
+    0,
+    (max, value) => value > max ? value : max,
+  );
+  if (rawMax <= 0) return 30;
+  final rounded = ((rawMax + 14) ~/ 15) * 15;
+  return rounded < 30 ? 30 : rounded;
+}
+
 class CaregiverPanelScreen extends StatefulWidget {
   const CaregiverPanelScreen({super.key, required this.controller});
 
@@ -160,6 +170,39 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
       return;
     }
     setState(() {});
+  }
+
+  Future<void> _confirmDeleteChildProfile(ChildProfile child) async {
+    final childName = child.name.trim().isEmpty ? 'este perfil' : child.name;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Eliminar perfil de nino'),
+            content: Text(
+              'Vas a eliminar $childName. Esta accion es irreversible y tambien borrara su progreso, sesiones y logros asociados.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFB3261E),
+                ),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    final result = await widget.controller.deleteChildProfile(child.id);
+    if (!mounted) return;
+    setState(() {});
+    await NebulaSnack.show(context, message: result.message, ok: result.ok);
   }
 
   Future<void> _saveParentalControl() async {
@@ -321,6 +364,7 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
               onCreateChildProfile: () => _openChildProfileEditor(),
               onEditChildProfile: (childId) =>
                   _openChildProfileEditor(childId: childId),
+              onDeleteChildProfile: (child) => _confirmDeleteChildProfile(child),
               onChildContextChanged: _changeChildContext,
             ),
             _ReportsTab(
@@ -481,12 +525,14 @@ class _SummaryTab extends StatelessWidget {
     required this.controller,
     required this.onCreateChildProfile,
     required this.onEditChildProfile,
+    required this.onDeleteChildProfile,
     required this.onChildContextChanged,
   });
 
   final AppController controller;
   final Future<void> Function() onCreateChildProfile;
   final Future<void> Function(String childId) onEditChildProfile;
+  final Future<void> Function(ChildProfile child) onDeleteChildProfile;
   final Future<void> Function(String childId) onChildContextChanged;
 
   @override
@@ -570,6 +616,14 @@ class _SummaryTab extends StatelessWidget {
                             icon: const Icon(Icons.edit_rounded),
                             tooltip: 'Editar',
                           ),
+                          IconButton(
+                            onPressed: () => onDeleteChildProfile(child),
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Color(0xFFB3261E),
+                            ),
+                            tooltip: 'Eliminar',
+                          ),
                         ],
                       ),
                     );
@@ -643,6 +697,7 @@ class _ReportsTab extends StatelessWidget {
     final dayData = _dailyMinutes(controller, childId: activeChildId);
     final hourly =
         controller.usageMinutesByHour(days: 14, childId: activeChildId);
+    final hourlyScaleMax = _hourlyChartScaleMax(hourly);
     final skillData = _skillScores(sessions);
     final pdfData = _buildPdfData(
       controller: controller,
@@ -801,30 +856,78 @@ class _ReportsTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 180,
+                  height: 190,
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: List.generate(24, (hour) {
-                      final minutes = hourly[hour] ?? 0;
-                      final ratio = (minutes / 120).clamp(0.0, 1.0);
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1),
-                          child: Container(
-                            height: 24 + (ratio * 156),
-                            color: Colors.blue.withValues(alpha: 0.45),
-                          ),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 38,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('${hourlyScaleMax}m'),
+                            Text('${(hourlyScaleMax / 2).round()}m'),
+                            const Text('0m'),
+                          ],
                         ),
-                      );
-                    }),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Column(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: List.generate(
+                                  3,
+                                  (_) => Container(
+                                    height: 1,
+                                    color:
+                                        Colors.blueGrey.withValues(alpha: 0.18),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: List.generate(24, (hour) {
+                                final minutes = hourly[hour] ?? 0;
+                                final ratio =
+                                    (minutes / hourlyScaleMax).clamp(0.0, 1.0);
+                                final height =
+                                    ratio <= 0 ? 0.0 : 8 + (ratio * 148);
+                                return Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 1,
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.bottomCenter,
+                                      child: Container(
+                                        height: height,
+                                        color: Colors.blue.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 6),
                 const Text(
                     '0h                                12h                                23h'),
                 const SizedBox(height: 4),
-                const Text(
-                  'Cada barra representa minutos acumulados en sesiones iniciadas en esa hora (ultimos 14 dias).',
+                Text(
+                  'Cada barra representa minutos acumulados en sesiones iniciadas en esa hora durante los ultimos 14 dias. Escala maxima: $hourlyScaleMax min.',
                 ),
               ],
             ),
@@ -935,6 +1038,8 @@ class _ReportsTab extends StatelessWidget {
     final caregiverName = controller.currentUser?.name.trim() ?? '';
     final activeChildId = controller.childProfile?.id.trim() ?? '';
     const periodDays = 30;
+    const dailyWindowDays = 7;
+    const hourlyWindowDays = 14;
 
     final currentFrom =
         DateTime.now().subtract(const Duration(days: periodDays));
@@ -990,6 +1095,8 @@ class _ReportsTab extends StatelessWidget {
       childName: childName.isEmpty ? 'Niño' : childName,
       generatedAtMillis: DateTime.now().millisecondsSinceEpoch,
       periodDays: periodDays,
+      dailyWindowDays: dailyWindowDays,
+      hourlyWindowDays: hourlyWindowDays,
       dailyMinutes: dayData,
       hourlyMinutes: hourly,
       skills: skillRows,
@@ -1255,7 +1362,8 @@ class _ControlTab extends StatelessWidget {
         _ChildContextCard(
           controller: controller,
           onChildChanged: onChildContextChanged,
-          note: 'El control parental se aplica al perfil de niño activo.',
+          note:
+              'El control parental se guarda para la cuenta cuidador y se evalua cuando un perfil de nino intenta abrir juegos.',
         ),
         const SizedBox(height: 10),
         Card(
