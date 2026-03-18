@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nebula/screens/settings/learning_content_personalization_screen.dart';
 
 import '../../controllers/app_controller.dart';
 import '../../core/data/skill_catalog.dart';
@@ -12,7 +13,6 @@ import 'admin_game_content_screen.dart';
 import 'caregiver_settings_screen.dart';
 import '../child_profile_setup_screen.dart';
 import '../portal_entry_screen.dart';
-import '../settings/personalization_screen.dart';
 import '../welcome_screen.dart';
 import 'report_pdf_preview_screen.dart';
 
@@ -78,9 +78,16 @@ int _hourlyChartScaleMax(Map<int, int> hourly) {
 }
 
 class CaregiverPanelScreen extends StatefulWidget {
-  const CaregiverPanelScreen({super.key, required this.controller});
+  const CaregiverPanelScreen({
+    super.key,
+    required this.controller,
+    this.flashMessage = '',
+    this.flashOk = true,
+  });
 
   final AppController controller;
+  final String flashMessage;
+  final bool flashOk;
 
   @override
   State<CaregiverPanelScreen> createState() => _CaregiverPanelScreenState();
@@ -117,6 +124,13 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     if (widget.controller.isAdmin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadAdminDashboard();
+      });
+    }
+    final flash = widget.flashMessage.trim();
+    if (flash.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        NebulaSnack.show(context, message: flash, ok: widget.flashOk);
       });
     }
   }

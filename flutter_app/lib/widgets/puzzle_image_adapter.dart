@@ -42,6 +42,12 @@ ImageProvider<Object>? puzzleImageProviderFromSource(String source) {
   return null;
 }
 
+Future<void> evictPuzzleImageSource(String source) async {
+  final provider = puzzleImageProviderFromSource(source);
+  if (provider == null) return;
+  await provider.evict();
+}
+
 class PuzzleImageAdapter extends StatelessWidget {
   const PuzzleImageAdapter({
     super.key,

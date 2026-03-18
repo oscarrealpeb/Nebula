@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnack(resolved.message, ok: false);
       return;
     }
-    _openPostLoginScreen();
+    _openPostLoginScreen(flashMessage: resolved.message, flashOk: true);
   }
 
   Future<void> _loginWithGoogle() async {
@@ -137,14 +137,20 @@ class _LoginScreenState extends State<LoginScreen> {
           _showSnack(retryResult.message, ok: false);
           return;
         }
-        _openPostLoginScreen();
+        _openPostLoginScreen(
+          flashMessage: retryResult.message,
+          flashOk: true,
+        );
         return;
       }
       if (!confirmResult.ok) {
         _showSnack(confirmResult.message, ok: false);
         return;
       }
-      _openPostLoginScreen();
+      _openPostLoginScreen(
+        flashMessage: confirmResult.message,
+        flashOk: true,
+      );
       return;
     }
 
@@ -152,22 +158,39 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnack(result.message, ok: false);
       return;
     }
-    _openPostLoginScreen();
+    _openPostLoginScreen(flashMessage: result.message, flashOk: true);
   }
 
-  void _openPostLoginScreen() {
+  void _openPostLoginScreen({
+    String flashMessage = '',
+    bool flashOk = true,
+  }) {
     final Widget destination;
     if (widget.controller.isAdmin) {
-      destination = CaregiverPanelScreen(controller: widget.controller);
+      destination = CaregiverPanelScreen(
+        controller: widget.controller,
+        flashMessage: flashMessage,
+        flashOk: flashOk,
+      );
     } else if (widget.controller.needsChildOnboarding) {
       destination = ChildProfileSetupScreen(
         controller: widget.controller,
         isMandatory: true,
+        flashMessage: flashMessage,
+        flashOk: flashOk,
       );
     } else if (widget.controller.needsPortalSelection) {
-      destination = PortalEntryScreen(controller: widget.controller);
+      destination = PortalEntryScreen(
+        controller: widget.controller,
+        flashMessage: flashMessage,
+        flashOk: flashOk,
+      );
     } else {
-      destination = CaregiverPanelScreen(controller: widget.controller);
+      destination = CaregiverPanelScreen(
+        controller: widget.controller,
+        flashMessage: flashMessage,
+        flashOk: flashOk,
+      );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

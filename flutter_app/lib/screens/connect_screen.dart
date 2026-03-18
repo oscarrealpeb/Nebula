@@ -12,8 +12,10 @@ class SoundItem {
   final String category;
   final String soundAsset;
   final String correctImage;
+  final String itemId;
 
   SoundItem({
+    this.itemId = '',
     required this.category,
     required this.soundAsset,
     required this.correctImage,
@@ -310,6 +312,10 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         )
         .map(
           (item) => SoundItem(
+            itemId: widget.controller.customContentItemId(
+              source: item.correctImage.trim(),
+              rawId: item.id,
+            ),
             category: item.category.trim().isEmpty
                 ? 'personalizado'
                 : item.category.trim(),
@@ -320,10 +326,27 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         .toList();
   }
 
+  SoundItem _resolvedSoundItem(SoundItem item) {
+    final itemId = item.itemId.trim().isNotEmpty
+        ? item.itemId
+        : widget.controller.customContentItemId(source: item.correctImage);
+    final resolvedImage = widget.controller.resolvedGameImageSourceFor(
+      gameKey: 'sonidos',
+      itemId: itemId,
+      defaultSource: item.correctImage,
+    );
+    return SoundItem(
+      itemId: itemId,
+      category: item.category,
+      soundAsset: item.soundAsset,
+      correctImage: resolvedImage,
+    );
+  }
+
   List<SoundItem> _itemsForDifficulty(GameDifficulty difficulty) {
     final defaults = _loadCategorizedSoundItems(difficulty);
     final custom = _customSoundItemsForDifficulty(difficulty);
-    if (custom.isEmpty) return [...defaults];
+    if (custom.isEmpty) return defaults.map(_resolvedSoundItem).toList();
 
     final merged = <SoundItem>[...custom];
     for (final item in defaults) {
@@ -336,12 +359,18 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
         merged.add(item);
       }
     }
-    return merged;
+    return merged.map(_resolvedSoundItem).toList();
   }
 
   List<String> _imagePoolForOptions() {
     final pool = <String>{
-      ..._defaultImages,
+      ..._defaultImages.map(
+        (source) => widget.controller.resolvedGameImageSourceFor(
+          gameKey: 'sonidos',
+          itemId: widget.controller.customContentItemId(source: source),
+          defaultSource: source,
+        ),
+      ),
       ..._activeItems.map((item) => item.correctImage.trim()),
     }.where((item) => item.isNotEmpty).toList();
     return pool;

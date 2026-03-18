@@ -1,8 +1,13 @@
-import 'dart:async';
+﻿import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/admin_dashboard_models.dart';
 import '../core/data/achievement_catalog.dart';
@@ -33,6 +38,16 @@ class ActionResult {
 class AppController extends ChangeNotifier {
   static const hiddenAdminEmail = 'admin@nebula.local';
   static const hiddenAdminPassword = '123456';
+  static const int minChildProfileAge = 10;
+  static const int maxChildProfileAge = 18;
+  static const int maxCustomImageBytes = 5 * 1024 * 1024;
+  static const int maxCustomImageKilobytes = maxCustomImageBytes ~/ 1024;
+  static const int maxCustomImageMegabytes = maxCustomImageBytes ~/ (1024 * 1024);
+  static const List<String> allowedCustomImageExtensions = <String>[
+    'jpg',
+    'jpeg',
+    'png',
+  ];
 
   AppController._(
     this._authService,
@@ -55,6 +70,8 @@ class AppController extends ChangeNotifier {
   String _activeChildProfileId = '';
   bool _needsPortalSelection = false;
   bool _isOnline = true;
+  String _localImageCacheDirPath = '';
+  final Set<String> _imageCacheSyncInFlight = <String>{};
   StreamSubscription<bool>? _connectivitySub;
   Future<void> _starUpdateQueue = Future<void>.value();
   String? _pendingHomeLevelUpPlanetName;
@@ -69,6 +86,7 @@ class AppController extends ChangeNotifier {
       store,
       firebaseAuth: firebaseEnabled ? FirebaseAuth.instance : null,
       firestore: firebaseEnabled ? FirebaseFirestore.instance : null,
+      storage: firebaseEnabled ? FirebaseStorage.instance : null,
     );
     final controller = AppController._(
       authService,
@@ -93,6 +111,7 @@ class AppController extends ChangeNotifier {
     if (contentResult.data != null) {
       controller._gameContentConfig = contentResult.data!;
     }
+    await controller._ensureLocalImageCacheDirReady();
     await controller._syncAchievementsFromProgress(
       queueNotification: false,
       notifyUi: false,
@@ -106,10 +125,12 @@ class AppController extends ChangeNotifier {
         controller._isOnline = online;
         if (online) {
           unawaited(controller._authService.syncCurrentUserToCloudBestEffort());
+          unawaited(controller._warmLocalImageCachesBestEffort());
         }
         controller.notifyListeners();
       },
     );
+    unawaited(controller._warmLocalImageCachesBestEffort());
     return controller;
   }
 
@@ -120,15 +141,45 @@ class AppController extends ChangeNotifier {
   List<String> get puzzleImageSources {
     final fromAdmin = _gameContentConfig.puzzleItems
         .where((item) => item.enabled)
-        .map((item) => item.imageSource.trim())
+        .map((item) {
+          final source = item.imageSource.trim();
+          if (source.isEmpty) return '';
+          return customGameImageSourceFor(
+                gameKey: 'puzzle',
+                itemId: customContentItemId(
+                  source: source,
+                  rawId: item.id,
+                ),
+                defaultSource: source,
+              ) ??
+              source;
+        })
         .where((item) => item.isNotEmpty)
         .toList();
     if (fromAdmin.isEmpty) {
-      return List<String>.from(defaultPuzzleImageSources);
+      return defaultPuzzleImageSources
+          .map(
+            (source) => customGameImageSourceFor(
+                  gameKey: 'puzzle',
+                  itemId: customContentItemId(source: source),
+                  defaultSource: source,
+                ) ??
+                source,
+          )
+          .toList();
     }
     final merged = <String>[
       ...fromAdmin,
-      ...defaultPuzzleImageSources.where((item) => !fromAdmin.contains(item)),
+      ...defaultPuzzleImageSources
+          .map(
+            (source) => customGameImageSourceFor(
+                  gameKey: 'puzzle',
+                  itemId: customContentItemId(source: source),
+                  defaultSource: source,
+                ) ??
+                source,
+          )
+          .where((item) => !fromAdmin.contains(item)),
     ];
     return merged;
   }
@@ -195,7 +246,10 @@ class AppController extends ChangeNotifier {
   }
 
   bool get hasChildProfile => childProfile != null;
-  bool get needsChildOnboarding => !isAdmin && childProfiles.isEmpty;
+  bool get needsChildOnboarding =>
+      !isAdmin &&
+      childProfiles.isEmpty &&
+      _activePortalRole == PortalRole.child;
   bool get needsPortalSelection =>
       !isAdmin &&
       _currentUser != null &&
@@ -273,13 +327,13 @@ class AppController extends ChangeNotifier {
   }
 
   double get currentAccentHue {
-    final child = childProfile;
+    final child = _activePortalRole == PortalRole.child ? childProfile : null;
     if (child != null) return child.accentHue;
     return (_currentUser?.accentHue ?? 190).toDouble();
   }
 
   double get currentAccentIntensity {
-    final child = childProfile;
+    final child = _activePortalRole == PortalRole.child ? childProfile : null;
     if (child != null) {
       return child.accentIntensity.clamp(0.65, 1.0).toDouble();
     }
@@ -350,6 +404,7 @@ class AppController extends ChangeNotifier {
         notifyUi: false,
       );
       await reloadGameContentConfig(notify: false);
+      unawaited(_warmLocalImageCachesBestEffort());
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -387,6 +442,7 @@ class AppController extends ChangeNotifier {
     );
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
+    unawaited(_warmLocalImageCachesBestEffort());
     notifyListeners();
     return ActionResult(ok: true, message: result.message);
   }
@@ -423,6 +479,7 @@ class AppController extends ChangeNotifier {
     await reloadAppAdminConfig(notify: false);
     await reloadGameContentConfig(notify: false);
     await reloadAdminDashboard(notify: false);
+    unawaited(_warmLocalImageCachesBestEffort());
     notifyListeners();
     return ActionResult(ok: true, message: result.message);
   }
@@ -462,6 +519,7 @@ class AppController extends ChangeNotifier {
       );
       await reloadAppAdminConfig(notify: false);
       await reloadGameContentConfig(notify: false);
+      unawaited(_warmLocalImageCachesBestEffort());
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -489,6 +547,7 @@ class AppController extends ChangeNotifier {
       );
       await reloadAppAdminConfig(notify: false);
       await reloadGameContentConfig(notify: false);
+      unawaited(_warmLocalImageCachesBestEffort());
       notifyListeners();
     }
     return ActionResult(ok: result.ok, message: result.message);
@@ -723,6 +782,7 @@ class AppController extends ChangeNotifier {
     final result = await _authService.fetchGameContentConfig();
     if (result.data != null) {
       _gameContentConfig = result.data!;
+      unawaited(_warmLocalImageCachesBestEffort());
       if (notify) {
         notifyListeners();
       }
@@ -740,6 +800,7 @@ class AppController extends ChangeNotifier {
     final result = await _authService.fetchGameContentConfig();
     if (result.ok && result.data != null) {
       _gameContentConfig = result.data!;
+      unawaited(_warmLocalImageCachesBestEffort());
       if (notify) notifyListeners();
       return ActionResult(ok: true, message: result.message);
     }
@@ -1286,10 +1347,11 @@ class AppController extends ChangeNotifier {
     final user = _currentUser;
     if (user == null) return;
     final safeIntensity = intensity.clamp(0.65, 1.0).toDouble();
-    final targetChildId = (childProfile?.id ?? '').trim();
+    final applyToChild = _activePortalRole == PortalRole.child && !isAdmin;
+    final targetChildId = applyToChild ? (childProfile?.id ?? '').trim() : '';
     var next = user.copyWith(accentHue: hue, accentIntensity: safeIntensity);
     final active = childProfile;
-    if (active != null && !isAdmin) {
+    if (applyToChild && active != null) {
       final updatedChild = active.copyWith(
         accentHue: hue,
         accentIntensity: safeIntensity,
@@ -1369,6 +1431,724 @@ class AppController extends ChangeNotifier {
     return null;
   }
 
+  String _customGameImageBaseKey({
+    required String gameKey,
+    required String itemId,
+  }) {
+    final normalizedGame = gameKey.trim().toLowerCase();
+    final normalizedItem = itemId.trim().toLowerCase();
+    return 'game::$normalizedGame::$normalizedItem';
+  }
+
+  String customContentItemId({
+    required String source,
+    String rawId = '',
+  }) {
+    final explicit = rawId.trim().toLowerCase();
+    if (explicit.isNotEmpty) return explicit;
+    final normalizedSource = source.trim().toLowerCase();
+    if (normalizedSource.isEmpty) return 'item';
+    final collapsed = normalizedSource.replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '_',
+    );
+    return collapsed.replaceAll(RegExp(r'^_+|_+$'), '');
+  }
+
+  Future<void> _ensureLocalImageCacheDirReady() async {
+    if (_localImageCacheDirPath.trim().isNotEmpty) return;
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${docsDir.path}/nebula_image_cache');
+      if (!cacheDir.existsSync()) {
+        await cacheDir.create(recursive: true);
+      }
+      _localImageCacheDirPath = cacheDir.path;
+    } catch (_) {
+      _localImageCacheDirPath = '';
+    }
+  }
+
+  String _localCachePathForStoragePath(String storagePath) {
+    final normalized = storagePath.trim();
+    if (_localImageCacheDirPath.trim().isEmpty || normalized.isEmpty) {
+      return '';
+    }
+    final extension = _fileExtension(normalized) ?? 'jpg';
+    final encoded = base64Url.encode(utf8.encode(normalized)).replaceAll('=', '');
+    return '$_localImageCacheDirPath/$encoded.$extension';
+  }
+
+  String? _localCachedFilePathForStoragePath(String? storagePath) {
+    final normalized = storagePath?.trim() ?? '';
+    if (normalized.isEmpty) return null;
+    final localPath = _localCachePathForStoragePath(normalized);
+    if (localPath.isEmpty) return null;
+    final file = File(localPath);
+    if (!file.existsSync()) return null;
+    return localPath;
+  }
+
+  Future<void> _writeLocalImageCacheCopy({
+    required String sourcePath,
+    required String storagePath,
+  }) async {
+    final normalizedSource = sourcePath.trim();
+    final normalizedStorage = storagePath.trim();
+    if (normalizedSource.isEmpty || normalizedStorage.isEmpty) return;
+    await _ensureLocalImageCacheDirReady();
+    final targetPath = _localCachePathForStoragePath(normalizedStorage);
+    if (targetPath.isEmpty) return;
+    final sourceFile = File(normalizedSource);
+    if (!sourceFile.existsSync()) return;
+    final targetFile = File(targetPath);
+    await targetFile.parent.create(recursive: true);
+    await sourceFile.copy(targetPath);
+  }
+
+  Future<void> _deleteLocalImageCacheFileBestEffort(String storagePath) async {
+    final targetPath = _localCachePathForStoragePath(storagePath);
+    if (targetPath.isEmpty) return;
+    try {
+      final targetFile = File(targetPath);
+      if (targetFile.existsSync()) {
+        await targetFile.delete();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _cacheRemoteImageLocallyBestEffort({
+    required String storagePath,
+    required String sourceUrl,
+  }) async {
+    final normalizedStorage = storagePath.trim();
+    final normalizedUrl = sourceUrl.trim();
+    if (normalizedStorage.isEmpty || normalizedUrl.isEmpty || !_isOnline) {
+      return;
+    }
+    if (_imageCacheSyncInFlight.contains(normalizedStorage)) return;
+    _imageCacheSyncInFlight.add(normalizedStorage);
+    try {
+      await _ensureLocalImageCacheDirReady();
+      final targetPath = _localCachePathForStoragePath(normalizedStorage);
+      if (targetPath.isEmpty) return;
+      final uri = Uri.tryParse(normalizedUrl);
+      if (uri == null ||
+          !(uri.scheme.toLowerCase() == 'http' ||
+              uri.scheme.toLowerCase() == 'https')) {
+        return;
+      }
+
+      final client = HttpClient();
+      try {
+        final request = await client.getUrl(uri);
+        final response = await request.close();
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          return;
+        }
+        final bytes = await consolidateHttpClientResponseBytes(response);
+        final targetFile = File(targetPath);
+        await targetFile.parent.create(recursive: true);
+        await targetFile.writeAsBytes(bytes, flush: true);
+      } finally {
+        client.close(force: true);
+      }
+    } catch (_) {
+      // Cache local best-effort: si falla, seguimos usando la URL remota.
+    } finally {
+      _imageCacheSyncInFlight.remove(normalizedStorage);
+    }
+  }
+
+  Future<void> _warmLocalImageCachesBestEffort() async {
+    if (!_isOnline) return;
+    final user = _currentUser;
+    await _ensureLocalImageCacheDirReady();
+    if (_localImageCacheDirPath.trim().isEmpty) return;
+
+    if (user != null) {
+      for (final entry in user.customImageStoragePaths.entries) {
+        final storagePath = entry.value.trim();
+        final sourceUrl = user.customImages[entry.key]?.trim() ?? '';
+        if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+        unawaited(
+          _cacheRemoteImageLocallyBestEffort(
+            storagePath: storagePath,
+            sourceUrl: sourceUrl,
+          ),
+        );
+      }
+    }
+
+    for (final entry in _gameContentConfig.globalEmotionImageStoragePaths.entries) {
+      final storagePath = entry.value.trim();
+      final sourceUrl =
+          _gameContentConfig.globalEmotionImageOverrides[entry.key]?.trim() ?? '';
+      if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+      unawaited(
+        _cacheRemoteImageLocallyBestEffort(
+          storagePath: storagePath,
+          sourceUrl: sourceUrl,
+        ),
+      );
+    }
+
+    for (final entry in _gameContentConfig.globalSoundImageStoragePaths.entries) {
+      final storagePath = entry.value.trim();
+      final sourceUrl =
+          _gameContentConfig.globalSoundImageOverrides[entry.key]?.trim() ?? '';
+      if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+      unawaited(
+        _cacheRemoteImageLocallyBestEffort(
+          storagePath: storagePath,
+          sourceUrl: sourceUrl,
+        ),
+      );
+    }
+  }
+
+  String? customGameImageSourceFor({
+    required String gameKey,
+    required String itemId,
+    required String defaultSource,
+    String childId = '',
+  }) {
+    final localCustom = _localCachedFilePathForStoragePath(
+      _customGameImageStoragePathFor(
+        gameKey: gameKey,
+        itemId: itemId,
+        childId: childId,
+      ),
+    );
+    if (localCustom != null && localCustom.isNotEmpty) {
+      return localCustom;
+    }
+    final custom = customImagePathFor(
+      key: _customGameImageBaseKey(gameKey: gameKey, itemId: itemId),
+      childId: childId,
+    );
+    if (custom == null || custom.trim().isEmpty) {
+      return defaultSource;
+    }
+    return custom;
+  }
+
+  String? _globalGameImageOverrideFor({
+    required String gameKey,
+    required String itemId,
+  }) {
+    final normalizedKey =
+        _customGameImageBaseKey(gameKey: gameKey, itemId: itemId);
+    return switch (gameKey.trim().toLowerCase()) {
+      'emociones' =>
+        _gameContentConfig.globalEmotionImageOverrides[normalizedKey]?.trim(),
+      'sonidos' =>
+        _gameContentConfig.globalSoundImageOverrides[normalizedKey]?.trim(),
+      _ => null,
+    };
+  }
+
+  String _globalGameImageStorageMapKey({
+    required String gameKey,
+    required String itemId,
+  }) {
+    return _customGameImageBaseKey(gameKey: gameKey, itemId: itemId);
+  }
+
+  String? _globalGameImageStoragePathFor({
+    required String gameKey,
+    required String itemId,
+  }) {
+    final key = _globalGameImageStorageMapKey(gameKey: gameKey, itemId: itemId);
+    return switch (gameKey.trim().toLowerCase()) {
+      'emociones' =>
+        _gameContentConfig.globalEmotionImageStoragePaths[key]?.trim(),
+      'sonidos' =>
+        _gameContentConfig.globalSoundImageStoragePaths[key]?.trim(),
+      _ => null,
+    };
+  }
+
+  String resolvedGameImageSourceFor({
+    required String gameKey,
+    required String itemId,
+    required String defaultSource,
+    String childId = '',
+  }) {
+    final customStoragePath = _customGameImageStoragePathFor(
+      gameKey: gameKey,
+      itemId: itemId,
+      childId: childId,
+    );
+    final localCustom = _localCachedFilePathForStoragePath(customStoragePath);
+    if (localCustom != null && localCustom.isNotEmpty) {
+      return localCustom;
+    }
+    final custom = customImagePathFor(
+      key: _customGameImageBaseKey(gameKey: gameKey, itemId: itemId),
+      childId: childId,
+    );
+    if (custom != null && custom.trim().isNotEmpty) {
+      if (customStoragePath != null && customStoragePath.trim().isNotEmpty) {
+        unawaited(
+          _cacheRemoteImageLocallyBestEffort(
+            storagePath: customStoragePath,
+            sourceUrl: custom,
+          ),
+        );
+      }
+      return custom;
+    }
+    final globalStoragePath = _globalGameImageStoragePathFor(
+      gameKey: gameKey,
+      itemId: itemId,
+    );
+    final localGlobal = _localCachedFilePathForStoragePath(globalStoragePath);
+    if (localGlobal != null && localGlobal.isNotEmpty) {
+      return localGlobal;
+    }
+    final global =
+        _globalGameImageOverrideFor(gameKey: gameKey, itemId: itemId);
+    if (global != null && global.isNotEmpty) {
+      if (globalStoragePath != null && globalStoragePath.trim().isNotEmpty) {
+        unawaited(
+          _cacheRemoteImageLocallyBestEffort(
+            storagePath: globalStoragePath,
+            sourceUrl: global,
+          ),
+        );
+      }
+      return global;
+    }
+    return defaultSource;
+  }
+
+  bool hasCustomGameImage({
+    required String gameKey,
+    required String itemId,
+    String childId = '',
+  }) {
+    final custom = customImagePathFor(
+      key: _customGameImageBaseKey(gameKey: gameKey, itemId: itemId),
+      childId: childId,
+    );
+    return custom != null && custom.trim().isNotEmpty;
+  }
+
+  String? _customGameImageStoragePathFor({
+    required String gameKey,
+    required String itemId,
+    String childId = '',
+  }) {
+    final user = _currentUser;
+    if (user == null) return null;
+    final directChildId = childId.trim();
+    final activeId =
+        directChildId.isNotEmpty ? directChildId : _activeChildProfileId;
+    final key = _scopedCustomImageKey(
+          baseKey: _customGameImageBaseKey(gameKey: gameKey, itemId: itemId),
+          childId: activeId,
+        ) ??
+        _customGameImageBaseKey(gameKey: gameKey, itemId: itemId);
+    final value = user.customImageStoragePaths[key]?.trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  Future<ActionResult> saveCustomGameImage({
+    required String gameKey,
+    required String itemId,
+    required String filePath,
+    String childId = '',
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+    if (!_firebaseEnabled) {
+      return const ActionResult(
+        ok: false,
+        message: 'Esta función requiere sincronización con Firebase.',
+      );
+    }
+    if (!_isOnline) {
+      return const ActionResult(
+        ok: false,
+        message: 'Necesitas internet para sincronizar la imagen.',
+      );
+    }
+
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'No se encontró la imagen seleccionada.',
+      );
+    }
+    final file = File(normalizedPath);
+    if (!file.existsSync()) {
+      return const ActionResult(
+        ok: false,
+        message: 'La imagen seleccionada ya no está disponible.',
+      );
+    }
+
+    final extension = _fileExtension(normalizedPath);
+    if (extension == null ||
+        !allowedCustomImageExtensions.contains(extension.toLowerCase())) {
+      return const ActionResult(
+        ok: false,
+        message: 'Formato no permitido. Usa JPG o PNG.',
+      );
+    }
+
+    final sizeBytes = file.lengthSync();
+    if (sizeBytes > maxCustomImageBytes) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'La imagen supera el tamaño máximo permitido de $maxCustomImageMegabytes MB.',
+      );
+    }
+
+    final targetChildId =
+        childId.trim().isEmpty ? _activeChildProfileId : childId.trim();
+    if (targetChildId.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'Selecciona primero un perfil de niño.',
+      );
+    }
+
+    final baseKey = _customGameImageBaseKey(gameKey: gameKey, itemId: itemId);
+    final targetKey = _scopedCustomImageKey(
+          baseKey: baseKey,
+          childId: targetChildId,
+        ) ??
+        baseKey;
+    final previousStoragePath = _customGameImageStoragePathFor(
+      gameKey: gameKey,
+      itemId: itemId,
+      childId: targetChildId,
+    );
+
+    final uploaded = await _authService.uploadCustomImageFile(
+      user: user,
+      childId: targetChildId,
+      gameKey: gameKey,
+      itemId: itemId,
+      filePath: normalizedPath,
+    );
+    if (!uploaded.ok || uploaded.data == null) {
+      return ActionResult(ok: false, message: uploaded.message);
+    }
+
+    final nextImages = Map<String, String>.from(user.customImages);
+    nextImages[targetKey] = uploaded.data!.downloadUrl;
+    final nextStorage = Map<String, String>.from(user.customImageStoragePaths);
+    nextStorage[targetKey] = uploaded.data!.storagePath;
+
+    final next = user.copyWith(
+      customImages: nextImages,
+      customImageStoragePaths: nextStorage,
+    );
+    final saved = await _authService.updateUser(next);
+    if (!saved.ok || saved.data == null) {
+      await _authService.deleteCustomImageFileBestEffort(
+        uploaded.data!.storagePath,
+      );
+      return ActionResult(ok: false, message: saved.message);
+    }
+
+    _currentUser = saved.data;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: _activeChildProfileId,
+    );
+    await _writeLocalImageCacheCopy(
+      sourcePath: normalizedPath,
+      storagePath: uploaded.data!.storagePath,
+    );
+    notifyListeners();
+
+    if (previousStoragePath != null &&
+        previousStoragePath.isNotEmpty &&
+        previousStoragePath != uploaded.data!.storagePath) {
+      unawaited(
+        _authService.deleteCustomImageFileBestEffort(previousStoragePath),
+      );
+      unawaited(_deleteLocalImageCacheFileBestEffort(previousStoragePath));
+    }
+
+    return const ActionResult(
+      ok: true,
+      message: 'Imagen personalizada guardada correctamente.',
+    );
+  }
+
+  Future<ActionResult> saveGlobalGameImage({
+    required String gameKey,
+    required String itemId,
+    required String filePath,
+  }) async {
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message: 'Solo el administrador puede cambiar imagenes predeterminadas.',
+      );
+    }
+    if (!_firebaseEnabled) {
+      return const ActionResult(
+        ok: false,
+        message: 'Esta funcion requiere sincronizacion con Firebase.',
+      );
+    }
+    if (!_isOnline) {
+      return const ActionResult(
+        ok: false,
+        message: 'Necesitas internet para sincronizar la imagen global.',
+      );
+    }
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      return const ActionResult(
+        ok: false,
+        message: 'No se encontro la imagen seleccionada.',
+      );
+    }
+    final file = File(normalizedPath);
+    if (!file.existsSync()) {
+      return const ActionResult(
+        ok: false,
+        message: 'La imagen seleccionada ya no esta disponible.',
+      );
+    }
+    final extension = _fileExtension(normalizedPath);
+    if (extension == null ||
+        !allowedCustomImageExtensions.contains(extension.toLowerCase())) {
+      return const ActionResult(
+        ok: false,
+        message: 'Formato no permitido. Usa JPG o PNG.',
+      );
+    }
+    final sizeBytes = file.lengthSync();
+    if (sizeBytes > maxCustomImageBytes) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'La imagen supera el tamano maximo permitido de $maxCustomImageMegabytes MB.',
+      );
+    }
+    final previousStoragePath = _globalGameImageStoragePathFor(
+      gameKey: gameKey,
+      itemId: itemId,
+    );
+    final uploaded = await _authService.uploadGlobalGameImageFile(
+      gameKey: gameKey,
+      itemId: itemId,
+      filePath: normalizedPath,
+    );
+    if (!uploaded.ok || uploaded.data == null) {
+      return ActionResult(ok: false, message: uploaded.message);
+    }
+    final key = _globalGameImageStorageMapKey(gameKey: gameKey, itemId: itemId);
+    late final GameContentConfig nextConfig;
+    switch (gameKey.trim().toLowerCase()) {
+      case 'emociones':
+        nextConfig = _gameContentConfig.copyWith(
+          globalEmotionImageOverrides: Map<String, String>.from(
+            _gameContentConfig.globalEmotionImageOverrides,
+          )..[key] = uploaded.data!.downloadUrl,
+          globalEmotionImageStoragePaths: Map<String, String>.from(
+            _gameContentConfig.globalEmotionImageStoragePaths,
+          )..[key] = uploaded.data!.storagePath,
+        );
+        break;
+      case 'sonidos':
+        nextConfig = _gameContentConfig.copyWith(
+          globalSoundImageOverrides: Map<String, String>.from(
+            _gameContentConfig.globalSoundImageOverrides,
+          )..[key] = uploaded.data!.downloadUrl,
+          globalSoundImageStoragePaths: Map<String, String>.from(
+            _gameContentConfig.globalSoundImageStoragePaths,
+          )..[key] = uploaded.data!.storagePath,
+        );
+        break;
+      default:
+        await _authService.deleteCustomImageFileBestEffort(
+          uploaded.data!.storagePath,
+        );
+        return const ActionResult(
+          ok: false,
+          message: 'Este juego aun no admite cambios globales de imagen.',
+        );
+    }
+    final saved = await _authService.saveGameContentConfig(nextConfig);
+    if (!saved.ok || saved.data == null) {
+      await _authService.deleteCustomImageFileBestEffort(
+        uploaded.data!.storagePath,
+      );
+      return ActionResult(ok: false, message: saved.message);
+    }
+    _gameContentConfig = saved.data!;
+    await _writeLocalImageCacheCopy(
+      sourcePath: normalizedPath,
+      storagePath: uploaded.data!.storagePath,
+    );
+    notifyListeners();
+    if (previousStoragePath != null &&
+        previousStoragePath.isNotEmpty &&
+        previousStoragePath != uploaded.data!.storagePath) {
+      unawaited(
+        _authService.deleteCustomImageFileBestEffort(previousStoragePath),
+      );
+      unawaited(_deleteLocalImageCacheFileBestEffort(previousStoragePath));
+    }
+    return const ActionResult(
+      ok: true,
+      message: 'Imagen predeterminada actualizada correctamente.',
+    );
+  }
+  Future<ActionResult> restoreCustomGameImage({
+    required String gameKey,
+    required String itemId,
+    String childId = '',
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+    }
+
+    final targetChildId =
+        childId.trim().isEmpty ? _activeChildProfileId : childId.trim();
+    final baseKey = _customGameImageBaseKey(gameKey: gameKey, itemId: itemId);
+    final targetKey = _scopedCustomImageKey(
+          baseKey: baseKey,
+          childId: targetChildId,
+        ) ??
+        baseKey;
+
+    final nextImages = Map<String, String>.from(user.customImages);
+    final nextStorage = Map<String, String>.from(user.customImageStoragePaths);
+    final removedImage = nextImages.remove(targetKey);
+    final removedStorage = nextStorage.remove(targetKey);
+    if ((removedImage == null || removedImage.trim().isEmpty) &&
+        (removedStorage == null || removedStorage.trim().isEmpty)) {
+      return const ActionResult(
+        ok: false,
+        message: 'Ese elemento ya usa la imagen original.',
+      );
+    }
+
+    final next = user.copyWith(
+      customImages: nextImages,
+      customImageStoragePaths: nextStorage,
+    );
+    final saved = await _authService.updateUser(next);
+    if (!saved.ok || saved.data == null) {
+      return ActionResult(ok: false, message: saved.message);
+    }
+
+    _currentUser = saved.data;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: _activeChildProfileId,
+    );
+    notifyListeners();
+
+    if (removedStorage != null && removedStorage.trim().isNotEmpty) {
+      unawaited(_authService.deleteCustomImageFileBestEffort(removedStorage));
+      unawaited(_deleteLocalImageCacheFileBestEffort(removedStorage));
+    }
+
+    return const ActionResult(
+      ok: true,
+      message: 'Se restauró la imagen original.',
+    );
+  }
+
+  Future<ActionResult> restoreGlobalGameImage({
+    required String gameKey,
+    required String itemId,
+  }) async {
+    if (!isAdmin) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'Solo el administrador puede restaurar imagenes predeterminadas.',
+      );
+    }
+    final key = _globalGameImageStorageMapKey(gameKey: gameKey, itemId: itemId);
+    final previousStoragePath = _globalGameImageStoragePathFor(
+      gameKey: gameKey,
+      itemId: itemId,
+    );
+    late final GameContentConfig nextConfig;
+    switch (gameKey.trim().toLowerCase()) {
+      case 'emociones':
+        final hasOverride =
+            _gameContentConfig.globalEmotionImageOverrides.containsKey(key) ||
+            _gameContentConfig.globalEmotionImageStoragePaths.containsKey(key);
+        if (!hasOverride && previousStoragePath == null) {
+          return const ActionResult(
+            ok: false,
+            message: 'Ese elemento ya usa la imagen predeterminada original.',
+          );
+        }
+        final nextOverrides = Map<String, String>.from(
+          _gameContentConfig.globalEmotionImageOverrides,
+        )..remove(key);
+        final nextStorage = Map<String, String>.from(
+          _gameContentConfig.globalEmotionImageStoragePaths,
+        )..remove(key);
+        nextConfig = _gameContentConfig.copyWith(
+          globalEmotionImageOverrides: nextOverrides,
+          globalEmotionImageStoragePaths: nextStorage,
+        );
+        break;
+      case 'sonidos':
+        final hasOverride =
+            _gameContentConfig.globalSoundImageOverrides.containsKey(key) ||
+            _gameContentConfig.globalSoundImageStoragePaths.containsKey(key);
+        if (!hasOverride && previousStoragePath == null) {
+          return const ActionResult(
+            ok: false,
+            message: 'Ese elemento ya usa la imagen predeterminada original.',
+          );
+        }
+        final nextOverrides = Map<String, String>.from(
+          _gameContentConfig.globalSoundImageOverrides,
+        )..remove(key);
+        final nextStorage = Map<String, String>.from(
+          _gameContentConfig.globalSoundImageStoragePaths,
+        )..remove(key);
+        nextConfig = _gameContentConfig.copyWith(
+          globalSoundImageOverrides: nextOverrides,
+          globalSoundImageStoragePaths: nextStorage,
+        );
+        break;
+      default:
+        return const ActionResult(
+          ok: false,
+          message: 'Este juego aun no admite cambios globales de imagen.',
+        );
+    }
+    final saved = await _authService.saveGameContentConfig(nextConfig);
+    if (!saved.ok || saved.data == null) {
+      return ActionResult(ok: false, message: saved.message);
+    }
+    _gameContentConfig = saved.data!;
+    notifyListeners();
+    if (previousStoragePath != null && previousStoragePath.isNotEmpty) {
+      unawaited(
+        _authService.deleteCustomImageFileBestEffort(previousStoragePath),
+      );
+      unawaited(_deleteLocalImageCacheFileBestEffort(previousStoragePath));
+    }
+    return const ActionResult(
+      ok: true,
+      message: 'Imagen predeterminada restaurada.',
+    );
+  }
   Future<void> updateCustomImage({
     required String key,
     required String imagePath,
@@ -1438,7 +2218,23 @@ class AppController extends ChangeNotifier {
       );
     }
 
-    final boundedAge = age.clamp(0, 18);
+    final effectiveBirthDateMillis = birthDateMillis > 0
+        ? birthDateMillis
+        : (editingExisting
+              ? existingProfiles
+                    .firstWhere((item) => item.id == childId.trim())
+                    .birthDateMillis
+              : 0);
+    final resolvedAge = effectiveBirthDateMillis > 0
+        ? _computeChildAgeFromBirthDateMillis(effectiveBirthDateMillis)
+        : age;
+    if (resolvedAge < minChildProfileAge ||
+        resolvedAge > maxChildProfileAge) {
+      return const ActionResult(
+        ok: false,
+        message: 'La edad permitida para perfiles de ni\u00f1o es de 10 a 18 a\u00f1os.',
+      );
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     final targetChildId =
         childId.trim().isNotEmpty ? childId.trim() : 'child_${user.id}_$now';
@@ -1458,7 +2254,7 @@ class AppController extends ChangeNotifier {
         .copyWith(
       id: targetChildId,
       name: trimmedName,
-      age: boundedAge,
+      age: resolvedAge,
       birthDateMillis:
           birthDateMillis > 0 ? birthDateMillis : (base?.birthDateMillis ?? 0),
       languageLevel: base?.languageLevel ?? 'medio',
@@ -1532,6 +2328,16 @@ class AppController extends ChangeNotifier {
       ..removeWhere(
         (key, _) => key.trim().toLowerCase().startsWith(scopedPrefix),
       );
+    final removedStoragePaths = <String>[];
+    final nextCustomImageStoragePaths = Map<String, String>.from(
+      user.customImageStoragePaths,
+    )..removeWhere((key, value) {
+        final matches = key.trim().toLowerCase().startsWith(scopedPrefix);
+        if (matches && value.trim().isNotEmpty) {
+          removedStoragePaths.add(value.trim());
+        }
+        return matches;
+      });
 
     final previousPrimaryId = user.childProfile?.id.trim() ?? '';
     final shouldReplacePrimary =
@@ -1554,6 +2360,7 @@ class AppController extends ChangeNotifier {
       childProfiles: existingProfiles,
       gameSessions: nextSessions,
       customImages: nextCustomImages,
+      customImageStoragePaths: nextCustomImageStoragePaths,
     );
 
     if (existingProfiles.isEmpty) {
@@ -1569,8 +2376,14 @@ class AppController extends ChangeNotifier {
         user: _currentUser,
         requestedChildId: nextPrimary?.id ?? '',
       );
-      _needsPortalSelection = _shouldAskPortalSelectionAfterAuth();
+      _needsPortalSelection = _activePortalRole == PortalRole.caregiver
+          ? false
+          : _shouldAskPortalSelectionAfterAuth();
       notifyListeners();
+      for (final path in removedStoragePaths) {
+        unawaited(_authService.deleteCustomImageFileBestEffort(path));
+        unawaited(_deleteLocalImageCacheFileBestEffort(path));
+      }
       return const ActionResult(
         ok: true,
         message: 'Perfil del nino eliminado correctamente.',
@@ -1578,6 +2391,17 @@ class AppController extends ChangeNotifier {
     }
 
     return ActionResult(ok: false, message: saved.message);
+  }
+
+  int _computeChildAgeFromBirthDateMillis(int birthDateMillis) {
+    if (birthDateMillis <= 0) return 0;
+    final birth = DateTime.fromMillisecondsSinceEpoch(birthDateMillis);
+    final now = DateTime.now();
+    var age = now.year - birth.year;
+    final beforeBirthday = now.month < birth.month ||
+        (now.month == birth.month && now.day < birth.day);
+    if (beforeBirthday) age -= 1;
+    return age;
   }
 
   Future<ActionResult> updateParentalControl(
@@ -1625,7 +2449,8 @@ class AppController extends ChangeNotifier {
     final existingIndex =
         existingProfiles.indexWhere((item) => item.id == demoChildId);
 
-    final birthDate = DateTime(now.year - 8, now.month, now.day);
+    final birthDate =
+        DateTime(now.year - minChildProfileAge, now.month, now.day);
     final baseChild = existingIndex >= 0
         ? existingProfiles[existingIndex]
         : ChildProfile(
@@ -1641,7 +2466,7 @@ class AppController extends ChangeNotifier {
     final demoChild = baseChild.copyWith(
       id: demoChildId,
       name: 'Perfil demo',
-      age: 8,
+      age: minChildProfileAge,
       birthDateMillis: birthDate.millisecondsSinceEpoch,
       active: true,
       createdAtMillis:
@@ -1772,7 +2597,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReportsForAllUsers() async {
     final current = _currentUser;
     if (current == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesión activa.');
     }
     if (!isAdmin) {
       return const ActionResult(
@@ -2218,6 +3043,14 @@ class AppController extends ChangeNotifier {
     return 'child::$normalizedChild::$normalizedBase';
   }
 
+  String? _fileExtension(String path) {
+    final dotIndex = path.lastIndexOf('.');
+    if (dotIndex < 0 || dotIndex >= path.length - 1) return null;
+    final ext = path.substring(dotIndex + 1).trim().toLowerCase();
+    if (ext.isEmpty) return null;
+    return ext;
+  }
+
   static String _resolveActiveChildId({
     required NebulaUser? user,
     required String requestedChildId,
@@ -2285,3 +3118,8 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+
+
+
+

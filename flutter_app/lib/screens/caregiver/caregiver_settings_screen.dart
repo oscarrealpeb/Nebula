@@ -1,13 +1,13 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:nebula/screens/settings/learning_content_personalization_screen.dart';
 
 import '../../controllers/app_controller.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
 import '../../widgets/nebula_snack.dart';
 import '../../widgets/nebula_text_field.dart';
-import '../settings/personalization_screen.dart';
 import '../welcome_screen.dart';
 
 class CaregiverSettingsScreen extends StatefulWidget {
@@ -21,16 +21,27 @@ class CaregiverSettingsScreen extends StatefulWidget {
 }
 
 class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
+  static const double _minIntensity = 0.70;
+  static const double _maxIntensity = 0.85;
+
   late final TextEditingController _nameController;
   bool _saving = false;
   int _remaining = 0;
   Timer? _timer;
+  Timer? _themeSyncTimer;
+  late double _hue;
+  late double _intensity;
+
+  final _hues = const [196.0, 215.0, 255.0, 345.0, 35.0, 290.0];
 
   @override
   void initState() {
     super.initState();
     final user = widget.controller.currentUser!;
     _nameController = TextEditingController(text: user.name);
+    _hue = user.accentHue;
+    _intensity =
+        user.accentIntensity.clamp(_minIntensity, _maxIntensity).toDouble();
     _remaining = widget.controller.profileResetRemaining();
     _startTickIfNeeded();
   }
@@ -38,6 +49,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _themeSyncTimer?.cancel();
     _nameController.dispose();
     super.dispose();
   }
@@ -55,6 +67,29 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
 
   void _showSnack(String message, {required bool ok}) {
     NebulaSnack.show(context, message: message, ok: ok);
+  }
+
+  Color _colorFromHue(double hue) {
+    final value = _intensity.clamp(_minIntensity, _maxIntensity).toDouble();
+    return HSVColor.fromAHSV(1, hue, 0.60, value).toColor();
+  }
+
+  void _applyThemeRealtime() {
+    _themeSyncTimer?.cancel();
+    _themeSyncTimer = Timer(const Duration(milliseconds: 70), () {
+      widget.controller.setThemeColor(
+        hue: _hue,
+        intensity: _intensity.clamp(_minIntensity, _maxIntensity).toDouble(),
+      );
+    });
+  }
+
+  void _showThemeSavedSnack() {
+    widget.controller.setThemeColor(
+      hue: _hue,
+      intensity: _intensity.clamp(_minIntensity, _maxIntensity).toDouble(),
+    );
+    _showSnack('Listo. El tema del cuidador ya quedó actualizado.', ok: true);
   }
 
   Future<void> _saveName() async {
@@ -231,6 +266,84 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                     NebulaPrimaryButton(
                       text: _saving ? 'Guardando...' : 'Guardar cambios',
                       onPressed: _saving ? null : _saveName,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tema del cuidador',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Este color se aplica a la experiencia del cuidador, sin cambiar el tema del niño.',
+                    ),
+                    const SizedBox(height: 10),
+                    GridView.builder(
+                      itemCount: _hues.length,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 1.2,
+                      ),
+                      itemBuilder: (_, index) {
+                        final hue = _hues[index];
+                        final selected = hue == _hue;
+                        return InkWell(
+                          onTap: () {
+                            setState(() => _hue = hue);
+                            _applyThemeRealtime();
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              color: _colorFromHue(hue),
+                              border: Border.all(
+                                color: selected
+                                    ? Colors.white
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Intensidad del color',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    Slider(
+                      value: _intensity,
+                      min: _minIntensity,
+                      max: _maxIntensity,
+                      onChanged: (value) {
+                        setState(() => _intensity = value);
+                        _applyThemeRealtime();
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    NebulaSecondaryButton(
+                      text: 'Guardar tema del cuidador',
+                      onPressed: _showThemeSavedSnack,
                     ),
                   ],
                 ),

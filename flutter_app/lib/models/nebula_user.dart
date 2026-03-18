@@ -258,6 +258,7 @@ class NebulaUser {
     required this.accentHue,
     required this.accentIntensity,
     required this.customImages,
+    this.customImageStoragePaths = const {},
     this.role = UserRole.caregiver,
     this.childProfile,
     this.childProfiles = const [],
@@ -279,6 +280,7 @@ class NebulaUser {
   final double accentHue;
   final double accentIntensity;
   final Map<String, String> customImages;
+  final Map<String, String> customImageStoragePaths;
   final String role;
   final ChildProfile? childProfile;
   final List<ChildProfile> childProfiles;
@@ -299,6 +301,7 @@ class NebulaUser {
     double? accentHue,
     double? accentIntensity,
     Map<String, String>? customImages,
+    Map<String, String>? customImageStoragePaths,
     String? role,
     ChildProfile? childProfile,
     bool clearChildProfile = false,
@@ -321,6 +324,8 @@ class NebulaUser {
       accentHue: accentHue ?? this.accentHue,
       accentIntensity: accentIntensity ?? this.accentIntensity,
       customImages: customImages ?? this.customImages,
+      customImageStoragePaths:
+          customImageStoragePaths ?? this.customImageStoragePaths,
       role: role ?? this.role,
       childProfile:
           clearChildProfile ? null : (childProfile ?? this.childProfile),
@@ -347,6 +352,7 @@ class NebulaUser {
       'accentHue': accentHue,
       'accentIntensity': accentIntensity,
       'customImages': customImages,
+      'customImageStoragePaths': customImageStoragePaths,
       'role': role,
       'childProfile': childProfile?.toJson(),
       'childProfiles': childProfiles.map((item) => item.toJson()).toList(),
@@ -420,6 +426,9 @@ class NebulaUser {
       accentIntensity: (json['accentIntensity'] as num?)?.toDouble() ?? 0.55,
       customImages: Map<String, String>.from(
         json['customImages'] as Map? ?? const {},
+      ),
+      customImageStoragePaths: Map<String, String>.from(
+        json['customImageStoragePaths'] as Map? ?? const {},
       ),
       role: (json['role'] as String?) ?? UserRole.caregiver,
       childProfile: resolvedPrimaryChild,

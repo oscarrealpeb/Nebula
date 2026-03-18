@@ -19,9 +19,16 @@ import 'settings/profile_screen.dart';
 import 'settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({
+    super.key,
+    required this.controller,
+    this.flashMessage = '',
+    this.flashOk = true,
+  });
 
   final AppController controller;
+  final String flashMessage;
+  final bool flashOk;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -56,6 +63,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
+      return;
+    }
+    final flash = widget.flashMessage.trim();
+    if (flash.isNotEmpty) {
+      await NebulaSnack.show(context, message: flash, ok: widget.flashOk);
     }
   }
 

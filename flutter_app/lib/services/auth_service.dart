@@ -1,9 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:uuid/uuid.dart';
 
@@ -24,6 +26,16 @@ class ServiceResult<T> {
   final bool ok;
   final String message;
   final T? data;
+}
+
+class CustomImageUploadResult {
+  const CustomImageUploadResult({
+    required this.downloadUrl,
+    required this.storagePath,
+  });
+
+  final String downloadUrl;
+  final String storagePath;
 }
 
 class _DashboardSessionSnapshot {
@@ -61,14 +73,17 @@ class AuthService {
     this._store, {
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
     GoogleSignIn? googleSignIn,
   })  : _firebaseAuth = firebaseAuth,
         _firestore = firestore,
+        _storage = storage,
         _googleSignIn = googleSignIn ?? GoogleSignIn.standard();
 
   final LocalStore _store;
   final FirebaseAuth? _firebaseAuth;
   final FirebaseFirestore? _firestore;
+  final FirebaseStorage? _storage;
   final GoogleSignIn _googleSignIn;
   final _uuid = const Uuid();
 
@@ -84,6 +99,7 @@ class AuthService {
   String? _pendingGoogleNameForConfirm;
 
   bool get _useFirebase => _firebaseAuth != null && _firestore != null;
+  bool get _useStorage => _useFirebase && _storage != null;
   PortalRole get activePortalRole => _activePortalRole;
 
   bool get isCurrentUserGoogleProvider {
@@ -370,10 +386,50 @@ class AuthService {
         )
         .take(10)
         .toList();
+    final emotionOverrides = Map<String, String>.fromEntries(
+      config.globalEmotionImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final soundOverrides = Map<String, String>.fromEntries(
+      config.globalSoundImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final emotionStoragePaths = Map<String, String>.fromEntries(
+      config.globalEmotionImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final soundStoragePaths = Map<String, String>.fromEntries(
+      config.globalSoundImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
     final normalized = GameContentConfig(
       emotionItems: emotions,
       soundItems: sounds,
       puzzleItems: puzzles,
+      globalEmotionImageOverrides: emotionOverrides,
+      globalSoundImageOverrides: soundOverrides,
+      globalEmotionImageStoragePaths: emotionStoragePaths,
+      globalSoundImageStoragePaths: soundStoragePaths,
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -1150,7 +1206,7 @@ class AuthService {
           await _store.clearPendingVerificationIssuedAt(match.email);
           return ServiceResult(
             ok: true,
-            message: 'Listo, ya estas dentro.',
+            message: 'Listo, ya estás dentro.',
             data: match,
           );
         }
@@ -1193,7 +1249,7 @@ class AuthService {
     _currentUser = match;
     await _store.clearPendingVerificationIssuedAt(match.email);
     return ServiceResult(
-        ok: true, message: 'Listo, ya estas dentro.', data: match);
+        ok: true, message: 'Listo, ya estás dentro.', data: match);
   }
 
   Future<ServiceResult<NebulaUser>> loginChild({
@@ -1371,6 +1427,150 @@ class AuthService {
       message: 'Datos actualizados.',
       data: nextUser,
     );
+  }
+
+  Future<ServiceResult<CustomImageUploadResult>> uploadCustomImageFile({
+    required NebulaUser user,
+    required String childId,
+    required String gameKey,
+    required String itemId,
+    required String filePath,
+  }) async {
+    if (!_useStorage) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La sincronización de imágenes requiere Firebase habilitado.',
+      );
+    }
+
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No se encontró la imagen seleccionada.',
+      );
+    }
+
+    final file = File(normalizedPath);
+    if (!file.existsSync()) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La imagen seleccionada ya no está disponible.',
+      );
+    }
+
+    final extension = _imageExtensionForPath(normalizedPath);
+    if (extension == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Formato no permitido. Usa JPG o PNG.',
+      );
+    }
+
+    final contentType = _contentTypeForExtension(extension);
+    final childSegment = childId.trim().isEmpty
+        ? 'global'
+        : _sanitizeStorageSegment(childId);
+    final gameSegment = _sanitizeStorageSegment(gameKey);
+    final itemSegment = _sanitizeStorageSegment(itemId);
+    final storagePath =
+        'users/${user.id}/children/$childSegment/games/$gameSegment/$itemSegment.$extension';
+
+    try {
+      final ref = _storage!.ref().child(storagePath);
+      final snapshot = await ref.putFile(
+        file,
+        SettableMetadata(contentType: contentType),
+      );
+      final url = await _downloadUrlWithRetry(snapshot.ref);
+      return ServiceResult(
+        ok: true,
+        message: 'Imagen subida correctamente.',
+        data: CustomImageUploadResult(
+          downloadUrl: url,
+          storagePath: snapshot.ref.fullPath,
+        ),
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos subir la imagen: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<CustomImageUploadResult>> uploadGlobalGameImageFile({
+    required String gameKey,
+    required String itemId,
+    required String filePath,
+  }) async {
+    if (!_useStorage) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La sincronización global de imágenes requiere Firebase Storage.',
+      );
+    }
+
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No se encontró la imagen seleccionada.',
+      );
+    }
+
+    final file = File(normalizedPath);
+    if (!file.existsSync()) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La imagen seleccionada ya no está disponible.',
+      );
+    }
+
+    final extension = _imageExtensionForPath(normalizedPath);
+    if (extension == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Formato no permitido. Usa JPG o PNG.',
+      );
+    }
+
+    final contentType = _contentTypeForExtension(extension);
+    final gameSegment = _sanitizeStorageSegment(gameKey);
+    final itemSegment = _sanitizeStorageSegment(itemId);
+    final storagePath =
+        'app/game_content/$gameSegment/$itemSegment.$extension';
+
+    try {
+      final ref = _storage!.ref().child(storagePath);
+      final snapshot = await ref.putFile(
+        file,
+        SettableMetadata(contentType: contentType),
+      );
+      final url = await _downloadUrlWithRetry(snapshot.ref);
+      return ServiceResult(
+        ok: true,
+        message: 'Imagen global subida correctamente.',
+        data: CustomImageUploadResult(
+          downloadUrl: url,
+          storagePath: snapshot.ref.fullPath,
+        ),
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos subir la imagen global: $e',
+      );
+    }
+  }
+
+  Future<void> deleteCustomImageFileBestEffort(String storagePath) async {
+    if (!_useStorage) return;
+    final normalized = storagePath.trim();
+    if (normalized.isEmpty) return;
+    try {
+      await _storage!.ref().child(normalized).delete();
+    } catch (_) {}
   }
 
   Future<ServiceResult<List<NebulaUser>>> listLocalUsers() async {
@@ -1845,6 +2045,7 @@ class AuthService {
           accentHue: localUser.accentHue,
           accentIntensity: localUser.accentIntensity,
           customImages: localUser.customImages,
+          customImageStoragePaths: localUser.customImageStoragePaths,
           role: localUser.role,
           childProfile: localUser.childProfile,
           childProfiles: localUser.childProfiles,
@@ -1974,6 +2175,9 @@ class AuthService {
               (cloud?['accentIntensity'] as num?)?.toDouble() ?? 0.55,
           customImages: Map<String, String>.from(
             cloud?['customImages'] as Map? ?? const {},
+          ),
+          customImageStoragePaths: Map<String, String>.from(
+            cloud?['customImageStoragePaths'] as Map? ?? const {},
           ),
           role: (cloud?['role'] as String?) ?? UserRole.caregiver,
           childProfile: cloud?['childProfile'] is Map
@@ -2893,6 +3097,7 @@ class AuthService {
         accentHue: localUser.accentHue,
         accentIntensity: localUser.accentIntensity,
         customImages: localUser.customImages,
+        customImageStoragePaths: localUser.customImageStoragePaths,
         role: localUser.role,
         childProfile: localUser.childProfile,
         childProfiles: localUser.childProfiles,
@@ -3073,6 +3278,9 @@ class AuthService {
         customImages: Map<String, String>.from(
           cloud?['customImages'] as Map? ?? const {},
         ),
+        customImageStoragePaths: Map<String, String>.from(
+          cloud?['customImageStoragePaths'] as Map? ?? const {},
+        ),
         role: (cloud?['role'] as String?) ?? UserRole.caregiver,
         childProfile: cloud?['childProfile'] is Map
             ? ChildProfile.fromJson(
@@ -3109,7 +3317,7 @@ class AuthService {
       await _store.clearPendingVerificationIssuedAt(restored.email);
       return ServiceResult(
         ok: true,
-        message: 'Listo, ya estas dentro.',
+        message: 'Listo, ya estás dentro.',
         data: restored,
       );
     } on FirebaseAuthException catch (e) {
@@ -3755,6 +3963,7 @@ class AuthService {
       accentHue: user.accentHue,
       accentIntensity: user.accentIntensity,
       customImages: user.customImages,
+      customImageStoragePaths: user.customImageStoragePaths,
       role: user.role,
       childProfile: user.childProfile,
       childProfiles: user.childProfiles,
@@ -3762,6 +3971,54 @@ class AuthService {
       parentalControl: user.parentalControl,
       unlockedAchievementIds: user.unlockedAchievementIds,
     );
+  }
+
+  String _sanitizeStorageSegment(String value) {
+    final cleaned = value.trim().toLowerCase().replaceAll(
+          RegExp(r'[^a-z0-9_-]+'),
+          '_',
+        );
+    if (cleaned.isEmpty) return 'item';
+    return cleaned;
+  }
+
+  String? _imageExtensionForPath(String path) {
+    final dotIndex = path.lastIndexOf('.');
+    if (dotIndex < 0 || dotIndex >= path.length - 1) return null;
+    final ext = path.substring(dotIndex + 1).trim().toLowerCase();
+    if (ext == 'jpg' || ext == 'jpeg' || ext == 'png') return ext;
+    return null;
+  }
+
+  String _contentTypeForExtension(String extension) {
+    return switch (extension) {
+      'png' => 'image/png',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      _ => 'application/octet-stream',
+    };
+  }
+
+  Future<String> _downloadUrlWithRetry(Reference ref) async {
+    FirebaseException? lastError;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await ref.getDownloadURL();
+      } on FirebaseException catch (e) {
+        lastError = e;
+        if (e.code != 'object-not-found' || attempt == 4) {
+          rethrow;
+        }
+        await Future<void>.delayed(
+          Duration(milliseconds: 350 * (attempt + 1)),
+        );
+      }
+    }
+    throw lastError ??
+        FirebaseException(
+          plugin: 'firebase_storage',
+          code: 'unknown',
+          message: 'No se pudo obtener la URL de descarga.',
+        );
   }
 
   Map<String, dynamic> _toCloudUserData(NebulaUser user) {
@@ -3781,6 +4038,7 @@ class AuthService {
       'accentHue': user.accentHue,
       'accentIntensity': user.accentIntensity,
       'customImages': user.customImages,
+      'customImageStoragePaths': user.customImageStoragePaths,
       'role': user.role,
       'childProfile': user.childProfile?.toJson(),
       'childProfiles': user.childProfiles.map((item) => item.toJson()).toList(),
@@ -3918,3 +4176,5 @@ class AuthService {
     _pendingGoogleNameForConfirm = null;
   }
 }
+
+

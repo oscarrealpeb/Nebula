@@ -17,6 +17,7 @@ dependencies:
   firebase_core: ^3.15.2
   firebase_auth: ^5.6.3
   cloud_firestore: ^5.6.12
+  firebase_storage: ^12.4.10
   google_sign_in: ^6.3.0
   internet_connection_checker_plus: ^2.7.2
   crypto: ^3.0.6
@@ -25,6 +26,8 @@ dependencies:
   permission_handler: ^11.3.0
   pdf: ^3.11.3
   printing: ^5.14.2
+  path_provider: ^2.1.5
+  crop_your_image: ^2.0.0
 
 dev_dependencies:
   flutter_test:

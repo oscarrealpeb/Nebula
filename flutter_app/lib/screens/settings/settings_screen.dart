@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:nebula/screens/settings/learning_content_personalization_screen.dart';
 
 import '../../controllers/app_controller.dart';
-import 'personalization_screen.dart';
 import 'preferences_screen.dart';
 import 'profile_screen.dart';
 

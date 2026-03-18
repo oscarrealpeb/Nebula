@@ -165,24 +165,44 @@ class GameContentConfig {
     this.emotionItems = const [],
     this.soundItems = const [],
     this.puzzleItems = const [],
+    this.globalEmotionImageOverrides = const {},
+    this.globalSoundImageOverrides = const {},
+    this.globalEmotionImageStoragePaths = const {},
+    this.globalSoundImageStoragePaths = const {},
     this.updatedAtMillis = 0,
   });
 
   final List<EmotionContentItem> emotionItems;
   final List<SoundContentItem> soundItems;
   final List<PuzzleContentItem> puzzleItems;
+  final Map<String, String> globalEmotionImageOverrides;
+  final Map<String, String> globalSoundImageOverrides;
+  final Map<String, String> globalEmotionImageStoragePaths;
+  final Map<String, String> globalSoundImageStoragePaths;
   final int updatedAtMillis;
 
   GameContentConfig copyWith({
     List<EmotionContentItem>? emotionItems,
     List<SoundContentItem>? soundItems,
     List<PuzzleContentItem>? puzzleItems,
+    Map<String, String>? globalEmotionImageOverrides,
+    Map<String, String>? globalSoundImageOverrides,
+    Map<String, String>? globalEmotionImageStoragePaths,
+    Map<String, String>? globalSoundImageStoragePaths,
     int? updatedAtMillis,
   }) {
     return GameContentConfig(
       emotionItems: emotionItems ?? this.emotionItems,
       soundItems: soundItems ?? this.soundItems,
       puzzleItems: puzzleItems ?? this.puzzleItems,
+      globalEmotionImageOverrides:
+          globalEmotionImageOverrides ?? this.globalEmotionImageOverrides,
+      globalSoundImageOverrides:
+          globalSoundImageOverrides ?? this.globalSoundImageOverrides,
+      globalEmotionImageStoragePaths:
+          globalEmotionImageStoragePaths ?? this.globalEmotionImageStoragePaths,
+      globalSoundImageStoragePaths:
+          globalSoundImageStoragePaths ?? this.globalSoundImageStoragePaths,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
     );
   }
@@ -192,6 +212,10 @@ class GameContentConfig {
       'emotionItems': emotionItems.map((item) => item.toJson()).toList(),
       'soundItems': soundItems.map((item) => item.toJson()).toList(),
       'puzzleItems': puzzleItems.map((item) => item.toJson()).toList(),
+      'globalEmotionImageOverrides': globalEmotionImageOverrides,
+      'globalSoundImageOverrides': globalSoundImageOverrides,
+      'globalEmotionImageStoragePaths': globalEmotionImageStoragePaths,
+      'globalSoundImageStoragePaths': globalSoundImageStoragePaths,
       'updatedAtMillis': updatedAtMillis,
     };
   }
@@ -222,6 +246,18 @@ class GameContentConfig {
             ),
           )
           .toList(),
+      globalEmotionImageOverrides: Map<String, String>.from(
+        json['globalEmotionImageOverrides'] as Map? ?? const {},
+      ),
+      globalSoundImageOverrides: Map<String, String>.from(
+        json['globalSoundImageOverrides'] as Map? ?? const {},
+      ),
+      globalEmotionImageStoragePaths: Map<String, String>.from(
+        json['globalEmotionImageStoragePaths'] as Map? ?? const {},
+      ),
+      globalSoundImageStoragePaths: Map<String, String>.from(
+        json['globalSoundImageStoragePaths'] as Map? ?? const {},
+      ),
       updatedAtMillis: (json['updatedAtMillis'] as num?)?.toInt() ?? 0,
     );
   }

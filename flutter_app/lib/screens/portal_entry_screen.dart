@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
@@ -13,9 +13,16 @@ enum _PortalStep {
 }
 
 class PortalEntryScreen extends StatefulWidget {
-  const PortalEntryScreen({super.key, required this.controller});
+  const PortalEntryScreen({
+    super.key,
+    required this.controller,
+    this.flashMessage = '',
+    this.flashOk = true,
+  });
 
   final AppController controller;
+  final String flashMessage;
+  final bool flashOk;
 
   @override
   State<PortalEntryScreen> createState() => _PortalEntryScreenState();
@@ -36,6 +43,13 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
       _selectedChildId = current.id;
     } else if (children.isNotEmpty) {
       _selectedChildId = children.first.id;
+    }
+    final flash = widget.flashMessage.trim();
+    if (flash.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        NebulaSnack.show(context, message: flash, ok: widget.flashOk);
+      });
     }
   }
 
@@ -71,7 +85,14 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
       _showSnack(result.message, ok: false);
       return;
     }
-    _openChildScreen();
+    final childName = widget.controller.childProfile?.name.trim().isNotEmpty ==
+            true
+        ? widget.controller.childProfile!.name.trim()
+        : 'explorador';
+    _openChildScreen(
+      flashMessage: '¡Hola, $childName!',
+      flashOk: true,
+    );
   }
 
   Future<void> _promptCaregiverPassword() async {
@@ -93,26 +114,43 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
       _showSnack(result.message, ok: false);
       return;
     }
-    _openCaregiverScreen();
+    _openCaregiverScreen(
+      flashMessage: result.message,
+      flashOk: true,
+    );
   }
 
-  void _openChildScreen() {
+  void _openChildScreen({
+    String flashMessage = '',
+    bool flashOk = true,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => HomeScreen(controller: widget.controller),
+          builder: (_) => HomeScreen(
+            controller: widget.controller,
+            flashMessage: flashMessage,
+            flashOk: flashOk,
+          ),
         ),
       );
     });
   }
 
-  void _openCaregiverScreen() {
+  void _openCaregiverScreen({
+    String flashMessage = '',
+    bool flashOk = true,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => CaregiverPanelScreen(controller: widget.controller),
+          builder: (_) => CaregiverPanelScreen(
+            controller: widget.controller,
+            flashMessage: flashMessage,
+            flashOk: flashOk,
+          ),
         ),
       );
     });
@@ -357,3 +395,5 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
     return '$day/$month/$year';
   }
 }
+
+

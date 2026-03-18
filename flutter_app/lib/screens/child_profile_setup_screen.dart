@@ -16,11 +16,15 @@ class ChildProfileSetupScreen extends StatefulWidget {
     required this.controller,
     this.isMandatory = false,
     this.childId = '',
+    this.flashMessage = '',
+    this.flashOk = true,
   });
 
   final AppController controller;
   final bool isMandatory;
   final String childId;
+  final String flashMessage;
+  final bool flashOk;
 
   @override
   State<ChildProfileSetupScreen> createState() =>
@@ -28,6 +32,9 @@ class ChildProfileSetupScreen extends StatefulWidget {
 }
 
 class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
+  static const int _minAllowedAge = AppController.minChildProfileAge;
+  static const int _maxAllowedAge = AppController.maxChildProfileAge;
+
   final _nameController = TextEditingController();
   final _birthDateController = TextEditingController();
   int _birthDateMillis = 0;
@@ -43,6 +50,13 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     }
     if (_birthDateMillis > 0) {
       _birthDateController.text = _formatDate(_birthDateMillis);
+    }
+    final flash = widget.flashMessage.trim();
+    if (flash.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        NebulaSnack.show(context, message: flash, ok: widget.flashOk);
+      });
     }
   }
 
@@ -70,14 +84,21 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
+    final youngestAllowed =
+        DateTime(now.year - _minAllowedAge, now.month, now.day);
+    final oldestAllowed =
+        DateTime(now.year - _maxAllowedAge, now.month, now.day);
     final initial = _birthDateMillis > 0
         ? DateTime.fromMillisecondsSinceEpoch(_birthDateMillis)
-        : DateTime(now.year - 6, now.month, now.day);
+        : DateTime(now.year - 12, now.month, now.day);
+    final clampedInitial = initial.isBefore(oldestAllowed)
+        ? oldestAllowed
+        : (initial.isAfter(youngestAllowed) ? youngestAllowed : initial);
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial.isAfter(now) ? now : initial,
-      firstDate: DateTime(now.year - 18, 1, 1),
-      lastDate: now,
+      initialDate: clampedInitial,
+      firstDate: oldestAllowed,
+      lastDate: youngestAllowed,
       helpText: 'Fecha de nacimiento',
     );
     if (picked == null) return;
@@ -105,8 +126,8 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     if (day == null || month == null || year == null) return 0;
 
     final now = DateTime.now();
-    final minDate = DateTime(now.year - 18, 1, 1);
-    final maxDate = DateTime(now.year, now.month, now.day);
+    final minDate = DateTime(now.year - _maxAllowedAge, now.month, now.day);
+    final maxDate = DateTime(now.year - _minAllowedAge, now.month, now.day);
     final date = DateTime(year, month, day);
     final isExact = date.year == year && date.month == month && date.day == day;
     if (!isExact) return 0;
@@ -119,7 +140,9 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     if (typed.isEmpty) return null;
     final digits = typed.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length < 8) return 'Completa la fecha en formato DD/MM/AAAA.';
-    if (_birthDateMillis <= 0) return 'Fecha invalida.';
+    if (_birthDateMillis <= 0) {
+      return 'La edad permitida es de $_minAllowedAge a $_maxAllowedAge a\u00f1os.';
+    }
     return null;
   }
 
@@ -131,7 +154,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     final beforeBirthday = now.month < birth.month ||
         (now.month == birth.month && now.day < birth.day);
     if (beforeBirthday) age -= 1;
-    return age.clamp(0, 18);
+    return age;
   }
 
   Future<void> _save() async {
@@ -139,7 +162,8 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
     if (_birthDateMillis <= 0) {
       await NebulaSnack.show(
         context,
-        message: 'Ingresa una fecha valida en formato DD/MM/AAAA.',
+        message:
+            'Ingresa una fecha v\u00e1lida en formato DD/MM/AAAA. La edad permitida es de $_minAllowedAge a $_maxAllowedAge a\u00f1os.',
         ok: false,
       );
       return;
@@ -193,7 +217,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
               ? null
               : BackButton(onPressed: () => Navigator.of(context).pop()),
           title:
-              Text(_editingChild == null ? 'Perfil del niño' : 'Editar niño'),
+              Text(_editingChild == null ? 'Perfil del ni\u00f1o' : 'Editar ni\u00f1o'),
         ),
         body: CosmicBackground(
           child: SafeArea(
@@ -208,13 +232,13 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                       children: [
                         Text(
                           widget.isMandatory
-                              ? 'Antes de continuar, registra al menos un perfil de niño.'
-                              : 'Completa la información del niño.',
+                              ? 'Antes de continuar, registra al menos un perfil de ni\u00f1o.'
+                              : 'Completa la informaci\u00f3n del ni\u00f1o.',
                         ),
                         const SizedBox(height: 12),
                         NebulaTextField(
                           controller: _nameController,
-                          label: 'Nombre del niño',
+                          label: 'Nombre del ni\u00f1o',
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
@@ -232,7 +256,7 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                           onChanged: _onBirthDateChanged,
                           decoration: InputDecoration(
                             labelText: 'DD/MM/AAAA',
-                            hintText: '12/03/2018',
+                            hintText: '12/03/2014',
                             errorText: _birthDateErrorText,
                             suffixIcon: IconButton(
                               onPressed: _pickBirthDate,
@@ -240,6 +264,11 @@ class _ChildProfileSetupScreenState extends State<ChildProfileSetupScreen> {
                               tooltip: 'Elegir desde calendario',
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Edad permitida: $_minAllowedAge a $_maxAllowedAge a\u00f1os.',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 16),
                         NebulaPrimaryButton(

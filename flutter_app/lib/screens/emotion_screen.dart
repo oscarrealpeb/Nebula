@@ -8,8 +8,10 @@ import 'package:lottie/lottie.dart';
 class EmotionQuestion {
   final String imagePath;
   final String correctEmotion;
+  final String itemId;
 
   EmotionQuestion({
+    this.itemId = '',
     required this.imagePath,
     required this.correctEmotion,
   });
@@ -422,12 +424,16 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
         )
         .map(
           (item) => EmotionQuestion(
+            itemId: widget.controller.customContentItemId(
+              source: item.imagePath.trim(),
+              rawId: item.id,
+            ),
             imagePath: item.imagePath.trim(),
             correctEmotion: item.correctEmotion.trim(),
           ),
         )
         .toList();
-    if (custom.isEmpty) return defaults;
+    if (custom.isEmpty) return defaults.map(_resolvedEmotionQuestion).toList();
 
     final merged = <EmotionQuestion>[...custom];
     for (final item in defaults) {
@@ -438,7 +444,23 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
         merged.add(item);
       }
     }
-    return merged;
+    return merged.map(_resolvedEmotionQuestion).toList();
+  }
+
+  EmotionQuestion _resolvedEmotionQuestion(EmotionQuestion question) {
+    final itemId = question.itemId.trim().isNotEmpty
+        ? question.itemId
+        : widget.controller.customContentItemId(source: question.imagePath);
+    final resolvedImage = widget.controller.resolvedGameImageSourceFor(
+      gameKey: 'emociones',
+      itemId: itemId,
+      defaultSource: question.imagePath,
+    );
+    return EmotionQuestion(
+      itemId: itemId,
+      imagePath: resolvedImage,
+      correctEmotion: question.correctEmotion,
+    );
   }
 
   ImageProvider _imageProviderFor(String path) {
