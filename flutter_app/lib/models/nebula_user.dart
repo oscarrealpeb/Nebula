@@ -20,6 +20,9 @@ class ChildProfile {
     this.loginPinHash = '',
     this.stars = 0,
     this.unlockedAchievementIds = const [],
+    this.parentalControl = const ParentalControl(),
+    this.dailyLimitUsageSeconds = 0,
+    this.dailyLimitUsageDayKey = 0,
   });
 
   final String id;
@@ -37,6 +40,9 @@ class ChildProfile {
   final String loginPinHash;
   final int stars;
   final List<String> unlockedAchievementIds;
+  final ParentalControl parentalControl;
+  final int dailyLimitUsageSeconds;
+  final int dailyLimitUsageDayKey;
 
   ChildProfile copyWith({
     String? id,
@@ -54,6 +60,9 @@ class ChildProfile {
     String? loginPinHash,
     int? stars,
     List<String>? unlockedAchievementIds,
+    ParentalControl? parentalControl,
+    int? dailyLimitUsageSeconds,
+    int? dailyLimitUsageDayKey,
   }) {
     return ChildProfile(
       id: id ?? this.id,
@@ -72,6 +81,11 @@ class ChildProfile {
       stars: stars ?? this.stars,
       unlockedAchievementIds:
           unlockedAchievementIds ?? this.unlockedAchievementIds,
+      parentalControl: parentalControl ?? this.parentalControl,
+      dailyLimitUsageSeconds:
+          dailyLimitUsageSeconds ?? this.dailyLimitUsageSeconds,
+      dailyLimitUsageDayKey:
+          dailyLimitUsageDayKey ?? this.dailyLimitUsageDayKey,
     );
   }
 
@@ -93,6 +107,9 @@ class ChildProfile {
       'loginPinHash': loginPinHash,
       'stars': stars,
       'unlockedAchievementIds': unlockedAchievementIds,
+      'parentalControl': parentalControl.toJson(),
+      'dailyLimitUsageSeconds': dailyLimitUsageSeconds,
+      'dailyLimitUsageDayKey': dailyLimitUsageDayKey,
     };
   }
 
@@ -116,6 +133,15 @@ class ChildProfile {
       unlockedAchievementIds: List<String>.from(
         json['unlockedAchievementIds'] as List? ?? const <String>[],
       ),
+      parentalControl: json['parentalControl'] is Map
+          ? ParentalControl.fromJson(
+              Map<String, dynamic>.from(json['parentalControl'] as Map),
+            )
+          : const ParentalControl(),
+      dailyLimitUsageSeconds:
+          (json['dailyLimitUsageSeconds'] as num?)?.toInt() ?? 0,
+      dailyLimitUsageDayKey:
+          (json['dailyLimitUsageDayKey'] as num?)?.toInt() ?? 0,
     );
   }
 }

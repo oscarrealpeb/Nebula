@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
+import '../services/narration_service.dart';
 import 'home_screen.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -49,41 +50,91 @@ class _GamediloscreenState extends State<Gamediloscreen> {
 
   final List<Map<String, String>> _easyWords = [
     {
-      'image': 'assets/images/conecta/gato.jpg',
-      'text': 'Gato',
-      'audio': 'sounds/gato.mp3',
+      'image': 'assets/dilo/mesa.jpg',
+      'text': 'Mesa',
+      'audioKey': 'mesa',
     },
-    // {
-    //   'image': 'assets/sol.png',
-    //   'text': 'sol',
-    //   'audio': 'sounds/sol.mp3',
-    // },
+    {
+      'image': 'assets/dilo/perro.jpg',
+      'text': 'Perro',
+      'audioKey': 'perro',
+    },
+    {
+      'image': 'assets/dilo/gato.jpg',
+      'text': 'Gato',
+      'audioKey': 'gato',
+    },
+    {
+      'image': 'assets/dilo/silla.jpg',
+      'text': 'Silla',
+      'audioKey': 'silla',
+    },
+    {
+      'image': 'assets/dilo/cocina.jpg',
+      'text': 'Cocina',
+      'audioKey': 'cocina',
+    },
   ];
 
   final List<Map<String, String>> _mediumWords = [
     {
-      'image': 'assets/images/conecta/elefante.jpg',
-      'text': 'Elefante',
-      'audio': 'sounds/elefante.mp3',
+      'image': 'assets/dilo/desayuno.jpg',
+      'text': 'Desayuno',
+      'audioKey': 'desayuno',
     },
-    // {
-    //   'image': 'assets/mesa.png',
-    //   'text': 'mesa',
-    //   'audio': 'sounds/mesa.mp3',
-    // },
+    {
+      'image': 'assets/dilo/almuerzo.jpg',
+      'text': 'Almuerzo',
+      'audioKey': 'almuerzo',
+    },
+    {
+      'image': 'assets/dilo/juguetes.jpg',
+      'text': 'Juguetes',
+      'audioKey': 'juguetes',
+    },
+    {
+      'image': 'assets/dilo/escritorio.jpg',
+      'text': 'Escritorio',
+      'audioKey': 'escritorio',
+    },
+    {
+      'image': 'assets/dilo/television.jpg',
+      'text': 'Television',
+      'audioKey': 'television',
+    },
   ];
 
   final List<Map<String, String>> _hardWords = [
     {
-      'image': 'assets/images/conecta/guitarra',
-      'text': 'Guitarra',
-      'audio': 'sounds/guitarra.mp3',
+      'image': 'assets/dilo/quiero_comer.jpg',
+      'text': 'Quiero comer',
+      'audioKey': 'quiero_comer',
     },
-    // {
-    //   'image': 'assets/comer.png',
-    //   'text': 'quiero comer',
-    //   'audio': 'sounds/quiero_comer.mp3',
-    // },
+    {
+      'image': 'assets/dilo/tengo_hambre.jpg',
+      'text': 'Tengo hambre',
+      'audioKey': 'tengo_hambre',
+    },
+    {
+      'image': 'assets/dilo/quiero_jugar.jpg',
+      'text': 'Quiero jugar',
+      'audioKey': 'quiero_jugar',
+    },
+    {
+      'image': 'assets/dilo/me_siento_triste.jpg',
+      'text': 'Me siento triste',
+      'audioKey': 'me_siento_triste',
+    },
+    {
+      'image': 'assets/dilo/me_siento_feliz.jpg',
+      'text': 'Me siento feliz',
+      'audioKey': 'me_siento_feliz',
+    },
+    {
+      'image': 'assets/dilo/quiero_dormir.jpg',
+      'text': 'Quiero dormir',
+      'audioKey': 'quiero_dormir',
+    },
   ];
 
   List<Map<String, String>> get _currentList {
@@ -100,6 +151,12 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     super.initState();
     _speech = stt.SpeechToText();
     _initSpeech();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'dilo_intro',
+      );
+    });
   }
 
   Future<void> _toggleListening() async {
@@ -176,10 +233,13 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   }
 
   Future<void> _playAudio() async {
-    final audioPath = _currentItem['audio'];
-    if (audioPath != null) {
-      await _audioPlayer.play(AssetSource(audioPath));
-    }
+    final audioKey = _currentItem['audioKey'];
+    if (audioKey == null) return;
+    final isFemale = widget.controller.selectedNarratorId.trim() == 'narrator_2';
+    final folder = isFemale ? 'dilo-mujer' : 'dilo-hombre';
+    final suffix = isFemale ? '-m' : '-h';
+    final audioPath = '$folder/$audioKey$suffix.mp3';
+    await _audioPlayer.play(AssetSource(audioPath));
   }
 
   Future<void> _initSpeech() async {

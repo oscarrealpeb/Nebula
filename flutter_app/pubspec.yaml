@@ -55,6 +55,11 @@ flutter:
     - assets/images/puzzles/
     - assets/images/planets/
     - assets/sounds/
+    - assets/narration/narrador-hombre/
+    - assets/narration/narrador-mujer/
+    - assets/dilo/
+    - assets/dilo-hombre/
+    - assets/dilo-mujer/
 
 flutter_launcher_icons:
   android: true

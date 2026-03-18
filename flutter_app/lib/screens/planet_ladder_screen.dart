@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../controllers/app_controller.dart';
 import '../core/data/planet_ladder.dart';
+import '../services/narration_service.dart';
 import 'logros_screen.dart';
 
-class PlanetLadderScreen extends StatelessWidget {
+class PlanetLadderScreen extends StatefulWidget {
   const PlanetLadderScreen({super.key, required this.controller});
 
   final AppController controller;
@@ -24,16 +25,38 @@ class PlanetLadderScreen extends StatelessWidget {
   ];
 
   @override
+  State<PlanetLadderScreen> createState() => _PlanetLadderScreenState();
+}
+
+class _PlanetLadderScreenState extends State<PlanetLadderScreen> {
+  bool _playedIntro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_playedIntro) return;
+      _playedIntro = true;
+      final planet =
+          planetForStars(widget.controller.progressStars).name.trim();
+      NarrationService.instance.play(
+        widget.controller,
+        key: planet,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (context, _) {
-        final user = controller.currentUser;
+        final user = widget.controller.currentUser;
         if (user == null) return const SizedBox.shrink();
 
-        final accent = controller.accentColor;
+        final accent = widget.controller.accentColor;
         final paleAccent = accent.withValues(alpha: 0.08);
-        final progressStars = controller.progressStars;
+        final progressStars = widget.controller.progressStars;
 
         final currentPlanet = planetForStars(progressStars);
         final progress = planetProgress(progressStars);
@@ -97,7 +120,7 @@ class PlanetLadderScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) =>
-                                LogrosScreen(controller: controller),
+                                LogrosScreen(controller: widget.controller),
                           ),
                         );
                       },

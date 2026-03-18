@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
+import '../services/narration_service.dart';
 import 'home_screen.dart';
 import 'package:lottie/lottie.dart';
 
@@ -359,6 +360,13 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     activeQuestions.shuffle();
 
     loadNextQuestion();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.playSequence(
+        widget.controller,
+        keys: const ['emotion_intro_1', 'emotion_intro_2'],
+      );
+    });
   }
 
   void loadNextQuestion() {
@@ -483,6 +491,31 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     setState(() {
       selectedEmotion = emotion;
     });
+    final key = _narrationKeyForEmotion(emotion);
+    if (key.isNotEmpty) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: key,
+      );
+    }
+  }
+
+  String _narrationKeyForEmotion(String emotion) {
+    final normalized = emotion.trim().toLowerCase();
+    switch (normalized) {
+      case 'feliz':
+        return 'feliz';
+      case 'triste':
+        return 'triste';
+      case 'enojado':
+        return 'enojado';
+      case 'sorprendido':
+        return 'sorprendido';
+      case 'asustado':
+        return 'asustado';
+      default:
+        return '';
+    }
   }
 
   Future<void> confirmAnswer() async {

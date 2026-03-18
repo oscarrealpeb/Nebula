@@ -8,6 +8,7 @@ import '../screens/caregiver/caregiver_panel_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/portal_entry_screen.dart';
 import '../screens/welcome_screen.dart';
+import '../widgets/child_time_limit_guard.dart';
 
 class NebulaApp extends StatelessWidget {
   const NebulaApp({super.key, required this.controller});
@@ -45,7 +46,10 @@ class NebulaApp extends StatelessWidget {
           title: 'Habla conmigo',
           debugShowCheckedModeBanner: false,
           theme: buildNebulaTheme(controller.accentColor),
-          home: home,
+          home: ChildTimeLimitGuard(
+            controller: controller,
+            child: home,
+          ),
         );
       },
     );

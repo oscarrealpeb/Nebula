@@ -99,7 +99,7 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
   final _minimumVersionController = TextEditingController();
   int _startHour = -1;
   int _endHour = -1;
-  late final Set<String> _blockedGameKeys;
+  final Set<String> _blockedGameKeys = <String>{};
   final Set<String> _adminBlockedGameKeys = <String>{};
   final Map<String, TextEditingController> _gameLabelControllers =
       <String, TextEditingController>{};
@@ -113,13 +113,7 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
   @override
   void initState() {
     super.initState();
-    final control = widget.controller.parentalControl;
-    _dailyLimitController.text = control.dailyLimitMinutes > 0
-        ? control.dailyLimitMinutes.toString()
-        : '';
-    _startHour = control.allowedStartHour;
-    _endHour = control.allowedEndHour;
-    _blockedGameKeys = control.blockedGameKeys.toSet();
+    _applyParentalControl(widget.controller.parentalControl);
     _applyAdminConfig(widget.controller.appAdminConfig);
     if (widget.controller.isAdmin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -183,7 +177,9 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
       await NebulaSnack.show(context, message: result.message, ok: false);
       return;
     }
-    setState(() {});
+    setState(() {
+      _applyParentalControl(widget.controller.parentalControl);
+    });
   }
 
   Future<void> _confirmDeleteChildProfile(ChildProfile child) async {
@@ -233,6 +229,17 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     if (!mounted) return;
     setState(() => _savingControl = false);
     await NebulaSnack.show(context, message: result.message, ok: result.ok);
+  }
+
+  void _applyParentalControl(ParentalControl control) {
+    _dailyLimitController.text = control.dailyLimitMinutes > 0
+        ? control.dailyLimitMinutes.toString()
+        : '';
+    _startHour = control.allowedStartHour;
+    _endHour = control.allowedEndHour;
+    _blockedGameKeys
+      ..clear()
+      ..addAll(control.blockedGameKeys);
   }
 
   Future<void> _saveAdminConfig() async {
@@ -1377,7 +1384,7 @@ class _ControlTab extends StatelessWidget {
           controller: controller,
           onChildChanged: onChildContextChanged,
           note:
-              'El control parental se guarda para la cuenta cuidador y se evalua cuando un perfil de nino intenta abrir juegos.',
+              'El control parental se guarda por cada niño seleccionado y se evalúa cuando ese perfil intenta abrir juegos.',
         ),
         const SizedBox(height: 10),
         Card(

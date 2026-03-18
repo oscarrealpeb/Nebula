@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
+import '../services/narration_service.dart';
 import '../widgets/cosmic_background.dart';
 
 class CartasGemelasGame extends StatefulWidget {
@@ -100,6 +101,12 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
     super.initState();
     _difficultyStars = widget.difficultyStars.clamp(1, 3).toInt();
     _startNewGame();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'cartas_gemelas_intro',
+      );
+    });
   }
 
   void _startNewGame() {

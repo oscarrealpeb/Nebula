@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
+import '../services/narration_service.dart';
 import 'home_screen.dart';
 import 'package:lottie/lottie.dart';
 
@@ -64,6 +65,7 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
 
   int _totalMistakes = 0;
   final DateTime _startedAt = DateTime.now();
+  bool _introNarrationQueued = false;
 
   static const List<String> _defaultImages = [
     'assets/images/conecta/arpa.jpg',
@@ -101,6 +103,25 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     super.initState();
     _activeItems = _buildActiveItems(widget.difficulty);
     _loadNextQuestion();
+    _queueIntroNarrationAfterFirstSound();
+  }
+
+  void _queueIntroNarrationAfterFirstSound() {
+    if (_introNarrationQueued) return;
+    _introNarrationQueued = true;
+    Future.microtask(() async {
+      if (!widget.controller.soundEffectsEnabled) return;
+      try {
+        await _player.onPlayerComplete.first;
+      } catch (_) {
+        return;
+      }
+      if (!mounted) return;
+      await NarrationService.instance.play(
+        widget.controller,
+        key: 'connect_intro',
+      );
+    });
   }
 
   List<SoundItem> _loadCategorizedSoundItems(GameDifficulty difficulty) {

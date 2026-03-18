@@ -6,6 +6,7 @@ import '../../controllers/app_controller.dart';
 import '../../core/data/avatar_catalog.dart';
 import '../../core/data/planet_ladder.dart';
 import '../../models/portal_role.dart';
+import '../../services/narration_service.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
 import '../../widgets/nebula_snack.dart';
@@ -60,6 +61,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _remaining = widget.controller.profileResetRemaining();
     _usernameValid = true;
     _startTickIfNeeded();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'profile',
+      );
+    });
   }
 
   @override

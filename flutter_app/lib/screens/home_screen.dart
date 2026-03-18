@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 import '../controllers/app_controller.dart';
 import '../core/data/avatar_catalog.dart';
 import '../core/data/planet_ladder.dart';
+import '../services/narration_service.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'child_profile_setup_screen.dart';
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _levelUpDialogVisible = false;
   bool _achievementDialogCheckQueued = false;
   bool _achievementDialogVisible = false;
+  bool _timeLimitExitCheckQueued = false;
   static const double _levelUpDialogHeight = 520; // editable
   static const double _levelUpDialogMaxWidth = 360; // editable
 
@@ -119,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final stars = await showStarDifficultySheet(
       context,
+      controller: widget.controller,
       maxEnabledStars: maxEnabledStars,
     );
     if (!context.mounted || stars == null) return;
@@ -162,9 +165,12 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
     }
 
+    widget.controller.setChildGameActive(true);
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => screen),
     );
+    widget.controller.setChildGameActive(false);
+    _scheduleTimeLimitExitCheck();
   }
 
   Future<void> _backToPortalSelector() async {
@@ -302,6 +308,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final unlocked = widget.controller.consumePendingAchievementUnlocks();
       if (unlocked.isEmpty) return;
       _achievementDialogVisible = true;
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'logro',
+      );
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -393,12 +403,34 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _scheduleTimeLimitExitCheck() {
+    if (!mounted || _timeLimitExitCheckQueued) return;
+    _timeLimitExitCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _timeLimitExitCheckQueued = false;
+      if (!mounted) return;
+      if (!widget.controller.shouldExitChildAfterTimeLimit) return;
+      widget.controller.exitChildPortalDueToLimit();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => PortalEntryScreen(
+            controller: widget.controller,
+            flashMessage: widget.controller.childTimeLimitMessage,
+            flashOk: false,
+          ),
+        ),
+        (_) => false,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
     _schedulePendingLevelUpDialogCheck();
     _schedulePendingAchievementDialogCheck();
+    _scheduleTimeLimitExitCheck();
 
     final descubreLabel = widget.controller.gameLabelForKey('descubre_emocion');
     final conectaLabel = widget.controller.gameLabelForKey('conecta_sonidos');
