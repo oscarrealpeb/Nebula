@@ -60,6 +60,23 @@ flutter:
     - assets/dilo/
     - assets/dilo-hombre/
     - assets/dilo-mujer/
+    - assets/images/explora/animales/
+    - assets/images/explora/
+    - assets/sounds/explora/animales/perro/
+    - assets/sounds/explora/animales/caballo/
+    - assets/sounds/explora/animales/conejo/
+    - assets/sounds/explora/animales/delfin/
+    - assets/sounds/explora/animales/elefante/
+    - assets/sounds/explora/animales/gato/
+    - assets/sounds/explora/animales/oso/
+    - assets/sounds/explora/animales/vaca/
+    - assets/sounds/explora/animales/tigre/
+    - assets/sounds/explora/animales/leon/
+    - assets/sounds/explora/animales/tucan/
+    - assets/sounds/explora/animales/pinguino/
+    - assets/sounds/explora/animales/tortuga/
+    - assets/sounds/explora/animales/jirafa/
+    - assets/sounds/explora/animales/mono/
 
 flutter_launcher_icons:
   android: true
