@@ -173,6 +173,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _scheduleTimeLimitExitCheck();
   }
 
+  bool _isGloballyBlocked(String gameKey) {
+    final normalized = gameKey.trim().toLowerCase();
+    return widget.controller.appAdminConfig.blockedGameKeys.any(
+      (item) => item.trim().toLowerCase() == normalized,
+    );
+  }
+
+  bool _isCaregiverBlocked(String gameKey) {
+    if (widget.controller.isAdmin) return false;
+    final normalized = gameKey.trim().toLowerCase();
+    final control = widget.controller.parentalControl;
+    return control.blockedGameKeys.any(
+      (item) => item.trim().toLowerCase() == normalized,
+    );
+  }
+
   Future<void> _backToPortalSelector() async {
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
@@ -565,74 +581,82 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle: 'Escoge una aventura y suma estrellitas',
             ),
             const SizedBox(height: 10),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: 0.85,
-              children: [
-                _GameCard(
-                  title: descubreLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/descubre_emocion1.png',
-                  onTap: () => _openGame(
-                    context,
-                    gameName: descubreLabel,
-                    gameKey: 'descubre_emocion',
-                  ),
-                  accentColor: color,
-                ),
-                _GameCard(
-                  title: conectaLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/conecta_imagenes1.png',
-                  accentColor: color,
-                  onTap: () => _openGame(
-                    context,
-                    gameName: conectaLabel,
-                    gameKey: 'conecta_sonidos',
-                  ),
-                ),
-                _GameCard(
-                  title: diLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/di_palabra1.png',
-                  accentColor: color,
-                  onTap: () => _openGame(
-                    context,
-                    gameName: diLabel,
-                    gameKey: 'di_palabra',
-                  ),
-                ),
-                _GameCard(
-                  title: exploraLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/explora_aprende1.png',
-                  accentColor: color,
-                  onTap: () async {
-                    final allowed = await _guardGameAccess(
-                      context,
-                      gameKey: 'explora_aprende',
-                    );
-                    if (!context.mounted || !allowed) return;
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ExploreLearnScreen(controller: widget.controller),
+            Builder(
+              builder: (context) {
+                final cards = <Widget>[];
+                if (!_isGloballyBlocked('descubre_emocion') &&
+                    !_isCaregiverBlocked('descubre_emocion')) {
+                  cards.add(
+                    _GameCard(
+                      title: descubreLabel.toUpperCase(),
+                      imagePath: 'assets/images/games/descubre_emocion1.png',
+                      onTap: () => _openGame(
+                        context,
+                        gameName: descubreLabel,
+                        gameKey: 'descubre_emocion',
                       ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cardWidth = (constraints.maxWidth - 10) / 2;
-                final cardHeight = cardWidth / 1.04;
-                return Center(
-                  child: SizedBox(
-                    width: cardWidth,
-                    height: cardHeight,
-                    child: _GameCard(
+                      accentColor: color,
+                    ),
+                  );
+                }
+                if (!_isGloballyBlocked('conecta_sonidos') &&
+                    !_isCaregiverBlocked('conecta_sonidos')) {
+                  cards.add(
+                    _GameCard(
+                      title: conectaLabel.toUpperCase(),
+                      imagePath: 'assets/images/games/conecta_imagenes1.png',
+                      accentColor: color,
+                      onTap: () => _openGame(
+                        context,
+                        gameName: conectaLabel,
+                        gameKey: 'conecta_sonidos',
+                      ),
+                    ),
+                  );
+                }
+                if (!_isGloballyBlocked('di_palabra') &&
+                    !_isCaregiverBlocked('di_palabra')) {
+                  cards.add(
+                    _GameCard(
+                      title: diLabel.toUpperCase(),
+                      imagePath: 'assets/images/games/di_palabra1.png',
+                      accentColor: color,
+                      onTap: () => _openGame(
+                        context,
+                        gameName: diLabel,
+                        gameKey: 'di_palabra',
+                      ),
+                    ),
+                  );
+                }
+                if (!_isGloballyBlocked('explora_aprende') &&
+                    !_isCaregiverBlocked('explora_aprende')) {
+                  cards.add(
+                    _GameCard(
+                      title: exploraLabel.toUpperCase(),
+                      imagePath: 'assets/images/games/explora_aprende1.png',
+                      accentColor: color,
+                      onTap: () async {
+                        final allowed = await _guardGameAccess(
+                          context,
+                          gameKey: 'explora_aprende',
+                        );
+                        if (!context.mounted || !allowed) return;
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ExploreLearnScreen(
+                              controller: widget.controller,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }
+                if (!_isGloballyBlocked('minijuegos') &&
+                    !_isCaregiverBlocked('minijuegos')) {
+                  cards.add(
+                    _GameCard(
                       title: miniLabel.toUpperCase(),
                       imagePath: 'assets/images/games/minijuegos1.png',
                       accentColor: color,
@@ -644,13 +668,36 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (!context.mounted || !allowed) return;
                         await Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) =>
-                                MinigamesScreen(controller: widget.controller),
+                            builder: (_) => MinigamesScreen(
+                              controller: widget.controller,
+                            ),
                           ),
                         );
                       },
                     ),
-                  ),
+                  );
+                }
+
+                if (cards.isEmpty) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Text(
+                        'No hay juegos disponibles por ahora.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  );
+                }
+
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: 0.85,
+                  children: cards,
                 );
               },
             ),

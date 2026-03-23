@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../services/narration_service.dart';
+import '../widgets/puzzle_image_adapter.dart';
 import 'home_screen.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -26,6 +29,20 @@ class Gamediloscreen extends StatefulWidget {
   State<Gamediloscreen> createState() => _GamediloscreenState();
 }
 
+class _DiloItem {
+  const _DiloItem({
+    required this.imageSource,
+    required this.text,
+    this.audioKey = '',
+    this.audioSource = '',
+  });
+
+  final String imageSource;
+  final String text;
+  final String audioKey;
+  final String audioSource;
+}
+
 class _GamediloscreenState extends State<Gamediloscreen> {
   final DateTime _startedAt = DateTime.now();
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -34,7 +51,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   String _recognizedText = '';
   String? _speechLocaleId;
   int _attemptsForCurrentWord = 0;
-  final List<Map<String, String>> _failedWords = [];
+  final List<_DiloItem> _failedWords = [];
   static const int _maxRounds = 5;
   static const int _maxAttemptsPerWord = 3;
   List<int> _errorIndexes = [];
@@ -48,102 +65,144 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   String? _feedbackMessage;
   bool _completing = false;
 
-  final List<Map<String, String>> _easyWords = [
-    {
-      'image': 'assets/dilo/mesa.jpg',
-      'text': 'Mesa',
-      'audioKey': 'mesa',
-    },
-    {
-      'image': 'assets/dilo/perro.jpg',
-      'text': 'Perro',
-      'audioKey': 'perro',
-    },
-    {
-      'image': 'assets/dilo/gato.jpg',
-      'text': 'Gato',
-      'audioKey': 'gato',
-    },
-    {
-      'image': 'assets/dilo/silla.jpg',
-      'text': 'Silla',
-      'audioKey': 'silla',
-    },
-    {
-      'image': 'assets/dilo/cocina.jpg',
-      'text': 'Cocina',
-      'audioKey': 'cocina',
-    },
+  final List<_DiloItem> _easyWords = [
+    const _DiloItem(
+      imageSource: 'assets/dilo/mesa.jpg',
+      text: 'Mesa',
+      audioKey: 'mesa',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/perro.jpg',
+      text: 'Perro',
+      audioKey: 'perro',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/gato.jpg',
+      text: 'Gato',
+      audioKey: 'gato',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/silla.jpg',
+      text: 'Silla',
+      audioKey: 'silla',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/cocina.jpg',
+      text: 'Cocina',
+      audioKey: 'cocina',
+    ),
   ];
 
-  final List<Map<String, String>> _mediumWords = [
-    {
-      'image': 'assets/dilo/desayuno.jpg',
-      'text': 'Desayuno',
-      'audioKey': 'desayuno',
-    },
-    {
-      'image': 'assets/dilo/almuerzo.jpg',
-      'text': 'Almuerzo',
-      'audioKey': 'almuerzo',
-    },
-    {
-      'image': 'assets/dilo/juguetes.jpg',
-      'text': 'Juguetes',
-      'audioKey': 'juguetes',
-    },
-    {
-      'image': 'assets/dilo/escritorio.jpg',
-      'text': 'Escritorio',
-      'audioKey': 'escritorio',
-    },
-    {
-      'image': 'assets/dilo/television.jpg',
-      'text': 'Television',
-      'audioKey': 'television',
-    },
+  final List<_DiloItem> _mediumWords = [
+    const _DiloItem(
+      imageSource: 'assets/dilo/desayuno.jpg',
+      text: 'Desayuno',
+      audioKey: 'desayuno',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/almuerzo.jpg',
+      text: 'Almuerzo',
+      audioKey: 'almuerzo',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/juguetes.jpg',
+      text: 'Juguetes',
+      audioKey: 'juguetes',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/escritorio.jpg',
+      text: 'Escritorio',
+      audioKey: 'escritorio',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/television.jpg',
+      text: 'Television',
+      audioKey: 'television',
+    ),
   ];
 
-  final List<Map<String, String>> _hardWords = [
-    {
-      'image': 'assets/dilo/quiero_comer.jpg',
-      'text': 'Quiero comer',
-      'audioKey': 'quiero_comer',
-    },
-    {
-      'image': 'assets/dilo/tengo_hambre.jpg',
-      'text': 'Tengo hambre',
-      'audioKey': 'tengo_hambre',
-    },
-    {
-      'image': 'assets/dilo/quiero_jugar.jpg',
-      'text': 'Quiero jugar',
-      'audioKey': 'quiero_jugar',
-    },
-    {
-      'image': 'assets/dilo/me_siento_triste.jpg',
-      'text': 'Me siento triste',
-      'audioKey': 'me_siento_triste',
-    },
-    {
-      'image': 'assets/dilo/me_siento_feliz.jpg',
-      'text': 'Me siento feliz',
-      'audioKey': 'me_siento_feliz',
-    },
-    {
-      'image': 'assets/dilo/quiero_dormir.jpg',
-      'text': 'Quiero dormir',
-      'audioKey': 'quiero_dormir',
-    },
+  final List<_DiloItem> _hardWords = [
+    const _DiloItem(
+      imageSource: 'assets/dilo/quiero_comer.jpg',
+      text: 'Quiero comer',
+      audioKey: 'quiero_comer',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/tengo_hambre.jpg',
+      text: 'Tengo hambre',
+      audioKey: 'tengo_hambre',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/quiero_jugar.jpg',
+      text: 'Quiero jugar',
+      audioKey: 'quiero_jugar',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/me_siento_triste.jpg',
+      text: 'Me siento triste',
+      audioKey: 'me_siento_triste',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/me_siento_feliz.jpg',
+      text: 'Me siento feliz',
+      audioKey: 'me_siento_feliz',
+    ),
+    const _DiloItem(
+      imageSource: 'assets/dilo/quiero_dormir.jpg',
+      text: 'Quiero dormir',
+      audioKey: 'quiero_dormir',
+    ),
   ];
 
-  List<Map<String, String>> get _currentList {
+  List<_DiloItem> _defaultsForDifficulty() {
     if (widget.difficultyStars <= 1) return _easyWords;
     if (widget.difficultyStars == 2) return _mediumWords;
     return _hardWords;
   }
 
-  Map<String, String> get _currentItem =>
+  List<_DiloItem> _customItemsForDifficulty() {
+    final stars = widget.difficultyStars.clamp(1, 3).toInt();
+    return widget.controller.gameContentConfig.diloItems
+        .where(
+          (item) =>
+              item.enabled &&
+              item.difficultyStars == stars &&
+              item.imagePath.trim().isNotEmpty &&
+              item.text.trim().isNotEmpty &&
+              item.audioSource.trim().isNotEmpty,
+        )
+        .map(
+          (item) => _DiloItem(
+            imageSource: item.imagePath.trim(),
+            text: item.text.trim(),
+            audioSource: item.audioSource.trim(),
+          ),
+        )
+        .toList();
+  }
+
+  List<_DiloItem> get _currentList {
+    final defaults = _defaultsForDifficulty();
+    final custom = _customItemsForDifficulty();
+    if (custom.isEmpty) return defaults;
+    final merged = <_DiloItem>[];
+    final seen = <String>{};
+    for (final item in custom) {
+      final key = item.text.trim().toLowerCase();
+      if (key.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      merged.add(item);
+    }
+    for (final item in defaults) {
+      final key = item.text.trim().toLowerCase();
+      if (key.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      merged.add(item);
+    }
+    return merged;
+  }
+
+  _DiloItem get _currentItem =>
       _currentList[_currentRound % _currentList.length];
 
   @override
@@ -233,8 +292,26 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   }
 
   Future<void> _playAudio() async {
-    final audioKey = _currentItem['audioKey'];
-    if (audioKey == null) return;
+    final customSource = _currentItem.audioSource.trim();
+    if (customSource.isNotEmpty) {
+      final lower = customSource.toLowerCase();
+      if (lower.startsWith('http://') || lower.startsWith('https://')) {
+        await _audioPlayer.play(UrlSource(customSource));
+        return;
+      }
+      if (customSource.startsWith('assets/')) {
+        final cleaned = customSource.substring('assets/'.length);
+        await _audioPlayer.play(AssetSource(cleaned));
+        return;
+      }
+      if (File(customSource).existsSync()) {
+        await _audioPlayer.play(DeviceFileSource(customSource));
+        return;
+      }
+    }
+
+    final audioKey = _currentItem.audioKey.trim();
+    if (audioKey.isEmpty) return;
     final isFemale = widget.controller.selectedNarratorId.trim() == 'narrator_2';
     final folder = isFemale ? 'dilo-mujer' : 'dilo-hombre';
     final suffix = isFemale ? '-m' : '-h';
@@ -346,7 +423,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   }
 
   void _evaluateAttempt() {
-    final correctText = _normalize(_currentItem['text']!);
+    final correctText = _normalize(_currentItem.text);
     final spokenText = _normalize(_recognizedText);
 
     int allowedErrors;
@@ -602,6 +679,9 @@ class _GamediloscreenState extends State<Gamediloscreen> {
 
   @override
   Widget build(BuildContext context) {
+    final imageProvider = puzzleImageProviderFromSource(
+      _currentItem.imageSource,
+    );
     return PopScope<Object?>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -647,17 +727,22 @@ class _GamediloscreenState extends State<Gamediloscreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: Image.asset(
-                          _currentItem['image']!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(Icons.broken_image_outlined)),
-                        ),
+                        child: imageProvider == null
+                            ? const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              )
+                            : Image(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.broken_image_outlined),
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _currentItem['text']!,
+                      _currentItem.text,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 22,
@@ -809,7 +894,7 @@ class _GamediloscreenState extends State<Gamediloscreen> {
   }
 
   List<TextSpan> _buildColoredText() {
-    final correctText = _normalize(_currentItem['text']!);
+    final correctText = _normalize(_currentItem.text);
     final spokenText = _normalize(_recognizedText);
 
     final List<TextSpan> spans = [];

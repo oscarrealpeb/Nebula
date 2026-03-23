@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/app_controller.dart';
@@ -133,6 +136,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
   final _soundImageController = TextEditingController();
   final _soundCategoryController = TextEditingController();
   final _puzzleSourceController = TextEditingController();
+  final _puzzleAudioController = TextEditingController();
+  final _diloImageController = TextEditingController();
+  final _diloTextController = TextEditingController();
+  final _diloAudioController = TextEditingController();
+  final _memoryImageController = TextEditingController();
+  final _memoryAudioController = TextEditingController();
   final _picker = ImagePicker();
 
   static const int _maxPuzzleImages = 8;
@@ -142,9 +151,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
 
   int _emotionDifficulty = 1;
   int _soundDifficulty = 1;
+  int _diloDifficulty = 1;
   bool _saving = false;
   bool _loading = false;
   String? _globalBusyKey;
+  String? _newItemBusyKey;
   int _globalPreviewRevision = 0;
   late GameContentConfig _working;
 
@@ -165,6 +176,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     _soundImageController.dispose();
     _soundCategoryController.dispose();
     _puzzleSourceController.dispose();
+    _puzzleAudioController.dispose();
+    _diloImageController.dispose();
+    _diloTextController.dispose();
+    _diloAudioController.dispose();
+    _memoryImageController.dispose();
+    _memoryAudioController.dispose();
     super.dispose();
   }
 
@@ -190,7 +207,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     await NebulaSnack.show(context, message: result.message, ok: result.ok);
   }
 
-  void _addEmotionItem() {
+  Future<void> _addEmotionItem() async {
     final imagePath = _emotionImageController.text.trim();
     final correctEmotion = _emotionCorrectController.text.trim();
     if (imagePath.isEmpty || correctEmotion.isEmpty) {
@@ -201,6 +218,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       );
       return;
     }
+    final imageOk = await _validateImageSource(
+      imagePath,
+      label: 'imagen',
+    );
+    if (!imageOk) return;
 
     final item = EmotionContentItem(
       id: 'emotion_${DateTime.now().microsecondsSinceEpoch}',
@@ -236,7 +258,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     });
   }
 
-  void _addSoundItem() {
+  Future<void> _addSoundItem() async {
     final soundAsset = _soundAssetController.text.trim();
     final correctImage = _soundImageController.text.trim();
     final category = _soundCategoryController.text.trim();
@@ -248,6 +270,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       );
       return;
     }
+    final soundOk = await _validateAudioSource(soundAsset);
+    if (!soundOk) return;
+    final imageOk = await _validateImageSource(
+      correctImage,
+      label: 'imagen correcta',
+    );
+    if (!imageOk) return;
 
     final item = SoundContentItem(
       id: 'sound_${DateTime.now().microsecondsSinceEpoch}',
@@ -282,6 +311,116 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     final next = _working.soundItems.where((item) => item.id != id).toList();
     setState(() {
       _working = _working.copyWith(soundItems: next);
+    });
+  }
+
+  Future<void> _addDiloItem() async {
+    final imagePath = _diloImageController.text.trim();
+    final text = _diloTextController.text.trim();
+    final audioSource = _diloAudioController.text.trim();
+    if (imagePath.isEmpty || text.isEmpty || audioSource.isEmpty) {
+      NebulaSnack.show(
+        context,
+        message: 'Completa imagen, texto y audio.',
+        ok: false,
+      );
+      return;
+    }
+    final imageOk = await _validateImageSource(
+      imagePath,
+      label: 'imagen',
+    );
+    if (!imageOk) return;
+    final audioOk = await _validateAudioSource(audioSource);
+    if (!audioOk) return;
+
+    final item = DiloContentItem(
+      id: 'dilo_${DateTime.now().microsecondsSinceEpoch}',
+      difficultyStars: _diloDifficulty.clamp(1, 3),
+      imagePath: imagePath,
+      text: text,
+      audioSource: audioSource,
+      enabled: true,
+    );
+
+    setState(() {
+      _working = _working.copyWith(
+        diloItems: [..._working.diloItems, item],
+      );
+      _diloImageController.clear();
+      _diloTextController.clear();
+      _diloAudioController.clear();
+    });
+  }
+
+  void _toggleDiloItem(String id, bool value) {
+    final next = _working.diloItems.map((item) {
+      if (item.id != id) return item;
+      return item.copyWith(enabled: value);
+    }).toList();
+    setState(() {
+      _working = _working.copyWith(diloItems: next);
+    });
+  }
+
+  void _removeDiloItem(String id) {
+    final next = _working.diloItems.where((item) => item.id != id).toList();
+    setState(() {
+      _working = _working.copyWith(diloItems: next);
+    });
+  }
+
+  Future<void> _addMemoryItem() async {
+    final imagePath = _memoryImageController.text.trim();
+    final audioSource = _memoryAudioController.text.trim();
+    if (imagePath.isEmpty) {
+      NebulaSnack.show(
+        context,
+        message: 'Completa la ruta de imagen.',
+        ok: false,
+      );
+      return;
+    }
+    final imageOk = await _validateImageSource(
+      imagePath,
+      label: 'imagen',
+    );
+    if (!imageOk) return;
+    if (audioSource.isNotEmpty) {
+      final audioOk = await _validateAudioSource(audioSource);
+      if (!audioOk) return;
+    }
+
+    final item = MemoryContentItem(
+      id: 'memory_${DateTime.now().microsecondsSinceEpoch}',
+      imagePath: imagePath,
+      audioSource: audioSource,
+      enabled: true,
+    );
+
+    setState(() {
+      _working = _working.copyWith(
+        memoryItems: [..._working.memoryItems, item],
+      );
+      _memoryImageController.clear();
+      _memoryAudioController.clear();
+    });
+  }
+
+  void _toggleMemoryItem(String id, bool value) {
+    final next = _working.memoryItems.map((item) {
+      if (item.id != id) return item;
+      return item.copyWith(enabled: value);
+    }).toList();
+    setState(() {
+      _working = _working.copyWith(memoryItems: next);
+    });
+  }
+
+  void _removeMemoryItem(String id) {
+    final next = _working.memoryItems.where((item) => item.id != id).toList();
+    setState(() {
+      _working = _working.copyWith(memoryItems: next);
     });
   }
 
@@ -482,6 +621,155 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     );
   }
 
+  Future<void> _pickNewItemImage({
+    required String targetKey,
+    required String gameKey,
+    required ImageSource source,
+    required void Function(String url) onUploaded,
+  }) async {
+    if (_newItemBusyKey != null) return;
+    if (!widget.controller.firebaseEnabled) {
+      await NebulaSnack.show(
+        context,
+        message: 'Esta funci\u00f3n requiere Firebase habilitado.',
+        ok: false,
+      );
+      return;
+    }
+    await widget.controller.refreshOnlineStatus();
+    if (!widget.controller.isOnline) {
+      await NebulaSnack.show(
+        context,
+        message: 'Necesitas internet para subir la imagen.',
+        ok: false,
+      );
+      return;
+    }
+    setState(() => _newItemBusyKey = targetKey);
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+      );
+      if (picked == null) return;
+      if (!mounted) return;
+      final prepared = await ImagePreparationService.cropAndValidate(
+        context,
+        picked.path,
+      );
+      if (!mounted || prepared.cancelled) return;
+      if (!prepared.ok) {
+        await NebulaSnack.show(
+          context,
+          message: prepared.message,
+          ok: false,
+        );
+        return;
+      }
+      final file = File(prepared.filePath);
+      final sizeBytes = file.lengthSync();
+      if (sizeBytes > AppController.maxCustomImageBytes) {
+        await NebulaSnack.show(
+          context,
+          message:
+              'La imagen supera el tama\u00f1o m\u00e1ximo permitido de ${AppController.maxCustomImageMegabytes} MB.',
+          ok: false,
+        );
+        return;
+      }
+
+      final upload = await widget.controller.authService.uploadGlobalGameImageFile(
+        gameKey: gameKey,
+        itemId: 'content_${DateTime.now().microsecondsSinceEpoch}',
+        filePath: prepared.filePath,
+      );
+      if (!mounted) return;
+      if (!upload.ok || upload.data == null) {
+        await NebulaSnack.show(
+          context,
+          message: upload.message,
+          ok: false,
+        );
+        return;
+      }
+      onUploaded(upload.data!.downloadUrl);
+      await NebulaSnack.show(
+        context,
+        message: 'Imagen subida. Completa los campos y agrega el item.',
+        ok: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _newItemBusyKey = null);
+      }
+    }
+  }
+
+  Future<void> _pickNewItemAudio({
+    required String targetKey,
+    required String gameKey,
+    required void Function(String url) onUploaded,
+  }) async {
+    if (_newItemBusyKey != null) return;
+    if (!widget.controller.firebaseEnabled) {
+      await NebulaSnack.show(
+        context,
+        message: 'Esta funci\u00f3n requiere Firebase habilitado.',
+        ok: false,
+      );
+      return;
+    }
+    await widget.controller.refreshOnlineStatus();
+    if (!widget.controller.isOnline) {
+      await NebulaSnack.show(
+        context,
+        message: 'Necesitas internet para subir el audio.',
+        ok: false,
+      );
+      return;
+    }
+    setState(() => _newItemBusyKey = targetKey);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final path = picked.files.single.path ?? '';
+      if (path.trim().isEmpty) {
+        await NebulaSnack.show(
+          context,
+          message: 'No se pudo leer el audio seleccionado.',
+          ok: false,
+        );
+        return;
+      }
+      final upload = await widget.controller.authService.uploadGlobalGameAudioFile(
+        gameKey: gameKey,
+        itemId: 'audio_${DateTime.now().microsecondsSinceEpoch}',
+        filePath: path,
+      );
+      if (!mounted) return;
+      if (!upload.ok || upload.data == null) {
+        await NebulaSnack.show(
+          context,
+          message: upload.message,
+          ok: false,
+        );
+        return;
+      }
+      onUploaded(upload.data!.downloadUrl);
+      await NebulaSnack.show(
+        context,
+        message: 'Audio subido. Completa los campos y agrega el item.',
+        ok: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _newItemBusyKey = null);
+      }
+    }
+  }
+
   Future<void> _pickPuzzleImage(ImageSource source) async {
     if (_working.puzzleItems.length >= _maxPuzzleImages) {
       await NebulaSnack.show(
@@ -534,11 +822,18 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       return;
     }
 
+    final audioSource = _puzzleAudioController.text.trim();
+    if (audioSource.isNotEmpty) {
+      final audioOk = await _validateAudioSource(audioSource);
+      if (!audioOk) return;
+    }
+
     final mime = _mimeForPath(picked.name);
     final sourceValue = 'data:$mime;base64,${base64Encode(bytes)}';
     final nextItem = PuzzleContentItem(
       id: 'puzzle_${DateTime.now().microsecondsSinceEpoch}',
       imageSource: sourceValue,
+      audioSource: audioSource,
       width: width,
       height: height,
       enabled: true,
@@ -547,6 +842,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       _working = _working.copyWith(
         puzzleItems: [..._working.puzzleItems, nextItem],
       );
+      _puzzleAudioController.clear();
     });
 
     if (!mounted) return;
@@ -578,8 +874,118 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     return 'image/jpeg';
   }
 
-  void _addPuzzleSourceManually() {
+  bool _looksLikeAbsolutePath(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) return false;
+    if (RegExp(r'^[a-zA-Z]:\\').hasMatch(normalized)) return true;
+    if (normalized.startsWith('/')) return true;
+    if (normalized.startsWith(r'\\')) return true;
+    return false;
+  }
+
+  Future<bool> _assetExists(String path) async {
+    try {
+      await rootBundle.load(path);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _validateImageSource(
+    String raw, {
+    required String label,
+  }) async {
+    final source = raw.trim();
+    if (source.isEmpty) {
+      await NebulaSnack.show(
+        context,
+        message: 'Completa la ruta de $label.',
+        ok: false,
+      );
+      return false;
+    }
+    if (source.startsWith('data:image/')) return true;
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      return true;
+    }
+    if (_looksLikeAbsolutePath(source)) {
+      if (File(source).existsSync()) return true;
+      await NebulaSnack.show(
+        context,
+        message: 'No encontramos el archivo local para $label.',
+        ok: false,
+      );
+      return false;
+    }
+    if (source.startsWith('assets/')) {
+      if (await _assetExists(source)) return true;
+      await NebulaSnack.show(
+        context,
+        message: 'No encontramos el asset para $label.',
+        ok: false,
+      );
+      return false;
+    }
+    final withAssets = 'assets/$source';
+    if (await _assetExists(withAssets)) return true;
+    if (await _assetExists(source)) return true;
+    await NebulaSnack.show(
+      context,
+      message:
+          'No encontramos la ruta de $label. Usa una URL válida, un asset o una ruta local existente.',
+      ok: false,
+    );
+    return false;
+  }
+
+  Future<bool> _validateAudioSource(String raw) async {
+    final source = raw.trim();
+    if (source.isEmpty) {
+      await NebulaSnack.show(
+        context,
+        message: 'Completa la ruta del audio.',
+        ok: false,
+      );
+      return false;
+    }
+    if (source.startsWith('data:audio/')) return true;
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      return true;
+    }
+    if (_looksLikeAbsolutePath(source)) {
+      if (File(source).existsSync()) return true;
+      await NebulaSnack.show(
+        context,
+        message: 'No encontramos el archivo de audio local.',
+        ok: false,
+      );
+      return false;
+    }
+    if (source.startsWith('assets/')) {
+      if (await _assetExists(source)) return true;
+      await NebulaSnack.show(
+        context,
+        message: 'No encontramos el asset de audio.',
+        ok: false,
+      );
+      return false;
+    }
+    final withAssets = 'assets/$source';
+    if (await _assetExists(withAssets)) return true;
+    if (await _assetExists(source)) return true;
+    await NebulaSnack.show(
+      context,
+      message:
+          'No encontramos la ruta del audio. Usa una URL válida, un asset o una ruta local existente.',
+      ok: false,
+    );
+    return false;
+  }
+
+  Future<void> _addPuzzleSourceManually() async {
     final source = _puzzleSourceController.text.trim();
+    final audioSource = _puzzleAudioController.text.trim();
     if (source.isEmpty) {
       NebulaSnack.show(
         context,
@@ -596,9 +1002,19 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       );
       return;
     }
+    final ok = await _validateImageSource(
+      source,
+      label: 'imagen de puzzle',
+    );
+    if (!ok) return;
+    if (audioSource.isNotEmpty) {
+      final audioOk = await _validateAudioSource(audioSource);
+      if (!audioOk) return;
+    }
     final nextItem = PuzzleContentItem(
       id: 'puzzle_${DateTime.now().microsecondsSinceEpoch}',
       imageSource: source,
+      audioSource: audioSource,
       width: 0,
       height: 0,
       enabled: true,
@@ -608,6 +1024,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         puzzleItems: [..._working.puzzleItems, nextItem],
       );
       _puzzleSourceController.clear();
+      _puzzleAudioController.clear();
     });
   }
 
@@ -634,125 +1051,110 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     required List<_GlobalDefaultImageItem> items,
   }) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+      child: ExpansionTile(
+        title: Text(title),
+        subtitle: Text('${items.length} im\u00e1genes \u00b7 $description'),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: items.map((item) {
+          final busy = _globalBusyKey == '${item.gameKey}::${item.itemId}';
+          final effectiveSource = widget.controller.resolvedGameImageSourceFor(
+            gameKey: item.gameKey,
+            itemId: item.itemId,
+            defaultSource: item.defaultSource,
+          );
+          final hasOverride = _hasGlobalOverride(
+            gameKey: item.gameKey,
+            itemId: item.itemId,
+          );
+          return Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6F8FC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFDCE4F2)),
             ),
-            const SizedBox(height: 6),
-            Text(description),
-            const SizedBox(height: 10),
-            ...items.map((item) {
-              final busy = _globalBusyKey == '${item.gameKey}::${item.itemId}';
-              final effectiveSource = widget.controller.resolvedGameImageSourceFor(
-                gameKey: item.gameKey,
-                itemId: item.itemId,
-                defaultSource: item.defaultSource,
-              );
-              final hasOverride = _hasGlobalOverride(
-                gameKey: item.gameKey,
-                itemId: item.itemId,
-              );
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF6F8FC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFDCE4F2)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                PuzzleImageAdapter(
+                  key: ValueKey(
+                    '${item.gameKey}::${item.itemId}::$_globalPreviewRevision::$effectiveSource',
+                  ),
+                  imageSource: effectiveSource,
+                  size: 72,
+                  borderRadius: 12,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PuzzleImageAdapter(
-                      key: ValueKey(
-                        '${item.gameKey}::${item.itemId}::$_globalPreviewRevision::$effectiveSource',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      imageSource: effectiveSource,
-                      size: 72,
-                      borderRadius: 12,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 4),
+                      Text(
+                        item.subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        hasOverride
+                            ? 'Usando predeterminada actualizada por admin.'
+                            : 'Usando imagen original de la app.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: hasOverride
+                                  ? const Color(0xFF1B8B3B)
+                                  : const Color(0xFF54637E),
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Text(
-                            item.title,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          FilledButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => _openGlobalSourceSheet(
+                                      gameKey: item.gameKey,
+                                      itemId: item.itemId,
+                                    ),
+                            icon: busy
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.edit_outlined),
+                            label: Text(
+                              busy ? 'Guardando...' : 'Cambiar predeterminada',
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.subtitle,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            hasOverride
-                                ? 'Usando predeterminada actualizada por admin.'
-                                : 'Usando imagen original de la app.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: hasOverride
-                                      ? const Color(0xFF1B8B3B)
-                                      : const Color(0xFF54637E),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              FilledButton.icon(
-                                onPressed: busy
-                                    ? null
-                                    : () => _openGlobalSourceSheet(
-                                          gameKey: item.gameKey,
-                                          itemId: item.itemId,
-                                        ),
-                                icon: busy
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.edit_outlined),
-                                label: Text(
-                                  busy ? 'Guardando...' : 'Cambiar predeterminada',
-                                ),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: hasOverride
-                                    ? () => _restoreGlobalImage(
-                                          gameKey: item.gameKey,
-                                          itemId: item.itemId,
-                                        )
-                                    : null,
-                                icon: const Icon(Icons.restore_rounded),
-                                label: const Text('Restaurar original'),
-                              ),
-                            ],
+                          OutlinedButton.icon(
+                            onPressed: hasOverride
+                                ? () => _restoreGlobalImage(
+                                      gameKey: item.gameKey,
+                                      itemId: item.itemId,
+                                    )
+                                : null,
+                            icon: const Icon(Icons.restore_rounded),
+                            label: const Text('Restaurar original'),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              );
-            }),
-          ],
-        ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -764,6 +1166,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     final soundItems = [..._working.soundItems]
       ..sort((a, b) => a.difficultyStars.compareTo(b.difficultyStars));
     final puzzleItems = [..._working.puzzleItems];
+    final diloItems = [..._working.diloItems]
+      ..sort((a, b) => a.difficultyStars.compareTo(b.difficultyStars));
+    final memoryItems = [..._working.memoryItems];
     final defaultEmotionItems = _defaultEmotionImages
         .map(
           (source) => _GlobalDefaultImageItem(
@@ -810,11 +1215,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Aquí defines recursos editables para juegos. Esta base no reemplaza aún la lógica actual en runtime.',
+                      'Aquí defines recursos globales de juegos. Los cambios se reflejan en todas las cuentas (las personalizaciones del niño tienen prioridad).',
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Emociones: ${_working.emotionItems.length}  |  Sonidos: ${_working.soundItems.length}  |  Puzzle: ${_working.puzzleItems.length}',
+                      'Emociones: ${_working.emotionItems.length}  |  Sonidos: ${_working.soundItems.length}  |  Dilo: ${_working.diloItems.length}  |  Cartas: ${_working.memoryItems.length}  |  Puzzle: ${_working.puzzleItems.length}',
                     ),
                     if (_loading) ...[
                       const SizedBox(height: 8),
@@ -882,6 +1287,50 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Respuesta correcta (ej: Feliz)',
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'emotion'
+                                ? 'Subiendo...'
+                                : 'Subir desde galeria',
+                            onPressed: _newItemBusyKey == 'emotion'
+                                ? null
+                                : () => _pickNewItemImage(
+                                      targetKey: 'emotion',
+                                      gameKey: 'emociones',
+                                      source: ImageSource.gallery,
+                                      onUploaded: (url) {
+                                        setState(() {
+                                          _emotionImageController.text = url;
+                                        });
+                                      },
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'emotion'
+                                ? 'Subiendo...'
+                                : 'Tomar foto',
+                            onPressed: _newItemBusyKey == 'emotion'
+                                ? null
+                                : () => _pickNewItemImage(
+                                      targetKey: 'emotion',
+                                      gameKey: 'emociones',
+                                      source: ImageSource.camera,
+                                      onUploaded: (url) {
+                                        setState(() {
+                                          _emotionImageController.text = url;
+                                        });
+                                      },
+                                    ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     NebulaSecondaryButton(
@@ -970,6 +1419,50 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'sound'
+                                ? 'Subiendo...'
+                                : 'Subir desde galeria',
+                            onPressed: _newItemBusyKey == 'sound'
+                                ? null
+                                : () => _pickNewItemImage(
+                                      targetKey: 'sound',
+                                      gameKey: 'sonidos',
+                                      source: ImageSource.gallery,
+                                      onUploaded: (url) {
+                                        setState(() {
+                                          _soundImageController.text = url;
+                                        });
+                                      },
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'sound'
+                                ? 'Subiendo...'
+                                : 'Tomar foto',
+                            onPressed: _newItemBusyKey == 'sound'
+                                ? null
+                                : () => _pickNewItemImage(
+                                      targetKey: 'sound',
+                                      gameKey: 'sonidos',
+                                      source: ImageSource.camera,
+                                      onUploaded: (url) {
+                                        setState(() {
+                                          _soundImageController.text = url;
+                                        });
+                                      },
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
                     NebulaSecondaryButton(
                       text: 'Agregar item de sonido',
                       onPressed: _addSoundItem,
@@ -997,6 +1490,264 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline),
                               onPressed: () => _removeSoundItem(item.id),
+                            ),
+                          )),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dilo',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text('Dificultad:'),
+                        const SizedBox(width: 8),
+                        DropdownButton<int>(
+                          value: _diloDifficulty,
+                          items: const [
+                            DropdownMenuItem(value: 1, child: Text('1')),
+                            DropdownMenuItem(value: 2, child: Text('2')),
+                            DropdownMenuItem(value: 3, child: Text('3')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _diloDifficulty = value);
+                          },
+                        ),
+                      ],
+                    ),
+                    TextField(
+                      controller: _diloImageController,
+                      decoration: const InputDecoration(
+                        labelText: 'Ruta o URL de imagen',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _diloTextController,
+                      decoration: const InputDecoration(
+                        labelText: 'Texto/Palabra',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _diloAudioController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL de audio (MP3/M4A/WAV)',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey?.startsWith('dilo_image') ==
+                                    true
+                                ? 'Subiendo...'
+                                : 'Subir imagen',
+                            onPressed:
+                                _newItemBusyKey?.startsWith('dilo') == true
+                                    ? null
+                                    : () => _pickNewItemImage(
+                                          targetKey: 'dilo_image',
+                                          gameKey: 'dilo',
+                                          source: ImageSource.gallery,
+                                          onUploaded: (url) {
+                                            setState(() {
+                                              _diloImageController.text = url;
+                                            });
+                                          },
+                                        ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey?.startsWith('dilo_audio') ==
+                                    true
+                                ? 'Subiendo...'
+                                : 'Subir audio',
+                            onPressed:
+                                _newItemBusyKey?.startsWith('dilo') == true
+                                    ? null
+                                    : () => _pickNewItemAudio(
+                                          targetKey: 'dilo_audio',
+                                          gameKey: 'dilo',
+                                          onUploaded: (url) {
+                                            setState(() {
+                                              _diloAudioController.text = url;
+                                            });
+                                          },
+                                        ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    NebulaSecondaryButton(
+                      text: 'Agregar item de Dilo',
+                      onPressed: _addDiloItem,
+                    ),
+                    const SizedBox(height: 10),
+                    if (diloItems.isEmpty)
+                      const Text('Sin items personalizados.')
+                    else
+                      ...diloItems.map((item) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Switch(
+                              value: item.enabled,
+                              onChanged: (value) =>
+                                  _toggleDiloItem(item.id, value),
+                            ),
+                            title: Text(
+                              'D${item.difficultyStars} | ${item.text}',
+                            ),
+                            subtitle: Text(
+                              item.imagePath,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _removeDiloItem(item.id),
+                            ),
+                          )),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cartas gemelas',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _memoryImageController,
+                      decoration: const InputDecoration(
+                        labelText: 'Ruta o URL de imagen',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _memoryAudioController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL de audio (opcional)',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'memory_image'
+                                ? 'Subiendo...'
+                                : 'Subir imagen',
+                            onPressed:
+                                _newItemBusyKey?.startsWith('memory') == true
+                                    ? null
+                                    : () => _pickNewItemImage(
+                                          targetKey: 'memory_image',
+                                          gameKey: 'cartas_gemelas',
+                                          source: ImageSource.gallery,
+                                          onUploaded: (url) {
+                                            setState(() {
+                                              _memoryImageController.text = url;
+                                            });
+                                      },
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: NebulaSecondaryButton(
+                            text: _newItemBusyKey == 'memory_image'
+                                ? 'Subiendo...'
+                                : 'Tomar foto',
+                            onPressed:
+                                _newItemBusyKey?.startsWith('memory') == true
+                                    ? null
+                                    : () => _pickNewItemImage(
+                                          targetKey: 'memory_image',
+                                          gameKey: 'cartas_gemelas',
+                                          source: ImageSource.camera,
+                                          onUploaded: (url) {
+                                            setState(() {
+                                              _memoryImageController.text = url;
+                                            });
+                                      },
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    NebulaSecondaryButton(
+                      text: _newItemBusyKey == 'memory_audio'
+                          ? 'Subiendo...'
+                          : 'Subir audio',
+                      onPressed:
+                          _newItemBusyKey?.startsWith('memory') == true
+                              ? null
+                              : () => _pickNewItemAudio(
+                                    targetKey: 'memory_audio',
+                                    gameKey: 'cartas_gemelas',
+                                    onUploaded: (url) {
+                                      setState(() {
+                                        _memoryAudioController.text = url;
+                                      });
+                                    },
+                                  ),
+                    ),
+                    const SizedBox(height: 10),
+                    NebulaSecondaryButton(
+                      text: 'Agregar imagen',
+                      onPressed: _addMemoryItem,
+                    ),
+                    const SizedBox(height: 10),
+                    if (memoryItems.isEmpty)
+                      const Text('Sin imagenes personalizadas.')
+                    else
+                      ...memoryItems.map((item) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Switch(
+                              value: item.enabled,
+                              onChanged: (value) =>
+                                  _toggleMemoryItem(item.id, value),
+                            ),
+                            title: Text(item.id),
+                            subtitle: Text(
+                              item.audioSource.isEmpty
+                                  ? item.imagePath
+                                  : '${item.imagePath} | Audio: ${item.audioSource}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _removeMemoryItem(item.id),
                             ),
                           )),
                   ],
@@ -1042,6 +1793,31 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 10),
                     TextField(
+                      controller: _puzzleAudioController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL de audio (opcional)',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    NebulaSecondaryButton(
+                      text: _newItemBusyKey == 'puzzle_audio'
+                          ? 'Subiendo...'
+                          : 'Subir audio',
+                      onPressed:
+                          _newItemBusyKey?.startsWith('puzzle') == true
+                              ? null
+                              : () => _pickNewItemAudio(
+                                    targetKey: 'puzzle_audio',
+                                    gameKey: 'puzzle',
+                                    onUploaded: (url) {
+                                      setState(() {
+                                        _puzzleAudioController.text = url;
+                                      });
+                                    },
+                                  ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
                       controller: _puzzleSourceController,
                       decoration: const InputDecoration(
                         labelText: 'URL o ruta de asset (opcional)',
@@ -1070,8 +1846,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                   : 'Fuente manual',
                             ),
                             subtitle: Text(
-                              item.imageSource,
-                              maxLines: 1,
+                              item.audioSource.isEmpty
+                                  ? item.imageSource
+                                  : '${item.imageSource} | Audio: ${item.audioSource}',
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: Wrap(
@@ -1090,6 +1868,68 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                               ],
                             ),
                           )),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Explora',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Interfaz preparada. Este juego aún no tiene lógica de contenido editable.',
+                    ),
+                    const SizedBox(height: 10),
+                    const NebulaSecondaryButton(
+                      text: 'Subir imagen (próximamente)',
+                      onPressed: null,
+                    ),
+                    const SizedBox(height: 8),
+                    const NebulaSecondaryButton(
+                      text: 'Subir audio (próximamente)',
+                      onPressed: null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dónde va',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Interfaz preparada. Este juego aún no tiene lógica de contenido editable.',
+                    ),
+                    const SizedBox(height: 10),
+                    const NebulaSecondaryButton(
+                      text: 'Subir imagen (próximamente)',
+                      onPressed: null,
+                    ),
+                    const SizedBox(height: 8),
+                    const NebulaSecondaryButton(
+                      text: 'Subir audio (próximamente)',
+                      onPressed: null,
+                    ),
                   ],
                 ),
               ),

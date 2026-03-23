@@ -35,7 +35,7 @@ Future<int?> showStarDifficultySheet(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Elige tu reto',
+                'Elige tu desafío',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),

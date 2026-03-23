@@ -15,6 +15,13 @@ class NebulaPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
+    final label = Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontWeight: FontWeight.w700),
+    );
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -29,17 +36,13 @@ class NebulaPrimaryButton extends StatelessWidget {
           shadowColor: color.withValues(alpha: 0.30),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 18),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              text,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+            if (icon != null) Icon(icon, size: 18),
+            label,
           ],
         ),
       ),
@@ -52,14 +55,22 @@ class NebulaSecondaryButton extends StatelessWidget {
     super.key,
     required this.text,
     required this.onPressed,
+    this.icon,
   });
 
   final String text;
   final VoidCallback? onPressed;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
+    final label = Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton(
@@ -71,7 +82,15 @@ class NebulaSecondaryButton extends StatelessWidget {
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
-        child: Text(text),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          children: [
+            if (icon != null) Icon(icon, size: 18, color: color),
+            label,
+          ],
+        ),
       ),
     );
   }

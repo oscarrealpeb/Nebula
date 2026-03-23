@@ -238,6 +238,15 @@ class AuthService {
     try {
       await _store.writeAdminConfig(normalized.toJson());
       if (_useFirebase) {
+        if (_firebaseAuth!.currentUser == null) {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No hay sesi\u00f3n de Firebase activa para el admin. Vuelve a iniciar sesi\u00f3n admin y reintenta.',
+            data: normalized,
+          );
+        }
+        await _ensureAdminRoleInCloud();
         try {
           await _firestore!
               .collection('app')
@@ -245,6 +254,17 @@ class AuthService {
               .set(normalized.toJson(), SetOptions(merge: true));
         } on FirebaseException catch (e) {
           if (e.code == 'permission-denied') {
+            final retryOk = await _retryAdminWrite(
+              docId: 'admin_config',
+              payload: normalized.toJson(),
+            );
+            if (retryOk) {
+              return ServiceResult(
+                ok: true,
+                message: 'Config admin guardada.',
+                data: normalized,
+              );
+            }
             return ServiceResult(
               ok: false,
               message:
@@ -271,6 +291,59 @@ class AuthService {
         message: 'No pudimos guardar la config admin: $e',
         data: normalized,
       );
+    }
+  }
+
+  Future<bool> _retryAdminWrite({
+    required String docId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final user = _currentUser;
+    if (!_useFirebase || user == null || user.role != UserRole.admin) {
+      return false;
+    }
+    try {
+      final firebaseUid = _firebaseAuth?.currentUser?.uid ?? '';
+      final cloudUser = firebaseUid.isNotEmpty && firebaseUid != user.id
+          ? _copyUserWithId(user, firebaseUid)
+          : user;
+      await _firestore!
+          .collection('users')
+          .doc(cloudUser.id)
+          .set(_toCloudUserData(cloudUser), SetOptions(merge: true));
+      await _firestore!
+          .collection('app')
+          .doc(docId)
+          .set(payload, SetOptions(merge: true));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _ensureAdminRoleInCloud() async {
+    final user = _currentUser;
+    if (!_useFirebase || user == null || user.role != UserRole.admin) {
+      return false;
+    }
+    final uid = _firebaseAuth?.currentUser?.uid ?? '';
+    if (uid.isEmpty) return false;
+    try {
+      await _firestore!.collection('users').doc(uid).set(
+        {
+          'id': uid,
+          'name': user.name,
+          'username': user.username,
+          'usernameLower': user.username.toLowerCase(),
+          'email': user.email,
+          'emailLower': user.email.toLowerCase(),
+          'role': UserRole.admin,
+        },
+        SetOptions(merge: true),
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -380,11 +453,41 @@ class AuthService {
         .map(
           (item) => item.copyWith(
             imageSource: item.imageSource.trim(),
+            audioSource: item.audioSource.trim(),
             width: item.width.clamp(0, 4096),
             height: item.height.clamp(0, 4096),
           ),
         )
         .take(10)
+        .toList();
+    final diloItems = config.diloItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty &&
+              item.imagePath.trim().isNotEmpty &&
+              item.text.trim().isNotEmpty &&
+              item.audioSource.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            difficultyStars: item.difficultyStars.clamp(1, 3),
+            imagePath: item.imagePath.trim(),
+            text: item.text.trim(),
+            audioSource: item.audioSource.trim(),
+          ),
+        )
+        .toList();
+    final memoryItems = config.memoryItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty && item.imagePath.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            imagePath: item.imagePath.trim(),
+            audioSource: item.audioSource.trim(),
+          ),
+        )
         .toList();
     final emotionOverrides = Map<String, String>.fromEntries(
       config.globalEmotionImageOverrides.entries
@@ -426,6 +529,8 @@ class AuthService {
       emotionItems: emotions,
       soundItems: sounds,
       puzzleItems: puzzles,
+      diloItems: diloItems,
+      memoryItems: memoryItems,
       globalEmotionImageOverrides: emotionOverrides,
       globalSoundImageOverrides: soundOverrides,
       globalEmotionImageStoragePaths: emotionStoragePaths,
@@ -436,6 +541,15 @@ class AuthService {
     try {
       await _store.writeGameContentConfig(normalized.toJson());
       if (_useFirebase) {
+        if (_firebaseAuth!.currentUser == null) {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No hay sesi\u00f3n de Firebase activa para el admin. Vuelve a iniciar sesi\u00f3n admin y reintenta.',
+            data: normalized,
+          );
+        }
+        await _ensureAdminRoleInCloud();
         try {
           await _firestore!
               .collection('app')
@@ -443,6 +557,17 @@ class AuthService {
               .set(normalized.toJson(), SetOptions(merge: true));
         } on FirebaseException catch (e) {
           if (e.code == 'permission-denied') {
+            final retryOk = await _retryAdminWrite(
+              docId: 'game_content_config',
+              payload: normalized.toJson(),
+            );
+            if (retryOk) {
+              return ServiceResult(
+                ok: true,
+                message: 'Contenido de juegos guardado.',
+                data: normalized,
+              );
+            }
             return ServiceResult(
               ok: false,
               message:
@@ -1527,6 +1652,17 @@ class AuthService {
       );
     }
 
+    if (_useFirebase) {
+      final ensured = await _ensureAdminRoleInCloud();
+      if (!ensured) {
+        return const ServiceResult(
+          ok: false,
+          message:
+              'No hay una sesión admin válida en Firebase. Inicia sesión y reintenta.',
+        );
+      }
+    }
+
     final extension = _imageExtensionForPath(normalizedPath);
     if (extension == null) {
       return const ServiceResult(
@@ -1560,6 +1696,82 @@ class AuthService {
       return ServiceResult(
         ok: false,
         message: 'No pudimos subir la imagen global: $e',
+      );
+    }
+  }
+
+  Future<ServiceResult<CustomImageUploadResult>> uploadGlobalGameAudioFile({
+    required String gameKey,
+    required String itemId,
+    required String filePath,
+  }) async {
+    if (!_useStorage) {
+      return const ServiceResult(
+        ok: false,
+        message: 'La sincronización global de audio requiere Firebase Storage.',
+      );
+    }
+
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No se encontró el audio seleccionado.',
+      );
+    }
+
+    final file = File(normalizedPath);
+    if (!file.existsSync()) {
+      return const ServiceResult(
+        ok: false,
+        message: 'El audio seleccionado ya no está disponible.',
+      );
+    }
+
+    if (_useFirebase) {
+      final ensured = await _ensureAdminRoleInCloud();
+      if (!ensured) {
+        return const ServiceResult(
+          ok: false,
+          message:
+              'No hay una sesión admin válida en Firebase. Inicia sesión y reintenta.',
+        );
+      }
+    }
+
+    final extension = _audioExtensionForPath(normalizedPath);
+    if (extension == null) {
+      return const ServiceResult(
+        ok: false,
+        message: 'Formato de audio no permitido. Usa MP3, M4A, WAV, AAC u OGG.',
+      );
+    }
+
+    final contentType = _contentTypeForExtension(extension);
+    final gameSegment = _sanitizeStorageSegment(gameKey);
+    final itemSegment = _sanitizeStorageSegment(itemId);
+    final storagePath =
+        'app/game_content/audio/$gameSegment/$itemSegment.$extension';
+
+    try {
+      final ref = _storage!.ref().child(storagePath);
+      final snapshot = await ref.putFile(
+        file,
+        SettableMetadata(contentType: contentType),
+      );
+      final url = await _downloadUrlWithRetry(snapshot.ref);
+      return ServiceResult(
+        ok: true,
+        message: 'Audio global subido correctamente.',
+        data: CustomImageUploadResult(
+          downloadUrl: url,
+          storagePath: snapshot.ref.fullPath,
+        ),
+      );
+    } catch (e) {
+      return ServiceResult(
+        ok: false,
+        message: 'No pudimos subir el audio global: $e',
       );
     }
   }
@@ -3990,10 +4202,29 @@ class AuthService {
     return null;
   }
 
+  String? _audioExtensionForPath(String path) {
+    final dotIndex = path.lastIndexOf('.');
+    if (dotIndex < 0 || dotIndex >= path.length - 1) return null;
+    final ext = path.substring(dotIndex + 1).trim().toLowerCase();
+    if (ext == 'mp3' ||
+        ext == 'm4a' ||
+        ext == 'wav' ||
+        ext == 'aac' ||
+        ext == 'ogg') {
+      return ext;
+    }
+    return null;
+  }
+
   String _contentTypeForExtension(String extension) {
     return switch (extension) {
       'png' => 'image/png',
       'jpg' || 'jpeg' => 'image/jpeg',
+      'mp3' => 'audio/mpeg',
+      'm4a' => 'audio/mp4',
+      'wav' => 'audio/wav',
+      'aac' => 'audio/aac',
+      'ogg' => 'audio/ogg',
       _ => 'application/octet-stream',
     };
   }
@@ -4084,6 +4315,10 @@ class AuthService {
     final user = _currentUser;
     if (user == null) return;
     await _syncCloudUserBestEffort(user);
+  }
+
+  Future<bool> ensureAdminCloudProfile() async {
+    return _ensureAdminRoleInCloud();
   }
 
   PortalRole _resolvePortalRoleForUser({

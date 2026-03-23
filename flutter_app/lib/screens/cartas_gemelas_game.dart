@@ -6,6 +6,7 @@ import 'package:lottie/lottie.dart';
 import '../controllers/app_controller.dart';
 import '../services/narration_service.dart';
 import '../widgets/cosmic_background.dart';
+import '../widgets/puzzle_image_adapter.dart';
 
 class CartasGemelasGame extends StatefulWidget {
   const CartasGemelasGame({
@@ -113,7 +114,7 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
     _startedAt = DateTime.now();
     _pairCount = _pairsForDifficulty(_difficultyStars);
 
-    final images = List<String>.from(_allImages)..shuffle(_random);
+    final images = _imagePool()..shuffle(_random);
     final selected = images.take(_pairCount).toList();
     _cards = [...selected, ...selected]..shuffle(_random);
 
@@ -137,6 +138,21 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
       default:
         return 5; // 10 cartas
     }
+  }
+
+  List<String> _imagePool() {
+    final custom = widget.controller.gameContentConfig.memoryItems
+        .where((item) => item.enabled && item.imagePath.trim().isNotEmpty)
+        .map((item) => item.imagePath.trim())
+        .toList();
+    if (custom.isEmpty) return List<String>.from(_allImages);
+    final merged = <String>[...custom];
+    for (final image in _allImages) {
+      if (!merged.contains(image)) {
+        merged.add(image);
+      }
+    }
+    return merged;
   }
 
   int _starsReward(int stars) {
@@ -361,10 +377,22 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
                               alignment: Alignment.center,
                               padding: const EdgeInsets.all(12),
                               child: visible
-                                  ? Image.asset(
-                                      _cards[index],
-                                      fit: BoxFit.contain,
-                                    )
+                                  ? (puzzleImageProviderFromSource(
+                                              _cards[index]) ==
+                                          null
+                                      ? Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 42,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimary,
+                                        )
+                                      : Image(
+                                          image: puzzleImageProviderFromSource(
+                                            _cards[index],
+                                          )!,
+                                          fit: BoxFit.contain,
+                                        ))
                                   : Icon(
                                       Icons.auto_awesome,
                                       size: 42,

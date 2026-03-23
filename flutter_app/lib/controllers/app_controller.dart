@@ -654,6 +654,12 @@ class AppController extends ChangeNotifier {
         message: 'El admin no usa portal de niño.',
       );
     }
+    if (_appAdminConfig.maintenanceMode) {
+      final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
+          ? 'La app está en mantenimiento. Intenta más tarde.'
+          : _appAdminConfig.maintenanceMessage;
+      return ActionResult(ok: false, message: message);
+    }
     final targetId = childId.trim();
     if (targetId.isEmpty) {
       return const ActionResult(
@@ -721,6 +727,12 @@ class AppController extends ChangeNotifier {
       _needsPortalSelection = false;
       notifyListeners();
       return const ActionResult(ok: true, message: 'Portal admin listo.');
+    }
+    if (_appAdminConfig.maintenanceMode) {
+      final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
+          ? 'La app está en mantenimiento. Intenta más tarde.'
+          : _appAdminConfig.maintenanceMessage;
+      return ActionResult(ok: false, message: message);
     }
     final typed = password.trim();
     if (typed.isEmpty) {

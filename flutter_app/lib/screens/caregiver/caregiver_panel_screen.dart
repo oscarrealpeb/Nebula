@@ -1205,6 +1205,10 @@ class _SkillsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final adminBlocked = controller.appAdminConfig.blockedGameKeys
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1239,61 +1243,74 @@ class _SkillsTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         ...skillCatalog.map(
-          (skill) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                    color: const Color(0xFFEEF5FF),
-                    child: Text(
-                      skill.title,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF153A78),
-                          ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Que es: ${skill.description}'),
-                        const SizedBox(height: 8),
-                        Text('Ejemplo cotidiano: ${skill.everydayExamples}'),
-                        const SizedBox(height: 8),
-                        Text('Como evaluamos: ${skill.evaluationNotes}'),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Juegos que la fortalecen',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                        const SizedBox(height: 8),
-                        ...skill.relatedGames.map((link) {
-                          final gameLabel = gameLabelByKey[link.gameKey] ??
-                              link.gameKey.replaceAll('_', ' ');
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _SkillGameTile(
-                              gameLabel: gameLabel,
-                              howItHelps: link.howItHelps,
+          (skill) {
+            final relatedGames = skill.relatedGames
+                .where((link) =>
+                    !adminBlocked.contains(link.gameKey.trim().toLowerCase()))
+                .toList();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                      color: const Color(0xFFEEF5FF),
+                      child: Text(
+                        skill.title,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF153A78),
                             ),
-                          );
-                        }),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Que es: ${skill.description}'),
+                          const SizedBox(height: 8),
+                          Text('Ejemplo cotidiano: ${skill.everydayExamples}'),
+                          const SizedBox(height: 8),
+                          Text('Como evaluamos: ${skill.evaluationNotes}'),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Juegos que la fortalecen',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (relatedGames.isEmpty)
+                            const Text(
+                              'Sin juegos disponibles por bloqueo admin.',
+                            )
+                          else
+                            ...relatedGames.map((link) {
+                              final gameLabel = gameLabelByKey[link.gameKey] ??
+                                  link.gameKey.replaceAll('_', ' ');
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _SkillGameTile(
+                                  gameLabel: gameLabel,
+                                  howItHelps: link.howItHelps,
+                                ),
+                              );
+                            }),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );
@@ -1377,6 +1394,10 @@ class _ControlTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hours = <int>[-1, ...List.generate(24, (i) => i)];
+    final adminBlocked = controller.appAdminConfig.blockedGameKeys
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1488,13 +1509,22 @@ class _ControlTab extends StatelessWidget {
                       ),
                 ),
                 const SizedBox(height: 8),
-                ...controller.effectiveGameLabels.entries.map((entry) {
+                ...controller.effectiveGameLabels.entries
+                    .where(
+                      (entry) =>
+                          !adminBlocked.contains(entry.key.trim().toLowerCase()),
+                    )
+                    .map((entry) {
                   final blocked = blockedGameKeys.contains(entry.key);
                   return CheckboxListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     value: blocked,
-                    title: Text(entry.value),
+                    title: Text(
+                      entry.value,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     onChanged: (value) =>
                         onBlockedChanged(entry.key, value ?? false),
                   );
@@ -1833,7 +1863,9 @@ class _AdminTab extends StatelessWidget {
                           title: Text(
                               labelController?.text.trim().isNotEmpty == true
                                   ? labelController!.text
-                                  : (gameLabelByKey[key] ?? key)),
+                                  : (gameLabelByKey[key] ?? key),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis),
                           subtitle: Text(key),
                           onChanged: (value) =>
                               onBlockedChanged(key, value ?? false),
@@ -1886,10 +1918,12 @@ class _MetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: Color.lerp(Colors.white, accent, 0.14),
+        border: Border.all(color: accent.withValues(alpha: 0.42)),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
