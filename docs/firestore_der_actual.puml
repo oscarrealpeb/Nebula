@@ -1,0 +1,126 @@
+@startuml
+title Nebula - DER Firestore (actual simplificado)
+
+hide circle
+top to bottom direction
+skinparam linetype ortho
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 60
+skinparam ranksep 70
+
+package "Coleccion app" {
+  entity "Configuracion admin\n(app/admin_config)" as AppAdmin {
+    *maintenanceMode : bool
+    maintenanceMessage : string
+    minimumVersion : string
+    blockedGameKeys : string[]
+    gameLabels : map<string,string>
+    updatedAtMillis : long
+  }
+
+  entity "Contenido global de juegos\n(app/game_content_config)" as GameContent {
+    *emotionItems : EmotionContentItem[]
+    *soundItems : SoundContentItem[]
+    *puzzleItems : PuzzleContentItem[]
+    globalEmotionImageOverrides : map<string,string>
+    globalSoundImageOverrides : map<string,string>
+    globalEmotionImageStoragePaths : map<string,string>
+    globalSoundImageStoragePaths : map<string,string>
+    updatedAtMillis : long
+  }
+}
+
+package "Coleccion users" {
+  entity "Usuarios\n(users/{userId})" as User {
+    *id : string
+    name : string
+    username : string
+    usernameLower : string
+    email : string
+    emailLower : string
+    role : string
+    hasLocalPassword : bool
+    parentalPinHash : string
+    stars : int
+    avatarIndex : int
+    selectedNarratorId : string
+    soundEffectsEnabled : bool
+    accentHue : double
+    accentIntensity : double
+    customImages : map<string,string>
+    customImageStoragePaths : map<string,string>
+    unlockedAchievementIds : string[]
+    childProfiles : ChildProfile[]
+    gameSessions : GameSessionRecord[]
+    parentalControl : ParentalControl
+    childProfile : ChildProfile?
+  }
+
+  entity "Perfiles de nino\n(childProfiles[] embebido)" as ChildProfile {
+    *id : string
+    name : string
+    age : int
+    birthDateMillis : long
+    languageLevel : string
+    active : bool
+    createdAtMillis : long
+    selectedNarratorId : string
+    soundEffectsEnabled : bool
+    accentHue : double
+    accentIntensity : double
+    loginUsername : string
+    loginUsernameLower : string
+    loginPinHash : string
+    stars : int
+    unlockedAchievementIds : string[]
+  }
+
+  entity "Sesiones de juego\n(gameSessions[] embebido)" as GameSession {
+    *id : string
+    gameKey : string
+    startedAtMillis : long
+    endedAtMillis : long
+    durationSeconds : int
+    difficultyStars : int
+    rounds : int
+    mistakes : int
+    pointsEarned : int
+    correctAnswers : int
+    totalAttempts : int
+    childId : string
+    perfectRounds : int
+  }
+
+  entity "Control parental\n(parentalControl embebido)" as ParentalControl {
+    dailyLimitMinutes : int
+    allowedStartHour : int
+    allowedEndHour : int
+    blockedGameKeys : string[]
+  }
+}
+
+entity "Cuentas eliminadas\n(admin_deleted_accounts/{recordId})" as DeletedAccount {
+  *id : string
+  userId : string
+  email : string
+  username : string
+  role : string
+  deletedAtMillis : long
+  reason : string
+  hadChildProfile : bool
+  sessionCount : int
+}
+
+User "1" -- "0..*" ChildProfile : contiene
+User "1" -- "0..*" GameSession : contiene
+User "1" -- "1" ParentalControl : contiene
+User "1" -- "0..1" ChildProfile : childProfile
+ChildProfile "1" .. "0..*" GameSession : referencia por childId
+
+AppAdmin "1" .. "0..*" User : aplica reglas
+GameContent "1" .. "0..*" User : provee contenido
+User "1" .. "0..*" DeletedAccount : auditoria
+
+@enduml
