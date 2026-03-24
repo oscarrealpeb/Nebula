@@ -28,6 +28,7 @@ dependencies:
   printing: ^5.14.2
   path_provider: ^2.1.5
   crop_your_image: ^2.0.0
+  cloud_functions: ^5.6.2
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +53,12 @@ flutter:
     - assets/images/cards/frutas/
     - assets/images/cards/instrumentos/
     - assets/images/cards/transporte/
+    - assets/images/donde_va/
+    - assets/images/donde_va/cocina/
+    - assets/images/donde_va/dormitorio/
+    - assets/images/donde_va/escuela/
+    - assets/images/donde_va/centro_comercial/
+    - assets/images/donde_va/granja/
     - assets/images/puzzles/
     - assets/images/planets/
     - assets/sounds/

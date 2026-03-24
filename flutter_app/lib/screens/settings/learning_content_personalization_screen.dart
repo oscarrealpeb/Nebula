@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/app_controller.dart';
@@ -154,12 +154,15 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
     for (final source in _defaultEmotionImages) {
       final itemId = widget.controller.customContentItemId(source: source);
+      final expectedEmotion = _emotionFromSource(source);
       items[itemId] = _GameImageItem(
         gameKey: 'emociones',
         itemId: itemId,
         title: _prettyNameFromSource(source),
         subtitle: _emotionLevelLabel(source),
         defaultSource: source,
+        expectedEmotion: expectedEmotion,
+        expectedDescription: _prettyEmotionName(expectedEmotion),
       );
     }
 
@@ -178,6 +181,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
             : item.correctEmotion.trim(),
         subtitle: 'Nivel ${item.difficultyStars} · contenido actual',
         defaultSource: source,
+        expectedEmotion: item.correctEmotion.trim(),
+        expectedDescription: item.correctEmotion.trim(),
       );
     }
 
@@ -202,6 +207,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         title: _prettyNameFromSource(source),
         subtitle: 'Set actual de sonidos e imágenes',
         defaultSource: source,
+        expectedConcepts: _expectedConceptsFromSource(source),
+        expectedDescription: _prettyNameFromSource(source),
       );
     }
 
@@ -221,6 +228,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
             ? 'Nivel ${item.difficultyStars} · contenido actual'
             : '$category · nivel ${item.difficultyStars}',
         defaultSource: source,
+        expectedConcepts: _expectedConceptsFromSource(
+          source,
+          extraLabels: <String>[category],
+        ),
+        expectedDescription: _prettyNameFromSource(source),
       );
     }
 
@@ -245,6 +257,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         title: _prettyNameFromSource(source),
         subtitle: 'Imagen base del rompecabezas',
         defaultSource: source,
+        expectedConcepts: _expectedConceptsFromSource(source),
+        expectedDescription: _prettyNameFromSource(source),
       );
     }
 
@@ -263,6 +277,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
             : item.id.trim(),
         subtitle: 'Imagen actual del rompecabezas',
         defaultSource: source,
+        expectedConcepts: _expectedConceptsFromSource(source),
+        expectedDescription: _prettyNameFromSource(source),
       );
     }
 
@@ -292,7 +308,9 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
   String _prettyNameFromSource(String source) {
     final clean = source.trim();
-    if (clean.isEmpty) return 'Elemento';
+    if (clean.isEmpty || clean.toLowerCase().startsWith('data:image/')) {
+      return 'Elemento';
+    }
     final slashIndex = clean.lastIndexOf('/');
     final fileName = slashIndex >= 0 ? clean.substring(slashIndex + 1) : clean;
     final dotIndex = fileName.lastIndexOf('.');
@@ -304,6 +322,63 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         .where((part) => part.isNotEmpty)
         .map((part) => part[0].toUpperCase() + part.substring(1))
         .join(' ');
+  }
+
+  String _emotionFromSource(String source) {
+    final normalized = source.trim().toLowerCase();
+    if (normalized.contains('feliz')) return 'feliz';
+    if (normalized.contains('triste')) return 'triste';
+    if (normalized.contains('enojado')) return 'enojado';
+    if (normalized.contains('sorprendido') ||
+        normalized.contains('sorpendido')) {
+      return 'sorprendido';
+    }
+    if (normalized.contains('asustado')) return 'asustado';
+    return '';
+  }
+
+  String _prettyEmotionName(String emotion) {
+    final normalized = emotion.trim().toLowerCase();
+    if (normalized.isEmpty) return 'emocion esperada';
+    return normalized[0].toUpperCase() + normalized.substring(1);
+  }
+
+  List<String> _expectedConceptsFromSource(
+    String source, {
+    Iterable<String> extraLabels = const <String>[],
+  }) {
+    final concepts = <String>{};
+
+    void addConcept(String raw) {
+      final normalized = raw
+          .trim()
+          .toLowerCase()
+          .replaceAll('á', 'a')
+          .replaceAll('é', 'e')
+          .replaceAll('í', 'i')
+          .replaceAll('ó', 'o')
+          .replaceAll('ú', 'u')
+          .replaceAll('ü', 'u')
+          .replaceAll('ñ', 'n')
+          .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (normalized.isEmpty) return;
+      concepts.add(normalized);
+      for (final token in normalized.split(' ')) {
+        if (token.length >= 3) {
+          concepts.add(token);
+        }
+      }
+    }
+
+    if (!source.trim().toLowerCase().startsWith('data:image/')) {
+      addConcept(_prettyNameFromSource(source));
+    }
+    for (final extra in extraLabels) {
+      addConcept(extra);
+    }
+    return concepts.toList(growable: false);
   }
 
   String _selectedChildName() {
@@ -351,6 +426,9 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         itemId: item.itemId,
         filePath: prepared.filePath,
         childId: childId,
+        expectedConcepts: item.expectedConcepts,
+        expectedEmotion: item.expectedEmotion,
+        expectedDescription: item.expectedDescription,
       );
       if (!mounted) return;
       if (result.ok) {
@@ -485,7 +563,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Las imágenes se sincronizan entre dispositivos del cuidador. Formatos permitidos: JPG y PNG. Tamaño máximo: 5 MB por imagen.',
+                      'Las imágenes se sincronizan entre dispositivos del cuidador. Formatos permitidos: JPG y PNG. Tamaño máximo: 5 MB por imagen. Antes de guardarlas también se revisa que el recorte y el contenido sean adecuados para el juego.',
                     ),
                   ],
                 ),
@@ -657,8 +735,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                                             ? () => _restoreImage(item)
                                             : null,
                                         icon: const Icon(Icons.restore_rounded),
-                                        label:
-                                            const Text('Restaurar original'),
+                                        label: const Text('Restaurar original'),
                                       ),
                                     ],
                                   ),
@@ -704,6 +781,9 @@ class _GameImageItem {
     required this.title,
     required this.subtitle,
     required this.defaultSource,
+    this.expectedConcepts = const <String>[],
+    this.expectedEmotion = '',
+    this.expectedDescription = '',
   });
 
   final String gameKey;
@@ -711,4 +791,7 @@ class _GameImageItem {
   final String title;
   final String subtitle;
   final String defaultSource;
+  final List<String> expectedConcepts;
+  final String expectedEmotion;
+  final String expectedDescription;
 }

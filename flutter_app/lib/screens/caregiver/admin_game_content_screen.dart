@@ -287,7 +287,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
 
   String _prettyNameFromSource(String source) {
     final clean = source.trim();
-    if (clean.isEmpty) return 'Elemento';
+    if (clean.isEmpty || clean.toLowerCase().startsWith('data:image/')) {
+      return 'Elemento';
+    }
     final slashIndex = clean.lastIndexOf('/');
     final fileName = slashIndex >= 0 ? clean.substring(slashIndex + 1) : clean;
     final dotIndex = fileName.lastIndexOf('.');
@@ -299,6 +301,63 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         .where((part) => part.isNotEmpty)
         .map((part) => part[0].toUpperCase() + part.substring(1))
         .join(' ');
+  }
+
+  String _emotionFromSource(String source) {
+    final normalized = source.trim().toLowerCase();
+    if (normalized.contains('feliz')) return 'feliz';
+    if (normalized.contains('triste')) return 'triste';
+    if (normalized.contains('enojado')) return 'enojado';
+    if (normalized.contains('sorprendido') ||
+        normalized.contains('sorpendido')) {
+      return 'sorprendido';
+    }
+    if (normalized.contains('asustado')) return 'asustado';
+    return '';
+  }
+
+  String _prettyEmotionName(String emotion) {
+    final normalized = emotion.trim().toLowerCase();
+    if (normalized.isEmpty) return 'emocion esperada';
+    return normalized[0].toUpperCase() + normalized.substring(1);
+  }
+
+  List<String> _expectedConceptsFromSource(
+    String source, {
+    Iterable<String> extraLabels = const <String>[],
+  }) {
+    final concepts = <String>{};
+
+    void addConcept(String raw) {
+      final normalized = raw
+          .trim()
+          .toLowerCase()
+          .replaceAll('á', 'a')
+          .replaceAll('é', 'e')
+          .replaceAll('í', 'i')
+          .replaceAll('ó', 'o')
+          .replaceAll('ú', 'u')
+          .replaceAll('ü', 'u')
+          .replaceAll('ñ', 'n')
+          .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (normalized.isEmpty) return;
+      concepts.add(normalized);
+      for (final token in normalized.split(' ')) {
+        if (token.length >= 3) {
+          concepts.add(token);
+        }
+      }
+    }
+
+    if (!source.trim().toLowerCase().startsWith('data:image/')) {
+      addConcept(_prettyNameFromSource(source));
+    }
+    for (final extra in extraLabels) {
+      addConcept(extra);
+    }
+    return concepts.toList(growable: false);
   }
 
   String _emotionDifficultyLabel(String source) {
@@ -319,10 +378,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     required String gameKey,
     required String itemId,
   }) {
-    final key = 'game::${gameKey.trim().toLowerCase()}::${itemId.trim().toLowerCase()}';
+    final key =
+        'game::${gameKey.trim().toLowerCase()}::${itemId.trim().toLowerCase()}';
     return switch (gameKey.trim().toLowerCase()) {
-      'emociones' => (_working.globalEmotionImageOverrides[key]?.trim().isNotEmpty ?? false),
-      'sonidos' => (_working.globalSoundImageOverrides[key]?.trim().isNotEmpty ?? false),
+      'emociones' =>
+        (_working.globalEmotionImageOverrides[key]?.trim().isNotEmpty ?? false),
+      'sonidos' =>
+        (_working.globalSoundImageOverrides[key]?.trim().isNotEmpty ?? false),
       _ => false,
     };
   }
@@ -339,12 +401,44 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       _ => const <String>[],
     };
     for (final source in pool) {
-      final sourceItemId = widget.controller.customContentItemId(source: source);
+      final sourceItemId =
+          widget.controller.customContentItemId(source: source);
       if (sourceItemId.trim().toLowerCase() == normalizedItemId) {
         return source;
       }
     }
     return '';
+  }
+
+  List<String> _expectedConceptsForGlobalItem({
+    required String gameKey,
+    required String itemId,
+  }) {
+    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
+    if (gameKey.trim().toLowerCase() == 'emociones') {
+      return const <String>[];
+    }
+    return _expectedConceptsFromSource(defaultSource);
+  }
+
+  String _expectedEmotionForGlobalItem({
+    required String gameKey,
+    required String itemId,
+  }) {
+    if (gameKey.trim().toLowerCase() != 'emociones') return '';
+    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
+    return _emotionFromSource(defaultSource);
+  }
+
+  String _expectedDescriptionForGlobalItem({
+    required String gameKey,
+    required String itemId,
+  }) {
+    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
+    if (gameKey.trim().toLowerCase() == 'emociones') {
+      return _prettyEmotionName(_emotionFromSource(defaultSource));
+    }
+    return _prettyNameFromSource(defaultSource);
   }
 
   Future<void> _pickGlobalImage({
@@ -380,6 +474,18 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         gameKey: gameKey,
         itemId: itemId,
         filePath: prepared.filePath,
+        expectedConcepts: _expectedConceptsForGlobalItem(
+          gameKey: gameKey,
+          itemId: itemId,
+        ),
+        expectedEmotion: _expectedEmotionForGlobalItem(
+          gameKey: gameKey,
+          itemId: itemId,
+        ),
+        expectedDescription: _expectedDescriptionForGlobalItem(
+          gameKey: gameKey,
+          itemId: itemId,
+        ),
       );
       if (!mounted) return;
       if (result.ok) {
@@ -650,7 +756,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             const SizedBox(height: 10),
             ...items.map((item) {
               final busy = _globalBusyKey == '${item.gameKey}::${item.itemId}';
-              final effectiveSource = widget.controller.resolvedGameImageSourceFor(
+              final effectiveSource =
+                  widget.controller.resolvedGameImageSourceFor(
                 gameKey: item.gameKey,
                 itemId: item.itemId,
                 defaultSource: item.defaultSource,
@@ -697,15 +804,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                             hasOverride
                                 ? 'Usando predeterminada actualizada por admin.'
                                 : 'Usando imagen original de la app.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: hasOverride
-                                      ? const Color(0xFF1B8B3B)
-                                      : const Color(0xFF54637E),
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: hasOverride
+                                          ? const Color(0xFF1B8B3B)
+                                          : const Color(0xFF54637E),
+                                      fontWeight: FontWeight.w600,
+                                    ),
                           ),
                           const SizedBox(height: 8),
                           Wrap(
@@ -729,7 +834,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                       )
                                     : const Icon(Icons.edit_outlined),
                                 label: Text(
-                                  busy ? 'Guardando...' : 'Cambiar predeterminada',
+                                  busy
+                                      ? 'Guardando...'
+                                      : 'Cambiar predeterminada',
                                 ),
                               ),
                               OutlinedButton.icon(
@@ -772,6 +879,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             title: _prettyNameFromSource(source),
             subtitle: _emotionDifficultyLabel(source),
             defaultSource: source,
+            expectedEmotion: _emotionFromSource(source),
+            expectedDescription: _prettyEmotionName(_emotionFromSource(source)),
           ),
         )
         .toList();
@@ -783,6 +892,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             title: _prettyNameFromSource(source),
             subtitle: 'Se usa como imagen predeterminada en Conecta sonidos.',
             defaultSource: source,
+            expectedConcepts: _expectedConceptsFromSource(source),
+            expectedDescription: _prettyNameFromSource(source),
           ),
         )
         .toList();
@@ -810,7 +921,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Aquí defines recursos editables para juegos. Esta base no reemplaza aún la lógica actual en runtime.',
+                      'Aquí defines recursos editables para juegos. Las nuevas imagenes pasan por validaciones de formato, recorte y revision de contenido antes de subirse.',
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1136,6 +1247,9 @@ class _GlobalDefaultImageItem {
     required this.title,
     required this.subtitle,
     required this.defaultSource,
+    this.expectedConcepts = const <String>[],
+    this.expectedEmotion = '',
+    this.expectedDescription = '',
   });
 
   final String gameKey;
@@ -1143,4 +1257,7 @@ class _GlobalDefaultImageItem {
   final String title;
   final String subtitle;
   final String defaultSource;
+  final List<String> expectedConcepts;
+  final String expectedEmotion;
+  final String expectedDescription;
 }

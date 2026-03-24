@@ -5,6 +5,7 @@ import '../controllers/app_controller.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'cartas_gemelas_game.dart';
+import 'donde_va_screen.dart';
 import 'game_placeholder_screen1.dart';
 import 'puzzle_screen.dart';
 
@@ -61,6 +62,19 @@ class MinigamesScreen extends StatelessWidget {
           builder: (_) => PuzzleScreen(
             controller: controller,
             stars: stars,
+          ),
+        ),
+      );
+      controller.setChildGameActive(false);
+      return;
+    }
+
+    if (gameKey == 'donde_va') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DondeVaScreen(
+            controller: controller,
+            difficultyStars: stars,
           ),
         ),
       );

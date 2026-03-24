@@ -21,6 +21,7 @@ import '../core/data/planet_ladder.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/cooldown_service.dart';
+import '../services/image_ai_review_service.dart';
 import '../services/local_store.dart';
 
 class ActionResult {
@@ -42,7 +43,8 @@ class AppController extends ChangeNotifier {
   static const int maxChildProfileAge = 18;
   static const int maxCustomImageBytes = 5 * 1024 * 1024;
   static const int maxCustomImageKilobytes = maxCustomImageBytes ~/ 1024;
-  static const int maxCustomImageMegabytes = maxCustomImageBytes ~/ (1024 * 1024);
+  static const int maxCustomImageMegabytes =
+      maxCustomImageBytes ~/ (1024 * 1024);
   static const List<String> allowedCustomImageExtensions = <String>[
     'jpg',
     'jpeg',
@@ -166,7 +168,8 @@ class AppController extends ChangeNotifier {
     if (fromAdmin.isEmpty) {
       return defaultPuzzleImageSources
           .map(
-            (source) => customGameImageSourceFor(
+            (source) =>
+                customGameImageSourceFor(
                   gameKey: 'puzzle',
                   itemId: customContentItemId(source: source),
                   defaultSource: source,
@@ -179,7 +182,8 @@ class AppController extends ChangeNotifier {
       ...fromAdmin,
       ...defaultPuzzleImageSources
           .map(
-            (source) => customGameImageSourceFor(
+            (source) =>
+                customGameImageSourceFor(
                   gameKey: 'puzzle',
                   itemId: customContentItemId(source: source),
                   defaultSource: source,
@@ -270,7 +274,7 @@ class AppController extends ChangeNotifier {
   bool get shouldExitChildAfterTimeLimit =>
       _childLimitExitPending && _childLimitDialogShown;
   String get childTimeLimitMessage =>
-      'Tu tiempo de juego ha terminado. Pídele ayuda a un adulto para volver a jugar.';
+      'Tu tiempo de juego ha terminado. PÃ­dele ayuda a un adulto para volver a jugar.';
   String? consumePendingHomeLevelUpPlanetName() {
     final value = _pendingHomeLevelUpPlanetName;
     _pendingHomeLevelUpPlanetName = null;
@@ -344,6 +348,7 @@ class AppController extends ChangeNotifier {
     }
     return user.parentalControl;
   }
+
   String get selectedNarratorId {
     final childValue = childProfile?.selectedNarratorId.trim() ?? '';
     if (childValue.isNotEmpty) return childValue;
@@ -521,7 +526,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El acceso directo de niño ya no está disponible. Entra con la cuenta del cuidador y luego elige el perfil del niño.',
+          'El acceso directo de niÃ±o ya no estÃ¡ disponible. Entra con la cuenta del cuidador y luego elige el perfil del niÃ±o.',
     );
   }
 
@@ -531,7 +536,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'Sin internet. Para entrar con Google, revisa tu conexión e intenta de nuevo.',
+            'Sin internet. Para entrar con Google, revisa tu conexiÃ³n e intenta de nuevo.',
       );
     }
     final result = await _authService.loginWithGoogle();
@@ -646,30 +651,29 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> enterChildPortal(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'El admin no usa portal de niño.',
+        message: 'El admin no usa portal de niÃ±o.',
       );
     }
     final targetId = childId.trim();
     if (targetId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona un perfil de niño.',
+        message: 'Selecciona un perfil de niÃ±o.',
       );
     }
     final exists = childProfiles.any((item) => item.id == targetId);
     if (!exists) {
       return const ActionResult(
         ok: false,
-        message: 'Ese perfil de niño no existe.',
+        message: 'Ese perfil de niÃ±o no existe.',
       );
     }
-    final targetChild =
-        childProfiles.firstWhere((item) => item.id == targetId);
+    final targetChild = childProfiles.firstWhere((item) => item.id == targetId);
     final targetControl = _parentalControlForChild(targetChild);
     if (targetControl.hasSchedule &&
         !_isWithinAllowedSchedule(targetControl, DateTime.now())) {
@@ -706,7 +710,7 @@ class AppController extends ChangeNotifier {
     _ensureActiveChildUsageDayIsToday();
     await _authService.persistPortalRole(PortalRole.child);
     notifyListeners();
-    return const ActionResult(ok: true, message: 'Portal niño listo.');
+    return const ActionResult(ok: true, message: 'Portal niÃ±o listo.');
   }
 
   Future<ActionResult> enterCaregiverPortal({
@@ -714,7 +718,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (isAdmin) {
       _activePortalRole = PortalRole.admin;
@@ -726,7 +730,7 @@ class AppController extends ChangeNotifier {
     if (typed.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe la contraseña del cuidador.',
+        message: 'Escribe la contraseÃ±a del cuidador.',
       );
     }
     final valid = await _authService.verifyCurrentUserPassword(typed);
@@ -745,19 +749,19 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> setCaregiverChildContext(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'El admin no usa perfiles de niño.',
+        message: 'El admin no usa perfiles de niÃ±o.',
       );
     }
     final targetId = childId.trim();
     if (targetId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona un perfil de niño.',
+        message: 'Selecciona un perfil de niÃ±o.',
       );
     }
     final list = childProfiles;
@@ -765,7 +769,7 @@ class AppController extends ChangeNotifier {
     if (!exists) {
       return const ActionResult(
         ok: false,
-        message: 'Ese perfil de niño no existe.',
+        message: 'Ese perfil de niÃ±o no existe.',
       );
     }
 
@@ -823,7 +827,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'Solo el admin puede modificar esta configuración.',
+        message: 'Solo el admin puede modificar esta configuraciÃ³n.',
       );
     }
     final result = await _authService.saveAppAdminConfig(config);
@@ -962,7 +966,7 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
-  /// Mantiene compatibilidad, pero el cambio en-app está deshabilitado.
+  /// Mantiene compatibilidad, pero el cambio en-app estÃ¡ deshabilitado.
   Future<ActionResult> changePasswordImproved({
     String currentPassword = '',
     required String newPassword,
@@ -971,7 +975,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseña en la app está deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseÃ±a en la app estÃ¡ deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1019,7 +1023,7 @@ class AppController extends ChangeNotifier {
         !_authService.isValidEmailFormat(normalized)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo válido.',
+        message: 'Escribe un correo vÃ¡lido.',
       );
     }
 
@@ -1050,13 +1054,13 @@ class AppController extends ChangeNotifier {
     if (!_authService.isValidEmailFormat(normalizedEmail)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo válido para reenviar verificación.',
+        message: 'Escribe un correo vÃ¡lido para reenviar verificaciÃ³n.',
       );
     }
     if (password.trim().isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe la contraseña para reenviar verificación.',
+        message: 'Escribe la contraseÃ±a para reenviar verificaciÃ³n.',
       );
     }
 
@@ -1081,7 +1085,7 @@ class AppController extends ChangeNotifier {
     _cooldownService.start(key, const Duration(minutes: 1));
     return const ActionResult(
       ok: true,
-      message: 'Reenvío solicitado. Revisa tu correo.',
+      message: 'ReenvÃ­o solicitado. Revisa tu correo.',
       remainingSeconds: 60,
     );
   }
@@ -1089,7 +1093,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestProfilePasswordReset() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final key = 'profile_reset_${user.id}';
     final remaining = _cooldownService.remainingSeconds(key);
@@ -1116,7 +1120,7 @@ class AppController extends ChangeNotifier {
   }) async {
     return const ActionResult(
       ok: false,
-      message: 'El cambio de correo desde la app está deshabilitado.',
+      message: 'El cambio de correo desde la app estÃ¡ deshabilitado.',
     );
   }
 
@@ -1128,7 +1132,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseña en la app está deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contraseÃ±a en la app estÃ¡ deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1138,7 +1142,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (_firebaseEnabled) {
       await refreshOnlineStatus();
@@ -1183,7 +1187,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> activateParentalPin(String pin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result = await _authService.setParentalPin(pin: pin);
     if (result.ok && result.data != null) {
@@ -1199,7 +1203,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result = await _authService.changeParentalPin(
       currentPin: currentPin,
@@ -1215,7 +1219,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deactivateParentalPin(String currentPin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result =
         await _authService.disableParentalPin(currentPin: currentPin);
@@ -1229,7 +1233,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestParentalPinRecoveryEmail() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result = await _authService.sendParentalPinRecoveryEmail();
     return ActionResult(ok: result.ok, message: result.message);
@@ -1241,7 +1245,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result = await _authService.recoverParentalPinWithPassword(
       accountPassword: accountPassword,
@@ -1259,7 +1263,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final result = await _authService.recoverParentalPinWithGoogle(
       newPin: newPin,
@@ -1288,7 +1292,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
 
     final result = await _authService.updateProfile(
@@ -1333,9 +1337,8 @@ class AppController extends ChangeNotifier {
       }
 
       next = _syncLegacyProgressFromChildren(next);
-      final currentProgressStars = (!isAdmin && childProfile != null)
-          ? nextStars
-          : next.stars;
+      final currentProgressStars =
+          (!isAdmin && childProfile != null) ? nextStars : next.stars;
       final previousPlanet = planetForStars(previousStars);
       final nextPlanet = planetForStars(currentProgressStars);
       final previousIndex = planetLadder.indexOf(previousPlanet);
@@ -1537,7 +1540,8 @@ class AppController extends ChangeNotifier {
       return '';
     }
     final extension = _fileExtension(normalized) ?? 'jpg';
-    final encoded = base64Url.encode(utf8.encode(normalized)).replaceAll('=', '');
+    final encoded =
+        base64Url.encode(utf8.encode(normalized)).replaceAll('=', '');
     return '$_localImageCacheDirPath/$encoded.$extension';
   }
 
@@ -1642,10 +1646,12 @@ class AppController extends ChangeNotifier {
       }
     }
 
-    for (final entry in _gameContentConfig.globalEmotionImageStoragePaths.entries) {
+    for (final entry
+        in _gameContentConfig.globalEmotionImageStoragePaths.entries) {
       final storagePath = entry.value.trim();
       final sourceUrl =
-          _gameContentConfig.globalEmotionImageOverrides[entry.key]?.trim() ?? '';
+          _gameContentConfig.globalEmotionImageOverrides[entry.key]?.trim() ??
+              '';
       if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
       unawaited(
         _cacheRemoteImageLocallyBestEffort(
@@ -1655,7 +1661,8 @@ class AppController extends ChangeNotifier {
       );
     }
 
-    for (final entry in _gameContentConfig.globalSoundImageStoragePaths.entries) {
+    for (final entry
+        in _gameContentConfig.globalSoundImageStoragePaths.entries) {
       final storagePath = entry.value.trim();
       final sourceUrl =
           _gameContentConfig.globalSoundImageOverrides[entry.key]?.trim() ?? '';
@@ -1725,8 +1732,7 @@ class AppController extends ChangeNotifier {
     return switch (gameKey.trim().toLowerCase()) {
       'emociones' =>
         _gameContentConfig.globalEmotionImageStoragePaths[key]?.trim(),
-      'sonidos' =>
-        _gameContentConfig.globalSoundImageStoragePaths[key]?.trim(),
+      'sonidos' => _gameContentConfig.globalSoundImageStoragePaths[key]?.trim(),
       _ => null,
     };
   }
@@ -1821,36 +1827,41 @@ class AppController extends ChangeNotifier {
     required String itemId,
     required String filePath,
     String childId = '',
+    List<String> expectedConcepts = const <String>[],
+    String expectedEmotion = '',
+    String expectedDescription = '',
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (!_firebaseEnabled) {
       return const ActionResult(
         ok: false,
-        message: 'Esta función requiere sincronización con Firebase.',
+        message: 'Esta funciÃ³n requiere sincronizaciÃ³n con Firebase.',
       );
     }
-    if (!_isOnline) {
+    if (!_authService.hasActiveFirebaseSession) {
       return const ActionResult(
         ok: false,
-        message: 'Necesitas internet para sincronizar la imagen.',
+        message:
+            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de sincronizar imagenes.',
       );
     }
+    await refreshOnlineStatus();
 
     final normalizedPath = filePath.trim();
     if (normalizedPath.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'No se encontró la imagen seleccionada.',
+        message: 'No se encontrÃ³ la imagen seleccionada.',
       );
     }
     final file = File(normalizedPath);
     if (!file.existsSync()) {
       return const ActionResult(
         ok: false,
-        message: 'La imagen seleccionada ya no está disponible.',
+        message: 'La imagen seleccionada ya no estÃ¡ disponible.',
       );
     }
 
@@ -1868,8 +1879,22 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'La imagen supera el tamaño máximo permitido de $maxCustomImageMegabytes MB.',
+            'La imagen supera el tamaÃ±o mÃ¡ximo permitido de $maxCustomImageMegabytes MB.',
       );
+    }
+
+    final review = await ImageAiReviewService.reviewImage(
+      filePath: normalizedPath,
+      context: ImageAiReviewContext(
+        gameKey: gameKey,
+        itemId: itemId,
+        expectedConcepts: expectedConcepts,
+        expectedEmotion: expectedEmotion,
+        expectedDescription: expectedDescription,
+      ),
+    );
+    if (!review.ok) {
+      return ActionResult(ok: false, message: review.message);
     }
 
     final targetChildId =
@@ -1877,7 +1902,7 @@ class AppController extends ChangeNotifier {
     if (targetChildId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona primero un perfil de niño.',
+        message: 'Selecciona primero un perfil de niÃ±o.',
       );
     }
 
@@ -1913,7 +1938,7 @@ class AppController extends ChangeNotifier {
       customImages: nextImages,
       customImageStoragePaths: nextStorage,
     );
-    final saved = await _authService.updateUser(next);
+    final saved = await _authService.updateUserEnsuringCloud(next);
     if (!saved.ok || saved.data == null) {
       await _authService.deleteCustomImageFileBestEffort(
         uploaded.data!.storagePath,
@@ -1951,11 +1976,15 @@ class AppController extends ChangeNotifier {
     required String gameKey,
     required String itemId,
     required String filePath,
+    List<String> expectedConcepts = const <String>[],
+    String expectedEmotion = '',
+    String expectedDescription = '',
   }) async {
     if (!isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'Solo el administrador puede cambiar imagenes predeterminadas.',
+        message:
+            'Solo el administrador puede cambiar imagenes predeterminadas.',
       );
     }
     if (!_firebaseEnabled) {
@@ -1964,12 +1993,14 @@ class AppController extends ChangeNotifier {
         message: 'Esta funcion requiere sincronizacion con Firebase.',
       );
     }
-    if (!_isOnline) {
+    if (!_authService.hasActiveFirebaseSession) {
       return const ActionResult(
         ok: false,
-        message: 'Necesitas internet para sincronizar la imagen global.',
+        message:
+            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de sincronizar imagenes globales.',
       );
     }
+    await refreshOnlineStatus();
     final normalizedPath = filePath.trim();
     if (normalizedPath.isEmpty) {
       return const ActionResult(
@@ -1999,6 +2030,19 @@ class AppController extends ChangeNotifier {
         message:
             'La imagen supera el tamano maximo permitido de $maxCustomImageMegabytes MB.',
       );
+    }
+    final review = await ImageAiReviewService.reviewImage(
+      filePath: normalizedPath,
+      context: ImageAiReviewContext(
+        gameKey: gameKey,
+        itemId: itemId,
+        expectedConcepts: expectedConcepts,
+        expectedEmotion: expectedEmotion,
+        expectedDescription: expectedDescription,
+      ),
+    );
+    if (!review.ok) {
+      return ActionResult(ok: false, message: review.message);
     }
     final previousStoragePath = _globalGameImageStoragePathFor(
       gameKey: gameKey,
@@ -2070,6 +2114,7 @@ class AppController extends ChangeNotifier {
       message: 'Imagen predeterminada actualizada correctamente.',
     );
   }
+
   Future<ActionResult> restoreCustomGameImage({
     required String gameKey,
     required String itemId,
@@ -2077,7 +2122,14 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+    }
+    if (_firebaseEnabled && !_authService.hasActiveFirebaseSession) {
+      return const ActionResult(
+        ok: false,
+        message:
+            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de restaurar imagenes.',
+      );
     }
 
     final targetChildId =
@@ -2105,7 +2157,7 @@ class AppController extends ChangeNotifier {
       customImages: nextImages,
       customImageStoragePaths: nextStorage,
     );
-    final saved = await _authService.updateUser(next);
+    final saved = await _authService.updateUserEnsuringCloud(next);
     if (!saved.ok || saved.data == null) {
       return ActionResult(ok: false, message: saved.message);
     }
@@ -2124,7 +2176,7 @@ class AppController extends ChangeNotifier {
 
     return const ActionResult(
       ok: true,
-      message: 'Se restauró la imagen original.',
+      message: 'Se restaurÃ³ la imagen original.',
     );
   }
 
@@ -2147,8 +2199,8 @@ class AppController extends ChangeNotifier {
     late final GameContentConfig nextConfig;
     switch (gameKey.trim().toLowerCase()) {
       case 'emociones':
-        final hasOverride =
-            _gameContentConfig.globalEmotionImageOverrides.containsKey(key) ||
+        final hasOverride = _gameContentConfig.globalEmotionImageOverrides
+                .containsKey(key) ||
             _gameContentConfig.globalEmotionImageStoragePaths.containsKey(key);
         if (!hasOverride && previousStoragePath == null) {
           return const ActionResult(
@@ -2168,8 +2220,8 @@ class AppController extends ChangeNotifier {
         );
         break;
       case 'sonidos':
-        final hasOverride =
-            _gameContentConfig.globalSoundImageOverrides.containsKey(key) ||
+        final hasOverride = _gameContentConfig.globalSoundImageOverrides
+                .containsKey(key) ||
             _gameContentConfig.globalSoundImageStoragePaths.containsKey(key);
         if (!hasOverride && previousStoragePath == null) {
           return const ActionResult(
@@ -2211,6 +2263,7 @@ class AppController extends ChangeNotifier {
       message: 'Imagen predeterminada restaurada.',
     );
   }
+
   Future<void> updateCustomImage({
     required String key,
     required String imagePath,
@@ -2249,7 +2302,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -2283,18 +2336,18 @@ class AppController extends ChangeNotifier {
     final effectiveBirthDateMillis = birthDateMillis > 0
         ? birthDateMillis
         : (editingExisting
-              ? existingProfiles
-                    .firstWhere((item) => item.id == childId.trim())
-                    .birthDateMillis
-              : 0);
+            ? existingProfiles
+                .firstWhere((item) => item.id == childId.trim())
+                .birthDateMillis
+            : 0);
     final resolvedAge = effectiveBirthDateMillis > 0
         ? _computeChildAgeFromBirthDateMillis(effectiveBirthDateMillis)
         : age;
-    if (resolvedAge < minChildProfileAge ||
-        resolvedAge > maxChildProfileAge) {
+    if (resolvedAge < minChildProfileAge || resolvedAge > maxChildProfileAge) {
       return const ActionResult(
         ok: false,
-        message: 'La edad permitida para perfiles de ni\u00f1o es de 10 a 18 a\u00f1os.',
+        message:
+            'La edad permitida para perfiles de ni\u00f1o es de 10 a 18 a\u00f1os.',
       );
     }
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -2470,7 +2523,7 @@ class AppController extends ChangeNotifier {
       ParentalControl nextControl) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     final normalized = nextControl.copyWith(
       dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
@@ -2634,13 +2687,13 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReports() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
         message:
-            'El perfil demo solo está disponible para cuentas de cuidador.',
+            'El perfil demo solo estÃ¡ disponible para cuentas de cuidador.',
       );
     }
 
@@ -2675,7 +2728,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReportsForAllUsers() async {
     final current = _currentUser;
     if (current == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (!isAdmin) {
       return const ActionResult(
@@ -2795,11 +2848,11 @@ class AppController extends ChangeNotifier {
   ActionResult canLaunchGame(String gameKey) {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesión activa.');
+      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
     }
     if (!isAdmin && _appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
-          ? 'La app está en mantenimiento. Intenta más tarde.'
+          ? 'La app estÃ¡ en mantenimiento. Intenta mÃ¡s tarde.'
           : _appAdminConfig.maintenanceMessage;
       return ActionResult(ok: false, message: message);
     }
@@ -2817,8 +2870,9 @@ class AppController extends ChangeNotifier {
       }
       activeChild ??= childProfile;
     }
-    final control =
-        activeChild == null ? parentalControl : _parentalControlForChild(activeChild);
+    final control = activeChild == null
+        ? parentalControl
+        : _parentalControlForChild(activeChild);
     if (_activePortalRole == PortalRole.child) {
       _ensureActiveChildUsageDayIsToday();
     }
@@ -2829,7 +2883,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin && globallyBlocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego está deshabilitado por administración.',
+        message: 'Este juego estÃ¡ deshabilitado por administraciÃ³n.',
       );
     }
     final blocked = control.blockedGameKeys.any(
@@ -2838,7 +2892,7 @@ class AppController extends ChangeNotifier {
     if (blocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego está bloqueado por control parental.',
+        message: 'Este juego estÃ¡ bloqueado por control parental.',
       );
     }
 
@@ -2966,10 +3020,11 @@ class AppController extends ChangeNotifier {
     if (user == null) return;
     final activeChild = !isAdmin ? childProfile : null;
     final scopedChildId = activeChild?.id.trim() ?? '';
-    final unlocked = (activeChild?.unlockedAchievementIds ?? user.unlockedAchievementIds)
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toSet();
+    final unlocked =
+        (activeChild?.unlockedAchievementIds ?? user.unlockedAchievementIds)
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toSet();
     final sessions = scopedChildId.isEmpty
         ? user.gameSessions
         : _sessionsForScope(childId: scopedChildId);
@@ -3293,10 +3348,8 @@ class AppController extends ChangeNotifier {
   }
 
   List<String> _orderedAchievementIds(Iterable<String> ids) {
-    final normalized = ids
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toSet();
+    final normalized =
+        ids.map((item) => item.trim()).where((item) => item.isNotEmpty).toSet();
     return achievementCatalog
         .map((item) => item.id)
         .where((id) => normalized.contains(id))
@@ -3423,8 +3476,4 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
-
-
-
-
 

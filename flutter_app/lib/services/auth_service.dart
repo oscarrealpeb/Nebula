@@ -101,6 +101,9 @@ class AuthService {
   bool get _useFirebase => _firebaseAuth != null && _firestore != null;
   bool get _useStorage => _useFirebase && _storage != null;
   PortalRole get activePortalRole => _activePortalRole;
+  bool get hasActiveFirebaseSession =>
+      !_useFirebase || _firebaseAuth?.currentUser != null;
+  String get currentFirebaseUid => _firebaseAuth?.currentUser?.uid ?? '';
 
   bool get isCurrentUserGoogleProvider {
     if (!_useFirebase) return false;
@@ -1429,6 +1432,58 @@ class AuthService {
     );
   }
 
+  Future<ServiceResult<NebulaUser>> updateUserEnsuringCloud(
+    NebulaUser nextUser,
+  ) async {
+    final previousUser = _currentUser;
+    final previousRole = _activePortalRole;
+
+    await _writeLocalOnlyUser(nextUser);
+    await _persistSessionState(nextUser, requestedRole: _activePortalRole);
+    _currentUser = nextUser;
+
+    if (_useFirebase) {
+      try {
+        await _writeCloudUser(nextUser);
+      } on FirebaseException catch (e) {
+        if (previousUser != null) {
+          await _writeLocalOnlyUser(previousUser);
+          await _persistSessionState(
+            previousUser,
+            requestedRole: previousRole,
+          );
+          _currentUser = previousUser;
+        }
+        return ServiceResult(
+          ok: false,
+          message:
+              'No pudimos sincronizar la imagen en Firestore: ${e.message ?? e.code}',
+          data: previousUser,
+        );
+      } catch (e) {
+        if (previousUser != null) {
+          await _writeLocalOnlyUser(previousUser);
+          await _persistSessionState(
+            previousUser,
+            requestedRole: previousRole,
+          );
+          _currentUser = previousUser;
+        }
+        return ServiceResult(
+          ok: false,
+          message: 'No pudimos sincronizar la imagen en Firestore: $e',
+          data: previousUser,
+        );
+      }
+    }
+
+    return ServiceResult(
+      ok: true,
+      message: 'Datos actualizados.',
+      data: nextUser,
+    );
+  }
+
   Future<ServiceResult<CustomImageUploadResult>> uploadCustomImageFile({
     required NebulaUser user,
     required String childId,
@@ -1473,8 +1528,11 @@ class AuthService {
         : _sanitizeStorageSegment(childId);
     final gameSegment = _sanitizeStorageSegment(gameKey);
     final itemSegment = _sanitizeStorageSegment(itemId);
+    final ownerUid = currentFirebaseUid.trim().isNotEmpty
+        ? currentFirebaseUid.trim()
+        : user.id.trim();
     final storagePath =
-        'users/${user.id}/children/$childSegment/games/$gameSegment/$itemSegment.$extension';
+        'users/$ownerUid/children/$childSegment/games/$gameSegment/$itemSegment.$extension';
 
     try {
       final ref = _storage!.ref().child(storagePath);
@@ -4071,13 +4129,17 @@ class AuthService {
   }
 
   Future<void> _upsertLocal(NebulaUser user) async {
+    await _writeLocalOnlyUser(user);
+    unawaited(_syncCloudUserBestEffort(user));
+  }
+
+  Future<void> _writeLocalOnlyUser(NebulaUser user) async {
     final users = await _store.readUsers();
     final updated = users.map((u) => u.id == user.id ? user : u).toList();
     if (!users.any((u) => u.id == user.id)) {
       updated.add(user);
     }
     await _store.writeUsers(updated);
-    unawaited(_syncCloudUserBestEffort(user));
   }
 
   Future<void> syncCurrentUserToCloudBestEffort() async {
