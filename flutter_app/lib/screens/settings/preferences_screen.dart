@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/app_controller.dart';
+import '../../services/narration_service.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_snack.dart';
 
@@ -26,10 +27,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   Timer? _themeSyncTimer;
 
   final _narrators = const [
-    ('narrator_1', 'Leo'),
-    ('narrator_2', 'Mateo'),
-    ('narrator_3', 'Valeria'),
-    ('narrator_4', 'Sofia'),
+    ('narrator_1', 'Carlos'),
+    ('narrator_2', 'Sofía'),
   ];
 
   
@@ -42,11 +41,23 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void initState() {
     super.initState();
     _narratorId = widget.controller.selectedNarratorId;
+    if (!_narrators.any((item) => item.$1 == _narratorId)) {
+      _narratorId = _narrators.first.$1;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.controller.setNarrator(_narratorId);
+      });
+    }
     _soundEnabled = widget.controller.soundEffectsEnabled;
     _hue = widget.controller.currentAccentHue;
     _intensity = widget.controller.currentAccentIntensity
         .clamp(_minIntensity, _maxIntensity)
         .toDouble();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'preferences',
+      );
+    });
   }
 
   @override
@@ -139,6 +150,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                           onTap: () {
                             setState(() => _narratorId = option.$1);
                             widget.controller.setNarrator(option.$1);
+                            NarrationService.instance.playForNarrator(
+                              narratorId: option.$1,
+                              key: 'presentacion',
+                              enabled: _soundEnabled,
+                            );
                           },
                           borderRadius: BorderRadius.circular(14),
                           child: Ink(
@@ -163,11 +179,10 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                                 Text(option.$2),
                                 IconButton(
                                   onPressed: () {
-                                    NebulaSnack.show(
-                                      context,
-                                      message:
-                                          'Hola, soy ${option.$2}. Vamos a jugar y aprender juntos.',
-                                      ok: true,
+                                    NarrationService.instance.playForNarrator(
+                                      narratorId: option.$1,
+                                      key: 'presentacion',
+                                      enabled: _soundEnabled,
                                     );
                                   },
                                   icon: const Icon(Icons.play_arrow_rounded),

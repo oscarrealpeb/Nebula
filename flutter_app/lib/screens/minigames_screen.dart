@@ -36,10 +36,12 @@ class MinigamesScreen extends StatelessWidget {
     if (!context.mounted) return;
     final stars = await showStarDifficultySheet(
       context,
+      controller: controller,
       maxEnabledStars: 3,
     );
     if (!context.mounted || stars == null) return;
 
+    controller.setChildGameActive(true);
     if (gameKey == 'cartas_gemelas') {
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -49,6 +51,7 @@ class MinigamesScreen extends StatelessWidget {
           ),
         ),
       );
+      controller.setChildGameActive(false);
       return;
     }
 
@@ -61,10 +64,11 @@ class MinigamesScreen extends StatelessWidget {
           ),
         ),
       );
+      controller.setChildGameActive(false);
       return;
     }
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GamePlaceholderScreen(
           controller: controller,
@@ -74,6 +78,7 @@ class MinigamesScreen extends StatelessWidget {
         ),
       ),
     );
+    controller.setChildGameActive(false);
   }
 
   @override

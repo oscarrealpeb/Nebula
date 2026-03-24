@@ -1,16 +1,17 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-
+import 'explore_learn_screen.dart';
 import '../controllers/app_controller.dart';
 import '../core/data/avatar_catalog.dart';
 import '../core/data/planet_ladder.dart';
+import '../services/narration_service.dart';
 import '../widgets/nebula_snack.dart';
 import '../widgets/star_difficulty_sheet.dart';
 import 'child_profile_setup_screen.dart';
 import 'connect_screen.dart';
 import 'dilo_screen.dart';
 import 'emotion_screen.dart';
-import 'explore_learn_screen.dart';
+
 import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _levelUpDialogVisible = false;
   bool _achievementDialogCheckQueued = false;
   bool _achievementDialogVisible = false;
+  bool _timeLimitExitCheckQueued = false;
   static const double _levelUpDialogHeight = 520; // editable
   static const double _levelUpDialogMaxWidth = 360; // editable
 
@@ -119,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final stars = await showStarDifficultySheet(
       context,
+      controller: widget.controller,
       maxEnabledStars: maxEnabledStars,
     );
     if (!context.mounted || stars == null) return;
@@ -162,9 +165,12 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
     }
 
+    widget.controller.setChildGameActive(true);
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => screen),
     );
+    widget.controller.setChildGameActive(false);
+    _scheduleTimeLimitExitCheck();
   }
 
   Future<void> _backToPortalSelector() async {
@@ -302,6 +308,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final unlocked = widget.controller.consumePendingAchievementUnlocks();
       if (unlocked.isEmpty) return;
       _achievementDialogVisible = true;
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'logro',
+      );
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -393,12 +403,34 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _scheduleTimeLimitExitCheck() {
+    if (!mounted || _timeLimitExitCheckQueued) return;
+    _timeLimitExitCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _timeLimitExitCheckQueued = false;
+      if (!mounted) return;
+      if (!widget.controller.shouldExitChildAfterTimeLimit) return;
+      widget.controller.exitChildPortalDueToLimit();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => PortalEntryScreen(
+            controller: widget.controller,
+            flashMessage: widget.controller.childTimeLimitMessage,
+            flashOk: false,
+          ),
+        ),
+        (_) => false,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.currentUser;
     if (user == null) return const SizedBox.shrink();
     _schedulePendingLevelUpDialogCheck();
     _schedulePendingAchievementDialogCheck();
+    _scheduleTimeLimitExitCheck();
 
     final descubreLabel = widget.controller.gameLabelForKey('descubre_emocion');
     final conectaLabel = widget.controller.gameLabelForKey('conecta_sonidos');
@@ -572,23 +604,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 _GameCard(
-                  title: exploraLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/explora_aprende1.png',
-                  accentColor: color,
-                  onTap: () async {
-                    final allowed = await _guardGameAccess(
-                      context,
-                      gameKey: 'explora_aprende',
-                    );
-                    if (!context.mounted || !allowed) return;
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ExploreLearnScreen(controller: widget.controller),
-                      ),
-                    );
-                  },
-                ),
+  title: exploraLabel.toUpperCase(),
+  imagePath: 'assets/images/games/explora_aprende1.png',
+  accentColor: color,
+  onTap: () async {
+    final allowed = await _guardGameAccess(
+      context,
+      gameKey: 'explora_aprende',
+    );
+    if (!context.mounted || !allowed) return;
+    
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        // CORRECCIÓN: La 'E' de Explore debe ser mayúscula
+        builder: (_) => ExploreLearnScreen(controller: widget.controller),
+      ),
+    );
+  },
+),
               ],
             ),
             const SizedBox(height: 12),

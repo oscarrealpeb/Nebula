@@ -48,6 +48,7 @@ class AppController extends ChangeNotifier {
     'jpeg',
     'png',
   ];
+  static const int _dailyUsagePersistThresholdSeconds = 10;
 
   AppController._(
     this._authService,
@@ -76,6 +77,12 @@ class AppController extends ChangeNotifier {
   Future<void> _starUpdateQueue = Future<void>.value();
   String? _pendingHomeLevelUpPlanetName;
   final List<String> _pendingAchievementUnlockIds = <String>[];
+  DateTime? _childSessionStartedAt;
+  int _childSessionBufferedSeconds = 0;
+  bool _childLimitReached = false;
+  bool _childLimitDialogShown = false;
+  bool _childLimitExitPending = false;
+  bool _childGameActive = false;
 
   static Future<AppController> bootstrap({
     bool firebaseEnabled = false,
@@ -255,6 +262,15 @@ class AppController extends ChangeNotifier {
       _currentUser != null &&
       childProfiles.isNotEmpty &&
       _needsPortalSelection;
+  bool get isChildGameActive => _childGameActive;
+  bool get shouldShowChildTimeLimitDialog =>
+      _childLimitReached &&
+      !_childLimitDialogShown &&
+      _activePortalRole == PortalRole.child;
+  bool get shouldExitChildAfterTimeLimit =>
+      _childLimitExitPending && _childLimitDialogShown;
+  String get childTimeLimitMessage =>
+      'Tu tiempo de juego ha terminado. Pídele ayuda a un adulto para volver a jugar.';
   String? consumePendingHomeLevelUpPlanetName() {
     final value = _pendingHomeLevelUpPlanetName;
     _pendingHomeLevelUpPlanetName = null;
@@ -312,8 +328,22 @@ class AppController extends ChangeNotifier {
     return 3;
   }
 
-  ParentalControl get parentalControl =>
-      _currentUser?.parentalControl ?? const ParentalControl();
+  ParentalControl get parentalControl {
+    final user = _currentUser;
+    if (user == null) return const ParentalControl();
+    if (isAdmin) return user.parentalControl;
+    final activeChild = childProfile;
+    if (activeChild != null) {
+      final childControl = activeChild.parentalControl;
+      final legacyControl = user.parentalControl;
+      if (_isEmptyParentalControl(childControl) &&
+          !_isEmptyParentalControl(legacyControl)) {
+        return legacyControl;
+      }
+      return childControl;
+    }
+    return user.parentalControl;
+  }
   String get selectedNarratorId {
     final childValue = childProfile?.selectedNarratorId.trim() ?? '';
     if (childValue.isNotEmpty) return childValue;
@@ -638,12 +668,33 @@ class AppController extends ChangeNotifier {
         message: 'Ese perfil de niño no existe.',
       );
     }
+    final targetChild =
+        childProfiles.firstWhere((item) => item.id == targetId);
+    final targetControl = _parentalControlForChild(targetChild);
+    if (targetControl.hasSchedule &&
+        !_isWithinAllowedSchedule(targetControl, DateTime.now())) {
+      final start = targetControl.allowedStartHour;
+      final end = targetControl.allowedEndHour;
+      return ActionResult(
+        ok: false,
+        message:
+            'Fuera del horario permitido ($start:00 - $end:00). Pide ayuda a un adulto.',
+      );
+    }
+    if (_isChildTimeLimitReachedForChild(targetId)) {
+      return ActionResult(ok: false, message: childTimeLimitMessage);
+    }
     _activeChildProfileId = targetId;
     _activePortalRole = PortalRole.child;
     _needsPortalSelection = false;
+    _childLimitReached = false;
+    _childLimitDialogShown = false;
+    _childLimitExitPending = false;
+    _childGameActive = false;
+    _childSessionBufferedSeconds = 0;
+    _childSessionStartedAt = null;
 
-    final selectedChild =
-        childProfiles.firstWhere((item) => item.id == targetId);
+    final selectedChild = targetChild;
     final nextPrimary = user.copyWith(
       childProfile: selectedChild,
       childProfiles: childProfiles,
@@ -652,6 +703,7 @@ class AppController extends ChangeNotifier {
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
     }
+    _ensureActiveChildUsageDayIsToday();
     await _authService.persistPortalRole(PortalRole.child);
     notifyListeners();
     return const ActionResult(ok: true, message: 'Portal niño listo.');
@@ -681,6 +733,8 @@ class AppController extends ChangeNotifier {
     if (!valid.ok) {
       return ActionResult(ok: false, message: valid.message);
     }
+    _endChildSessionTracking();
+    _childGameActive = false;
     _activePortalRole = PortalRole.caregiver;
     _needsPortalSelection = false;
     await _authService.persistPortalRole(PortalRole.caregiver);
@@ -739,6 +793,8 @@ class AppController extends ChangeNotifier {
 
   void markPortalSelectionPending() {
     if (_currentUser == null || isAdmin || childProfiles.isEmpty) return;
+    _endChildSessionTracking();
+    _childGameActive = false;
     _needsPortalSelection = true;
     notifyListeners();
   }
@@ -941,6 +997,12 @@ class AppController extends ChangeNotifier {
 
   Future<void> logout() async {
     await _authService.logout();
+    _endChildSessionTracking();
+    _childSessionBufferedSeconds = 0;
+    _childLimitReached = false;
+    _childLimitDialogShown = false;
+    _childLimitExitPending = false;
+    _childGameActive = false;
     _currentUser = null;
     _activePortalRole = _authService.activePortalRole;
     _activeChildProfileId = '';
@@ -2412,16 +2474,32 @@ class AppController extends ChangeNotifier {
     }
     final normalized = nextControl.copyWith(
       dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
+      allowedStartHour: nextControl.allowedStartHour.clamp(-1, 23),
+      allowedEndHour: nextControl.allowedEndHour.clamp(-1, 23),
       blockedGameKeys: nextControl.blockedGameKeys
           .map((item) => item.trim())
           .where((item) => item.isNotEmpty)
           .toSet()
           .toList(),
     );
-    final next = user.copyWith(parentalControl: normalized);
+    final activeChild = !isAdmin ? childProfile : null;
+    final todayKey = _todayKey();
+    final next = activeChild == null
+        ? user.copyWith(parentalControl: normalized)
+        : _upsertChildProfile(
+            user,
+            activeChild.copyWith(
+              parentalControl: normalized,
+              dailyLimitUsageSeconds: 0,
+              dailyLimitUsageDayKey: todayKey,
+            ),
+          );
     final saved = await _authService.updateUser(next);
     if (saved.ok && saved.data != null) {
       _currentUser = saved.data;
+      _childLimitReached = false;
+      _childLimitDialogShown = false;
+      _childLimitExitPending = false;
       notifyListeners();
       return const ActionResult(
           ok: true, message: 'Control parental guardado.');
@@ -2726,7 +2804,24 @@ class AppController extends ChangeNotifier {
       return ActionResult(ok: false, message: message);
     }
 
-    final control = user.parentalControl;
+    ChildProfile? activeChild;
+    if (_activePortalRole == PortalRole.child) {
+      final activeId = _activeChildProfileId.trim();
+      if (activeId.isNotEmpty) {
+        for (final item in childProfiles) {
+          if (item.id == activeId) {
+            activeChild = item;
+            break;
+          }
+        }
+      }
+      activeChild ??= childProfile;
+    }
+    final control =
+        activeChild == null ? parentalControl : _parentalControlForChild(activeChild);
+    if (_activePortalRole == PortalRole.child) {
+      _ensureActiveChildUsageDayIsToday();
+    }
     final normalizedKey = gameKey.trim().toLowerCase();
     final globallyBlocked = _appAdminConfig.blockedGameKeys.any(
       (item) => item.trim().toLowerCase() == normalizedKey,
@@ -2748,13 +2843,10 @@ class AppController extends ChangeNotifier {
     }
 
     if (control.hasSchedule) {
-      final hour = DateTime.now().hour;
-      final start = control.allowedStartHour;
-      final end = control.allowedEndHour;
-      final allowed = start < end
-          ? (hour >= start && hour < end)
-          : (hour >= start || hour < end);
-      if (!allowed) {
+      final now = DateTime.now();
+      if (!_isWithinAllowedSchedule(control, now)) {
+        final start = control.allowedStartHour;
+        final end = control.allowedEndHour;
         return ActionResult(
           ok: false,
           message:
@@ -2764,7 +2856,7 @@ class AppController extends ChangeNotifier {
     }
 
     if (control.dailyLimitMinutes > 0) {
-      final used = usedMinutesOn(DateTime.now());
+      final used = _estimatedUsedMinutesToday();
       if (used >= control.dailyLimitMinutes) {
         return ActionResult(
           ok: false,
@@ -2981,6 +3073,219 @@ class AppController extends ChangeNotifier {
     final rem = seconds % 60;
     final remText = rem.toString().padLeft(2, '0');
     return '$minutes:$remText';
+  }
+
+  int _todayKey([DateTime? when]) {
+    final now = when ?? DateTime.now();
+    return (now.year * 10000) + (now.month * 100) + now.day;
+  }
+
+  ParentalControl _parentalControlForChild(ChildProfile child) {
+    final user = _currentUser;
+    if (user == null) return const ParentalControl();
+    final childControl = child.parentalControl;
+    final legacyControl = user.parentalControl;
+    if (_isEmptyParentalControl(childControl) &&
+        !_isEmptyParentalControl(legacyControl)) {
+      return legacyControl;
+    }
+    return childControl;
+  }
+
+  bool _isWithinAllowedSchedule(ParentalControl control, DateTime now) {
+    if (!control.hasSchedule) return true;
+    final start = control.allowedStartHour.clamp(0, 23);
+    final end = control.allowedEndHour.clamp(0, 23);
+    final currentMinutes = (now.hour * 60) + now.minute;
+    final startMinutes = start * 60;
+    final endMinutes = end * 60;
+    if (start < end) {
+      return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    }
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+
+  int _usageSecondsTodayForChild(ChildProfile child, int todayKey) {
+    if (child.dailyLimitUsageDayKey != todayKey) return 0;
+    return child.dailyLimitUsageSeconds.clamp(0, 24 * 3600);
+  }
+
+  void _ensureActiveChildUsageDayIsToday({bool notify = false}) {
+    final user = _currentUser;
+    final child = childProfile;
+    if (user == null || child == null) return;
+    final todayKey = _todayKey();
+    if (child.dailyLimitUsageDayKey == todayKey) return;
+    final updatedChild = child.copyWith(
+      dailyLimitUsageSeconds: 0,
+      dailyLimitUsageDayKey: todayKey,
+    );
+    final next = _upsertChildProfile(user, updatedChild);
+    _currentUser = next;
+    _childSessionBufferedSeconds = 0;
+    _childSessionStartedAt = _childGameActive ? DateTime.now() : null;
+    _childLimitReached = false;
+    _childLimitDialogShown = false;
+    _childLimitExitPending = false;
+    if (notify) {
+      notifyListeners();
+    }
+    unawaited(_authService.updateUser(next));
+  }
+
+  void _updateActiveChildUsage({
+    required ChildProfile child,
+    required int nextSeconds,
+    required int dayKey,
+    bool notify = false,
+  }) {
+    final user = _currentUser;
+    if (user == null) return;
+    final updatedChild = child.copyWith(
+      dailyLimitUsageSeconds: nextSeconds.clamp(0, 24 * 3600),
+      dailyLimitUsageDayKey: dayKey,
+    );
+    final next = _upsertChildProfile(user, updatedChild);
+    _currentUser = next;
+    if (notify) {
+      notifyListeners();
+    }
+    unawaited(_authService.updateUser(next));
+  }
+
+  void _flushBufferedChildUsage({bool notify = false}) {
+    if (_childSessionBufferedSeconds <= 0) return;
+    final child = childProfile;
+    if (child == null) {
+      _childSessionBufferedSeconds = 0;
+      return;
+    }
+    final todayKey = _todayKey();
+    final baseSeconds = _usageSecondsTodayForChild(child, todayKey);
+    final nextSeconds = baseSeconds + _childSessionBufferedSeconds;
+    _childSessionBufferedSeconds = 0;
+    _updateActiveChildUsage(
+      child: child,
+      nextSeconds: nextSeconds,
+      dayKey: todayKey,
+      notify: notify,
+    );
+  }
+
+  void _bufferChildSessionUsage({bool force = false}) {
+    if (_childSessionStartedAt == null) return;
+    final now = DateTime.now();
+    final elapsed = now.difference(_childSessionStartedAt!).inSeconds;
+    if (elapsed <= 0) return;
+    _childSessionBufferedSeconds += elapsed;
+    _childSessionStartedAt = now;
+    if (force ||
+        _childSessionBufferedSeconds >= _dailyUsagePersistThresholdSeconds) {
+      _flushBufferedChildUsage(notify: false);
+    }
+  }
+
+  void setChildGameActive(bool value) {
+    if (_childGameActive == value) return;
+    _childGameActive = value;
+    if (value) {
+      _startChildSessionTracking();
+    } else {
+      _endChildSessionTracking();
+      _checkChildLimitAfterSessionEnd();
+    }
+    notifyListeners();
+  }
+
+  void acknowledgeChildTimeLimitDialog() {
+    if (_childLimitDialogShown) return;
+    _childLimitDialogShown = true;
+    notifyListeners();
+  }
+
+  void evaluateChildTimeLimit() {
+    if (_activePortalRole != PortalRole.child) return;
+    _ensureActiveChildUsageDayIsToday();
+    if (!_childGameActive) return;
+    final limit = parentalControl.dailyLimitMinutes;
+    if (limit <= 0) return;
+    _bufferChildSessionUsage();
+    final used = _estimatedUsedMinutesToday();
+    if (used >= limit && !_childLimitReached) {
+      _childLimitReached = true;
+      _childLimitExitPending = true;
+      _bufferChildSessionUsage(force: true);
+      notifyListeners();
+    }
+  }
+
+  void _checkChildLimitAfterSessionEnd() {
+    if (_activePortalRole != PortalRole.child) return;
+    final limit = parentalControl.dailyLimitMinutes;
+    if (limit <= 0) return;
+    _ensureActiveChildUsageDayIsToday();
+    final used = _estimatedUsedMinutesToday();
+    if (used >= limit && !_childLimitReached) {
+      _childLimitReached = true;
+      _childLimitExitPending = true;
+    }
+  }
+
+  void exitChildPortalDueToLimit() {
+    _endChildSessionTracking();
+    _childLimitExitPending = false;
+    _childLimitDialogShown = true;
+    markPortalSelectionPending();
+  }
+
+  bool _isChildTimeLimitReachedForChild(String childId) {
+    final user = _currentUser;
+    if (user == null) return false;
+    ChildProfile? target;
+    for (final item in childProfiles) {
+      if (item.id == childId) {
+        target = item;
+        break;
+      }
+    }
+    if (target == null) return false;
+    final control = _parentalControlForChild(target);
+    final limit = control.dailyLimitMinutes;
+    if (limit <= 0) return false;
+    final todayKey = _todayKey();
+    final usedSeconds = _usageSecondsTodayForChild(target, todayKey);
+    return (usedSeconds ~/ 60) >= limit;
+  }
+
+  int _estimatedUsedMinutesToday() {
+    final child = childProfile;
+    if (child == null) return 0;
+    final todayKey = _todayKey();
+    final baseSeconds = _usageSecondsTodayForChild(child, todayKey);
+    final elapsed = _childSessionStartedAt == null
+        ? 0
+        : DateTime.now().difference(_childSessionStartedAt!).inSeconds;
+    final totalSeconds = baseSeconds + _childSessionBufferedSeconds + elapsed;
+    return totalSeconds ~/ 60;
+  }
+
+  void _startChildSessionTracking() {
+    _ensureActiveChildUsageDayIsToday();
+    _childSessionBufferedSeconds = 0;
+    _childSessionStartedAt = DateTime.now();
+  }
+
+  void _endChildSessionTracking() {
+    if (_childSessionStartedAt == null) return;
+    _bufferChildSessionUsage(force: true);
+    _childSessionStartedAt = null;
+  }
+
+  bool _isEmptyParentalControl(ParentalControl control) {
+    return control.dailyLimitMinutes <= 0 &&
+        control.allowedStartHour < 0 &&
+        control.allowedEndHour < 0 &&
+        control.blockedGameKeys.isEmpty;
   }
 
   bool _sameLocalDay(DateTime a, DateTime b) {

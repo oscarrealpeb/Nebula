@@ -7,56 +7,98 @@ environment:
   sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
-  lottie: ^2.7.0
   flutter:
     sdk: flutter
+
+  # UI / Animaciones
+  lottie: ^2.7.0
   cupertino_icons: ^1.0.8
+
+  # Storage / Utils
   shared_preferences: ^2.5.3
   uuid: ^4.5.1
+  path_provider: ^2.1.5
+  crypto: ^3.0.6
+
+  # Media
   image_picker: ^1.1.2
+  crop_your_image: ^2.0.0
+
+  # Firebase
   firebase_core: ^3.15.2
   firebase_auth: ^5.6.3
   cloud_firestore: ^5.6.12
   firebase_storage: ^12.4.10
   google_sign_in: ^6.3.0
+
+  # Conectividad
   internet_connection_checker_plus: ^2.7.2
-  crypto: ^3.0.6
+
+  # Audio / Voz 🔥
   audioplayers: ^5.2.1
   speech_to_text: ^7.3.0
   permission_handler: ^11.3.0
+
+  # PDF
   pdf: ^3.11.3
   printing: ^5.14.2
-  path_provider: ^2.1.5
-  crop_your_image: ^2.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.3
+
+  # Testing
   firebase_auth_platform_interface: ^7.7.3
   firebase_auth_mocks: ^0.14.2
   fake_cloud_firestore: ^3.1.0
   mocktail: ^1.0.4
 
+  # Iconos
+  flutter_launcher_icons: ^0.14.3
+
 flutter:
   uses-material-design: true
+
   assets:
+    # 🔹 Animaciones
     - assets/animations/
+
+    # 🔹 Imágenes juegos
     - assets/images/games/
     - assets/images/facil/
     - assets/images/medio/
     - assets/images/dificil/
     - assets/images/conecta/
+
+    # 🔹 Cartas
     - assets/images/cards/animales/
     - assets/images/cards/frutas/
     - assets/images/cards/instrumentos/
     - assets/images/cards/transporte/
+
+    # 🔹 Puzzles
     - assets/images/puzzles/
+
+    # 🔹 Planetas
     - assets/images/planets/
-    - assets/sounds/
+
+    # 🔹 🌌 NUEVO: Universo (Explora)
+    - assets/images/universe/
+
+    # 🔊 🔥 AUDIOS (IMPORTANTE)
+    - assets/sounds/universe/
+
+    # 🔊 Narración existente
+    - assets/narration/narrador-hombre/
+    - assets/narration/narrador-mujer/
+
+    # 🔊 Dilo
+    - assets/dilo/
+    - assets/dilo-hombre/
+    - assets/dilo-mujer/
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/nebula_logo_final.png"
+  image_path: "assets/icon/nebula_logo_fsinal.png"

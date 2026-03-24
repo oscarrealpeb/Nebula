@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
 import '../controllers/puzzle_controller.dart';
+import '../services/narration_service.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/puzzle/puzzle_board.dart';
 import '../widgets/puzzle_image_adapter.dart';
@@ -41,6 +42,12 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
       imageSources: widget.controller.puzzleImageSources,
     )..addListener(_onPuzzleChanged);
     _puzzleController.generatePuzzle(_selectedStars);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NarrationService.instance.play(
+        widget.controller,
+        key: 'puzzle_intro',
+      );
+    });
   }
 
   @override

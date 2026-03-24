@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/app_controller.dart';
+import '../services/narration_service.dart';
+
 Future<int?> showStarDifficultySheet(
   BuildContext context, {
+  required AppController controller,
   int maxEnabledStars = 3,
 }) {
   final safeMaxEnabledStars = maxEnabledStars.clamp(1, 3);
+  bool played = false;
   return showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true, // permite que ocupe más altura
@@ -12,6 +17,15 @@ Future<int?> showStarDifficultySheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (_) {
+      if (!played) {
+        played = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          NarrationService.instance.play(
+            controller,
+            key: 'niveles',
+          );
+        });
+      }
       // Tamaño de la sheet: mitad de la pantalla
       return FractionallySizedBox(
         heightFactor: 0.5, // 50% de la pantalla
@@ -88,3 +102,4 @@ Future<int?> showStarDifficultySheet(
     },
   );
 }
+
