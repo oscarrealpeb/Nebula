@@ -60,6 +60,7 @@ flutter:
     - assets/dilo/
     - assets/dilo-hombre/
     - assets/dilo-mujer/
+    - assets/images/explora/arte/
     - assets/images/explora/animales/
     - assets/images/explora/
     - assets/sounds/explora/animales/perro/
@@ -96,6 +97,16 @@ flutter:
     - assets/sounds/explora/historia/inventos/
     - assets/sounds/explora/historia/ninos/
     - assets/sounds/explora/historia/maravillas/
+    - assets/sounds/explora/arte/mona_lisa/
+    - assets/sounds/explora/arte/noche_estrellada/
+    - assets/sounds/explora/arte/girasoles/
+    - assets/sounds/explora/arte/el_grito/
+    - assets/sounds/explora/arte/joven_perla/
+    - assets/sounds/explora/arte/da_vinci/
+    - assets/sounds/explora/arte/van_gogh/
+    - assets/sounds/explora/arte/picasso/
+    - assets/sounds/explora/arte/frida_kahlo/
+    - assets/sounds/explora/arte/dali/
 
 flutter_launcher_icons:
   android: true

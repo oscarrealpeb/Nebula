@@ -4,6 +4,7 @@ import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import 'animales_screen.dart';
 import 'historia_screen.dart';
+import 'arte_screen.dart'; // ✅ IMPORT agregado
 
 class ExploreLearnScreen extends StatelessWidget {
   const ExploreLearnScreen({super.key, required this.controller});
@@ -55,7 +56,8 @@ class ExploreLearnScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => HistoriaScreen(controller: controller),
+                        builder: (_) =>
+                            HistoriaScreen(controller: controller),
                       ),
                     );
                   },
@@ -63,7 +65,15 @@ class ExploreLearnScreen extends StatelessWidget {
                 _CategoryCard(
                   title: 'Arte',
                   imagePath: 'assets/images/explora/arte.png',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ArteScreen(controller: controller),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -109,7 +119,7 @@ class _CategoryCard extends StatelessWidget {
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: Colors.black, // visible
+            color: Colors.black,
           ),
         ),
       ],
