@@ -1,4 +1,5 @@
 ﻿import 'dart:io';
+import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
@@ -14,24 +15,33 @@ class NarrationService {
   final AudioPlayer _player = AudioPlayer();
   final Map<String, String> _cache = {};
 
+  // 🔥 NUEVO: índice para evitar repetición
+  int? _lastRandomIndex;
+
   Future<void> play(
     AppController controller, {
     required String key,
     bool stopBeforePlay = true,
   }) async {
     if (!controller.soundEffectsEnabled) return;
-    final assetPath = _assetPathForNarrator(controller.selectedNarratorId, key);
+    final assetPath =
+        _assetPathForNarrator(controller.selectedNarratorId, key);
     if (assetPath.isEmpty) return;
     await _playFromAssetPath(assetPath, stopBeforePlay: stopBeforePlay);
   }
-
+Future<void> stop() async {
+  try {
+    await _player.stop();
+  } catch (_) {}
+}
   Future<void> playSequence(
     AppController controller, {
     required List<String> keys,
   }) async {
     if (!controller.soundEffectsEnabled) return;
     for (final key in keys) {
-      final assetPath = _assetPathForNarrator(controller.selectedNarratorId, key);
+      final assetPath =
+          _assetPathForNarrator(controller.selectedNarratorId, key);
       if (assetPath.isEmpty) continue;
       await _playFromAssetPath(
         assetPath,
@@ -53,6 +63,51 @@ class NarrationService {
     await _playFromAssetPath(assetPath, stopBeforePlay: stopBeforePlay);
   }
 
+  /// 🔥 NUEVO: Obtener audio aleatorio sin repetir seguido
+  String getRandomAudio(List<String> audios) {
+    if (audios.isEmpty) return '';
+
+    final random = Random();
+    int index;
+
+    do {
+      index = random.nextInt(audios.length);
+    } while (_lastRandomIndex != null && index == _lastRandomIndex);
+
+    _lastRandomIndex = index;
+    return audios[index];
+  }
+
+  /// 🔥 NUEVO: Reproducir audio directo desde assets (Explora)
+  Future<void> playAssetDirect(
+    String fullAssetPath, {
+    bool stopBeforePlay = true,
+  }) async {
+    try {
+      if (stopBeforePlay) {
+        await _player.stop();
+      }
+
+      // ⚠️ IMPORTANTE: quitar "assets/"
+      final path = fullAssetPath.replaceFirst("assets/", "");
+
+      await _player.play(AssetSource(path), volume: 1.0);
+    } catch (e) {
+      print("Error reproduciendo audio: $e");
+    }
+  }
+
+  /// 🔥 NUEVO: Reproducir audio aleatorio desde lista (TU CASO)
+  Future<String> playRandomFromList(List<String> audios) async {
+    final audio = getRandomAudio(audios);
+
+    if (audio.isEmpty) return '';
+
+    await playAssetDirect(audio);
+
+    return audio;
+  }
+
   Future<void> _playFromAssetPath(
     String assetPath, {
     required bool stopBeforePlay,
@@ -67,12 +122,11 @@ class NarrationService {
         await _player.onPlayerComplete.first;
       }
       return;
-    } catch (_) {
-      // Seguimos al fallback.
-    }
+    } catch (_) {}
 
     final filePath = await _loadToTempFile(assetPath);
     if (filePath.isEmpty) return;
+
     try {
       if (stopBeforePlay) {
         await _player.stop();
@@ -81,9 +135,7 @@ class NarrationService {
       if (waitForComplete) {
         await _player.onPlayerComplete.first;
       }
-    } catch (_) {
-      // Evitar romper el flujo si el audio falla.
-    }
+    } catch (_) {}
   }
 
   String _assetPathForNarrator(String narratorId, String key) {
@@ -91,9 +143,12 @@ class NarrationService {
     final folder = isFemale
         ? 'narration/narrador-mujer'
         : 'narration/narrador-hombre';
+
     final fileBase = _fileBaseForKey(key);
     if (fileBase.isEmpty) return '';
+
     final suffix = isFemale ? '-m' : '-h';
+
     return '$folder/$fileBase$suffix.mp3';
   }
 
@@ -104,11 +159,14 @@ class NarrationService {
 
     final byteData = await _tryLoadFromBundle(assetPath);
     if (byteData == null) return '';
+
     final dir = await getTemporaryDirectory();
     final safeName = assetPath.replaceAll('/', '_');
     final file = File('${dir.path}/$safeName');
+
     await file.writeAsBytes(byteData.buffer.asUint8List());
     _cache[assetPath] = file.path;
+
     return file.path;
   }
 
@@ -165,6 +223,7 @@ class NarrationService {
 
   String _planetAudioBaseFor(String key) {
     final normalized = _normalizeKey(key);
+
     switch (normalized) {
       case 'mercurio':
         return 'p-mercurio';
@@ -195,6 +254,7 @@ class NarrationService {
 
   String _normalizeKey(String raw) {
     final lower = raw.trim().toLowerCase();
+
     return lower
         .replaceAll('á', 'a')
         .replaceAll('é', 'e')

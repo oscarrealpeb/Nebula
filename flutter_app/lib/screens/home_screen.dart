@@ -1,6 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-
+import 'explore_learn_screen.dart';
 import '../controllers/app_controller.dart';
 import '../core/data/avatar_catalog.dart';
 import '../core/data/planet_ladder.dart';
@@ -11,7 +11,7 @@ import 'child_profile_setup_screen.dart';
 import 'connect_screen.dart';
 import 'dilo_screen.dart';
 import 'emotion_screen.dart';
-import 'explore_learn_screen.dart';
+
 import 'game_placeholder_screen1.dart';
 import 'minigames_screen.dart';
 import 'planet_ladder_screen.dart';
@@ -604,23 +604,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 _GameCard(
-                  title: exploraLabel.toUpperCase(),
-                  imagePath: 'assets/images/games/explora_aprende1.png',
-                  accentColor: color,
-                  onTap: () async {
-                    final allowed = await _guardGameAccess(
-                      context,
-                      gameKey: 'explora_aprende',
-                    );
-                    if (!context.mounted || !allowed) return;
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ExploreLearnScreen(controller: widget.controller),
-                      ),
-                    );
-                  },
-                ),
+  title: exploraLabel.toUpperCase(),
+  imagePath: 'assets/images/games/explora_aprende1.png',
+  accentColor: color,
+  onTap: () async {
+    final allowed = await _guardGameAccess(
+      context,
+      gameKey: 'explora_aprende',
+    );
+    if (!context.mounted || !allowed) return;
+    
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        // CORRECCIÓN: La 'E' de Explore debe ser mayúscula
+        builder: (_) => ExploreLearnScreen(controller: widget.controller),
+      ),
+    );
+  },
+),
               ],
             ),
             const SizedBox(height: 12),
