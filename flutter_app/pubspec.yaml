@@ -24,6 +24,7 @@ dependencies:
   audioplayers: ^5.2.1
   speech_to_text: ^7.3.0
   permission_handler: ^11.3.0
+  file_picker: ^10.0.0
   pdf: ^3.11.3
   printing: ^5.14.2
   path_provider: ^2.1.5
@@ -61,6 +62,7 @@ flutter:
     - assets/images/donde_va/granja/
     - assets/images/puzzles/
     - assets/images/planets/
+    - assets/secuencias/
     - assets/sounds/
     - assets/narration/narrador-hombre/
     - assets/narration/narrador-mujer/

@@ -8,6 +8,7 @@ import 'cartas_gemelas_game.dart';
 import 'donde_va_screen.dart';
 import 'game_placeholder_screen1.dart';
 import 'puzzle_screen.dart';
+import 'que_sigue_screen.dart';
 
 const Color backgroundLilac = Color.fromARGB(255, 255, 255, 255);
 
@@ -82,6 +83,19 @@ class MinigamesScreen extends StatelessWidget {
       return;
     }
 
+    if (gameKey == 'que_sigue') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => QueSigueScreen(
+            controller: controller,
+            difficultyStars: stars,
+          ),
+        ),
+      );
+      controller.setChildGameActive(false);
+      return;
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GamePlaceholderScreen(
@@ -95,12 +109,76 @@ class MinigamesScreen extends StatelessWidget {
     controller.setChildGameActive(false);
   }
 
+  bool _isGloballyBlocked(AppController controller, String gameKey) {
+    final normalized = gameKey.trim().toLowerCase();
+    return controller.appAdminConfig.blockedGameKeys.any(
+      (item) => item.trim().toLowerCase() == normalized,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cartasLabel = controller.gameLabelForKey('cartas_gemelas');
     final queLabel = controller.gameLabelForKey('que_sigue');
     final dondeLabel = controller.gameLabelForKey('donde_va');
     final armaLabel = controller.gameLabelForKey('arma_imagen');
+    final miniCards = <Widget>[];
+    if (!_isGloballyBlocked(controller, 'cartas_gemelas')) {
+      miniCards.add(
+        _MiniGameCard(
+          title: cartasLabel,
+          imagePath: 'assets/images/games/cartas_gemelas1.png',
+          onTap: () => _openGame(
+            context,
+            gameName: cartasLabel,
+            gameKey: 'cartas_gemelas',
+          ),
+          accentColor: controller.accentColor,
+        ),
+      );
+    }
+    if (!_isGloballyBlocked(controller, 'que_sigue')) {
+      miniCards.add(
+        _MiniGameCard(
+          title: queLabel,
+          imagePath: 'assets/images/games/que_sigue1.png',
+          onTap: () => _openGame(
+            context,
+            gameName: queLabel,
+            gameKey: 'que_sigue',
+          ),
+          accentColor: controller.accentColor,
+        ),
+      );
+    }
+    if (!_isGloballyBlocked(controller, 'donde_va')) {
+      miniCards.add(
+        _MiniGameCard(
+          title: dondeLabel,
+          imagePath: 'assets/images/games/donde_va1.png',
+          onTap: () => _openGame(
+            context,
+            gameName: dondeLabel,
+            gameKey: 'donde_va',
+          ),
+          accentColor: controller.accentColor,
+        ),
+      );
+    }
+    if (!_isGloballyBlocked(controller, 'arma_imagen')) {
+      miniCards.add(
+        _MiniGameCard(
+          title: armaLabel,
+          imagePath: 'assets/images/games/arma_la_imagen1.png',
+          onTap: () => _openGame(
+            context,
+            gameName: armaLabel,
+            gameKey: 'arma_imagen',
+          ),
+          accentColor: controller.accentColor,
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
@@ -143,69 +221,35 @@ class MinigamesScreen extends StatelessWidget {
                   ),
                   child: Stack(
                     children: [
-                      GridView.count(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 1.04,
-                        children: [
-                          _MiniGameCard(
-                            title: cartasLabel,
-                            imagePath:
-                                'assets/images/games/cartas_gemelas1.png',
-                            onTap: () => _openGame(
-                              context,
-                              gameName: cartasLabel,
-                              gameKey: 'cartas_gemelas',
-                            ),
-                            accentColor: controller.accentColor,
+                      if (miniCards.isEmpty)
+                        Center(
+                          child: Text(
+                            'No hay minijuegos disponibles por ahora.',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
-                          _MiniGameCard(
-                            title: queLabel,
-                            imagePath: 'assets/images/games/que_sigue1.png',
-                            onTap: () => _openGame(
-                              context,
-                              gameName: queLabel,
-                              gameKey: 'que_sigue',
+                        )
+                      else
+                        GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.04,
+                          children: miniCards,
+                        ),
+                      if (miniCards.isNotEmpty)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: SizedBox(
+                            width: 140,
+                            height: 140,
+                            child: Lottie.asset(
+                              'assets/animations/minijuegos1.json',
+                              repeat: true,
+                              fit: BoxFit.contain,
                             ),
-                            accentColor: controller.accentColor,
-                          ),
-                          _MiniGameCard(
-                            title: dondeLabel,
-                            imagePath: 'assets/images/games/donde_va1.png',
-                            onTap: () => _openGame(
-                              context,
-                              gameName: dondeLabel,
-                              gameKey: 'donde_va',
-                            ),
-                            accentColor: controller.accentColor,
-                          ),
-                          _MiniGameCard(
-                            title: armaLabel,
-                            imagePath:
-                                'assets/images/games/arma_la_imagen1.png',
-                            onTap: () => _openGame(
-                              context,
-                              gameName: armaLabel,
-                              gameKey: 'arma_imagen',
-                            ),
-                            accentColor: controller.accentColor,
-                          ),
-                        ],
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: SizedBox(
-                          width: 140,
-                          height: 140,
-                          child: Lottie.asset(
-                            'assets/animations/minijuegos1.json',
-                            repeat: true,
-                            fit: BoxFit.contain,
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),

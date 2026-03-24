@@ -6,6 +6,7 @@ import '../widgets/nebula_button.dart';
 import '../widgets/nebula_snack.dart';
 import 'caregiver/caregiver_panel_screen.dart';
 import 'home_screen.dart';
+import 'welcome_screen.dart';
 
 enum _PortalStep {
   role,
@@ -102,6 +103,33 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
     await _enterCaregiver(password);
   }
 
+  Future<void> _promptLogout() async {
+    if (_childSubmitting || _caregiverSubmitting) return;
+    final password = await _askCaregiverPassword(title: 'Cerrar sesión');
+    if (!mounted || password == null) return;
+    setState(() => _caregiverSubmitting = true);
+    final result = await widget.controller.authService
+        .verifyCurrentUserPassword(password.trim());
+    if (!mounted) return;
+    setState(() => _caregiverSubmitting = false);
+    if (!result.ok) {
+      _showSnack(result.message, ok: false);
+      return;
+    }
+    await widget.controller.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => WelcomeScreen(
+          controller: widget.controller,
+          flashMessage: 'Sesión cerrada correctamente.',
+          flashOk: true,
+        ),
+      ),
+      (_) => false,
+    );
+  }
+
   Future<void> _enterCaregiver(String password) async {
     if (_childSubmitting || _caregiverSubmitting) return;
     setState(() => _caregiverSubmitting = true);
@@ -156,7 +184,9 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
     });
   }
 
-  Future<String?> _askCaregiverPassword() async {
+  Future<String?> _askCaregiverPassword({
+    String title = 'Entrar como cuidador',
+  }) async {
     return showDialog<String>(
       context: context,
       barrierDismissible: true,
@@ -169,7 +199,7 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
 
         return StatefulBuilder(
           builder: (context, setLocalState) => AlertDialog(
-            title: const Text('Entrar como cuidador'),
+            title: Text(title),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,10 +302,21 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
   Widget build(BuildContext context) {
     final children = widget.controller.childProfiles;
     final loading = _childSubmitting || _caregiverSubmitting;
+    final maintenanceActive =
+        widget.controller.appInMaintenance && !widget.controller.isAdmin;
+    final maintenanceMessage =
+        widget.controller.appMaintenanceMessage.trim().isEmpty
+            ? 'La app está en mantenimiento. Intenta más tarde.'
+            : widget.controller.appMaintenanceMessage.trim();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('\u00bfQui\u00e9n usa la aplicaci\u00f3n?'),
+        leading: IconButton(
+          onPressed: loading ? null : _promptLogout,
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Cerrar sesión',
+        ),
       ),
       body: CosmicBackground(
         child: ListView(
@@ -300,16 +341,25 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
                           const SizedBox(height: 12),
                           NebulaPrimaryButton(
                             text: 'Entrar como ni\u00f1o',
-                            onPressed: loading ? null : _goToChildStep,
+                            icon: Icons.child_care_rounded,
+                            onPressed: (loading || maintenanceActive)
+                                ? null
+                                : _goToChildStep,
                           ),
                           const SizedBox(height: 10),
                           NebulaSecondaryButton(
                             text: _caregiverSubmitting
                                 ? 'Validando...'
                                 : 'Entrar como cuidador',
-                            onPressed:
-                                loading ? null : _promptCaregiverPassword,
+                            icon: Icons.supervisor_account_rounded,
+                            onPressed: (loading || maintenanceActive)
+                                ? null
+                                : _promptCaregiverPassword,
                           ),
+                          if (maintenanceActive) ...[
+                            const SizedBox(height: 12),
+                            _MaintenanceNotice(message: maintenanceMessage),
+                          ],
                         ],
                       )
                     : Column(
@@ -365,7 +415,9 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
                           NebulaPrimaryButton(
                             text:
                                 _childSubmitting ? 'Entrando...' : 'Continuar',
-                            onPressed: (loading || children.isEmpty)
+                            onPressed: (loading ||
+                                    children.isEmpty ||
+                                    maintenanceActive)
                                 ? null
                                 : _enterChild,
                           ),
@@ -377,6 +429,10 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
                                     setState(() => _step = _PortalStep.role),
                             child: const Text('Volver'),
                           ),
+                          if (maintenanceActive) ...[
+                            const SizedBox(height: 12),
+                            _MaintenanceNotice(message: maintenanceMessage),
+                          ],
                         ],
                       ),
               ),
@@ -393,6 +449,32 @@ class _PortalEntryScreenState extends State<PortalEntryScreen> {
     final month = date.month.toString().padLeft(2, '0');
     final year = date.year.toString();
     return '$day/$month/$year';
+  }
+}
+
+class _MaintenanceNotice extends StatelessWidget {
+  const _MaintenanceNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE3E3),
+        border: Border.all(color: const Color(0xFFE15B5B)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
   }
 }
 
