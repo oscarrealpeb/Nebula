@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import '../widgets/cosmic_background.dart';
 import 'animales_screen.dart';
+import 'historia_screen.dart';
 
 class ExploreLearnScreen extends StatelessWidget {
   const ExploreLearnScreen({super.key, required this.controller});
@@ -50,7 +51,14 @@ class ExploreLearnScreen extends StatelessWidget {
                 _CategoryCard(
                   title: 'Historia',
                   imagePath: 'assets/images/explora/historia.png',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => HistoriaScreen(controller: controller),
+                      ),
+                    );
+                  },
                 ),
                 _CategoryCard(
                   title: 'Arte',

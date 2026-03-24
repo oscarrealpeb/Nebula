@@ -77,6 +77,25 @@ flutter:
     - assets/sounds/explora/animales/tortuga/
     - assets/sounds/explora/animales/jirafa/
     - assets/sounds/explora/animales/mono/
+    - assets/sounds/explora/historia/
+    - assets/images/explora/historia/
+    
+    - assets/sounds/explora/historia/
+    - assets/sounds/explora/historia/dinosaurios/
+    - assets/sounds/explora/historia/ciudades/
+    - assets/sounds/explora/historia/piratas/
+    - assets/sounds/explora/historia/egipcios/
+    - assets/sounds/explora/historia/castillos/
+    - assets/sounds/explora/historia/vikingos/
+    - assets/sounds/explora/historia/romanos/
+    - assets/sounds/explora/historia/exploradores/
+    - assets/sounds/explora/historia/reyes/
+    - assets/sounds/explora/historia/transportes/
+    - assets/sounds/explora/historia/civilizaciones/
+    - assets/sounds/explora/historia/descubrimientos/
+    - assets/sounds/explora/historia/inventos/
+    - assets/sounds/explora/historia/ninos/
+    - assets/sounds/explora/historia/maravillas/
 
 flutter_launcher_icons:
   android: true
