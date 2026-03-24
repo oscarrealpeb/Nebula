@@ -279,8 +279,12 @@ class GameContentConfig {
     this.memoryItems = const [],
     this.globalEmotionImageOverrides = const {},
     this.globalSoundImageOverrides = const {},
+    this.globalPuzzleImageOverrides = const {},
+    this.globalMemoryImageOverrides = const {},
     this.globalEmotionImageStoragePaths = const {},
     this.globalSoundImageStoragePaths = const {},
+    this.globalPuzzleImageStoragePaths = const {},
+    this.globalMemoryImageStoragePaths = const {},
     this.updatedAtMillis = 0,
   });
 
@@ -291,8 +295,12 @@ class GameContentConfig {
   final List<MemoryContentItem> memoryItems;
   final Map<String, String> globalEmotionImageOverrides;
   final Map<String, String> globalSoundImageOverrides;
+  final Map<String, String> globalPuzzleImageOverrides;
+  final Map<String, String> globalMemoryImageOverrides;
   final Map<String, String> globalEmotionImageStoragePaths;
   final Map<String, String> globalSoundImageStoragePaths;
+  final Map<String, String> globalPuzzleImageStoragePaths;
+  final Map<String, String> globalMemoryImageStoragePaths;
   final int updatedAtMillis;
 
   GameContentConfig copyWith({
@@ -303,8 +311,12 @@ class GameContentConfig {
     List<MemoryContentItem>? memoryItems,
     Map<String, String>? globalEmotionImageOverrides,
     Map<String, String>? globalSoundImageOverrides,
+    Map<String, String>? globalPuzzleImageOverrides,
+    Map<String, String>? globalMemoryImageOverrides,
     Map<String, String>? globalEmotionImageStoragePaths,
     Map<String, String>? globalSoundImageStoragePaths,
+    Map<String, String>? globalPuzzleImageStoragePaths,
+    Map<String, String>? globalMemoryImageStoragePaths,
     int? updatedAtMillis,
   }) {
     return GameContentConfig(
@@ -317,10 +329,18 @@ class GameContentConfig {
           globalEmotionImageOverrides ?? this.globalEmotionImageOverrides,
       globalSoundImageOverrides:
           globalSoundImageOverrides ?? this.globalSoundImageOverrides,
+      globalPuzzleImageOverrides:
+          globalPuzzleImageOverrides ?? this.globalPuzzleImageOverrides,
+      globalMemoryImageOverrides:
+          globalMemoryImageOverrides ?? this.globalMemoryImageOverrides,
       globalEmotionImageStoragePaths:
           globalEmotionImageStoragePaths ?? this.globalEmotionImageStoragePaths,
       globalSoundImageStoragePaths:
           globalSoundImageStoragePaths ?? this.globalSoundImageStoragePaths,
+      globalPuzzleImageStoragePaths:
+          globalPuzzleImageStoragePaths ?? this.globalPuzzleImageStoragePaths,
+      globalMemoryImageStoragePaths:
+          globalMemoryImageStoragePaths ?? this.globalMemoryImageStoragePaths,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
     );
   }
@@ -334,8 +354,12 @@ class GameContentConfig {
       'memoryItems': memoryItems.map((item) => item.toJson()).toList(),
       'globalEmotionImageOverrides': globalEmotionImageOverrides,
       'globalSoundImageOverrides': globalSoundImageOverrides,
+      'globalPuzzleImageOverrides': globalPuzzleImageOverrides,
+      'globalMemoryImageOverrides': globalMemoryImageOverrides,
       'globalEmotionImageStoragePaths': globalEmotionImageStoragePaths,
       'globalSoundImageStoragePaths': globalSoundImageStoragePaths,
+      'globalPuzzleImageStoragePaths': globalPuzzleImageStoragePaths,
+      'globalMemoryImageStoragePaths': globalMemoryImageStoragePaths,
       'updatedAtMillis': updatedAtMillis,
     };
   }
@@ -388,11 +412,23 @@ class GameContentConfig {
       globalSoundImageOverrides: Map<String, String>.from(
         json['globalSoundImageOverrides'] as Map? ?? const {},
       ),
+      globalPuzzleImageOverrides: Map<String, String>.from(
+        json['globalPuzzleImageOverrides'] as Map? ?? const {},
+      ),
+      globalMemoryImageOverrides: Map<String, String>.from(
+        json['globalMemoryImageOverrides'] as Map? ?? const {},
+      ),
       globalEmotionImageStoragePaths: Map<String, String>.from(
         json['globalEmotionImageStoragePaths'] as Map? ?? const {},
       ),
       globalSoundImageStoragePaths: Map<String, String>.from(
         json['globalSoundImageStoragePaths'] as Map? ?? const {},
+      ),
+      globalPuzzleImageStoragePaths: Map<String, String>.from(
+        json['globalPuzzleImageStoragePaths'] as Map? ?? const {},
+      ),
+      globalMemoryImageStoragePaths: Map<String, String>.from(
+        json['globalMemoryImageStoragePaths'] as Map? ?? const {},
       ),
       updatedAtMillis: (json['updatedAtMillis'] as num?)?.toInt() ?? 0,
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/app_controller.dart';
+import '../core/data/memory_catalog.dart';
 import '../services/narration_service.dart';
 import '../widgets/cosmic_background.dart';
 import '../widgets/puzzle_image_adapter.dart';
@@ -23,64 +24,6 @@ class CartasGemelasGame extends StatefulWidget {
 }
 
 class _CartasGemelasGameState extends State<CartasGemelasGame> {
-  static const List<String> _allImages = [
-    'assets/images/cards/animales/abeja.png',
-    'assets/images/cards/animales/ardilla.png',
-    'assets/images/cards/animales/caballo.png',
-    'assets/images/cards/animales/cabra.png',
-    'assets/images/cards/animales/cobra.png',
-    'assets/images/cards/animales/cocodrilo.png',
-    'assets/images/cards/animales/elefante.png',
-    'assets/images/cards/animales/ganso.png',
-    'assets/images/cards/animales/gato.png',
-    'assets/images/cards/animales/loro.png',
-    'assets/images/cards/animales/oveja.png',
-    'assets/images/cards/animales/perro.png',
-    'assets/images/cards/animales/tigre.png',
-    'assets/images/cards/animales/tortuga-marina.png',
-    'assets/images/cards/animales/vaca.png',
-    'assets/images/cards/frutas/cereza.png',
-    'assets/images/cards/frutas/coco.png',
-    'assets/images/cards/frutas/fresa.png',
-    'assets/images/cards/frutas/kiwi-verde.png',
-    'assets/images/cards/frutas/limon.png',
-    'assets/images/cards/frutas/mango.png',
-    'assets/images/cards/frutas/manzana.png',
-    'assets/images/cards/frutas/maracuya.png',
-    'assets/images/cards/frutas/naranja.png',
-    'assets/images/cards/frutas/papaya.png',
-    'assets/images/cards/frutas/pera.png',
-    'assets/images/cards/frutas/pina.png',
-    'assets/images/cards/frutas/platano.png',
-    'assets/images/cards/frutas/sandia.png',
-    'assets/images/cards/frutas/uva.png',
-    'assets/images/cards/instrumentos/acordeon.png',
-    'assets/images/cards/instrumentos/arpa.png',
-    'assets/images/cards/instrumentos/bateria.png',
-    'assets/images/cards/instrumentos/flauta.png',
-    'assets/images/cards/instrumentos/guitarra-acustica.png',
-    'assets/images/cards/instrumentos/guitarra-electrica.png',
-    'assets/images/cards/instrumentos/maracas.png',
-    'assets/images/cards/instrumentos/marimba.png',
-    'assets/images/cards/instrumentos/pandereta.png',
-    'assets/images/cards/instrumentos/piano.png',
-    'assets/images/cards/instrumentos/platillo.png',
-    'assets/images/cards/instrumentos/saxofono.png',
-    'assets/images/cards/instrumentos/tambor.png',
-    'assets/images/cards/instrumentos/trompeta.png',
-    'assets/images/cards/instrumentos/violin.png',
-    'assets/images/cards/transporte/autobus.png',
-    'assets/images/cards/transporte/avion.png',
-    'assets/images/cards/transporte/barco.png',
-    'assets/images/cards/transporte/bicicleta.png',
-    'assets/images/cards/transporte/carro-deportivo.png',
-    'assets/images/cards/transporte/helicoptero.png',
-    'assets/images/cards/transporte/moto.png',
-    'assets/images/cards/transporte/submarino.png',
-    'assets/images/cards/transporte/taxi.png',
-    'assets/images/cards/transporte/tren.png',
-  ];
-
   final _random = Random();
 
   late DateTime _startedAt;
@@ -143,11 +86,26 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
   List<String> _imagePool() {
     final custom = widget.controller.gameContentConfig.memoryItems
         .where((item) => item.enabled && item.imagePath.trim().isNotEmpty)
-        .map((item) => item.imagePath.trim())
+        .map(
+          (item) => widget.controller.resolvedGameImageSourceFor(
+            gameKey: 'cartas_gemelas',
+            itemId: item.imagePath.trim(),
+            defaultSource: item.imagePath.trim(),
+          ),
+        )
         .toList();
-    if (custom.isEmpty) return List<String>.from(_allImages);
+    final defaults = defaultMemoryImageSources
+        .map(
+          (source) => widget.controller.resolvedGameImageSourceFor(
+            gameKey: 'cartas_gemelas',
+            itemId: source,
+            defaultSource: source,
+          ),
+        )
+        .toList();
+    if (custom.isEmpty) return List<String>.from(defaults);
     final merged = <String>[...custom];
-    for (final image in _allImages) {
+    for (final image in defaults) {
       if (!merged.contains(image)) {
         merged.add(image);
       }

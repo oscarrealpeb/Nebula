@@ -153,28 +153,22 @@ class AppController extends ChangeNotifier {
         .map((item) {
           final source = item.imageSource.trim();
           if (source.isEmpty) return '';
-          return customGameImageSourceFor(
-                gameKey: 'puzzle',
-                itemId: customContentItemId(
-                  source: source,
-                  rawId: item.id,
-                ),
-                defaultSource: source,
-              ) ??
-              source;
+          return resolvedGameImageSourceFor(
+            gameKey: 'puzzle',
+            itemId: source,
+            defaultSource: source,
+          );
         })
         .where((item) => item.isNotEmpty)
         .toList();
     if (fromAdmin.isEmpty) {
       return defaultPuzzleImageSources
           .map(
-            (source) =>
-                customGameImageSourceFor(
-                  gameKey: 'puzzle',
-                  itemId: customContentItemId(source: source),
-                  defaultSource: source,
-                ) ??
-                source,
+            (source) => resolvedGameImageSourceFor(
+              gameKey: 'puzzle',
+              itemId: source,
+              defaultSource: source,
+            ),
           )
           .toList();
     }
@@ -182,13 +176,11 @@ class AppController extends ChangeNotifier {
       ...fromAdmin,
       ...defaultPuzzleImageSources
           .map(
-            (source) =>
-                customGameImageSourceFor(
-                  gameKey: 'puzzle',
-                  itemId: customContentItemId(source: source),
-                  defaultSource: source,
-                ) ??
-                source,
+            (source) => resolvedGameImageSourceFor(
+              gameKey: 'puzzle',
+              itemId: source,
+              defaultSource: source,
+            ),
           )
           .where((item) => !fromAdmin.contains(item)),
     ];
@@ -1686,6 +1678,36 @@ class AppController extends ChangeNotifier {
         ),
       );
     }
+
+    for (final entry
+        in _gameContentConfig.globalPuzzleImageStoragePaths.entries) {
+      final storagePath = entry.value.trim();
+      final sourceUrl =
+          _gameContentConfig.globalPuzzleImageOverrides[entry.key]?.trim() ??
+              '';
+      if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+      unawaited(
+        _cacheRemoteImageLocallyBestEffort(
+          storagePath: storagePath,
+          sourceUrl: sourceUrl,
+        ),
+      );
+    }
+
+    for (final entry
+        in _gameContentConfig.globalMemoryImageStoragePaths.entries) {
+      final storagePath = entry.value.trim();
+      final sourceUrl =
+          _gameContentConfig.globalMemoryImageOverrides[entry.key]?.trim() ??
+              '';
+      if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+      unawaited(
+        _cacheRemoteImageLocallyBestEffort(
+          storagePath: storagePath,
+          sourceUrl: sourceUrl,
+        ),
+      );
+    }
   }
 
   String? customGameImageSourceFor({
@@ -1725,6 +1747,10 @@ class AppController extends ChangeNotifier {
         _gameContentConfig.globalEmotionImageOverrides[normalizedKey]?.trim(),
       'sonidos' =>
         _gameContentConfig.globalSoundImageOverrides[normalizedKey]?.trim(),
+      'puzzle' =>
+        _gameContentConfig.globalPuzzleImageOverrides[normalizedKey]?.trim(),
+      'cartas_gemelas' =>
+        _gameContentConfig.globalMemoryImageOverrides[normalizedKey]?.trim(),
       _ => null,
     };
   }
@@ -1745,6 +1771,9 @@ class AppController extends ChangeNotifier {
       'emociones' =>
         _gameContentConfig.globalEmotionImageStoragePaths[key]?.trim(),
       'sonidos' => _gameContentConfig.globalSoundImageStoragePaths[key]?.trim(),
+      'puzzle' => _gameContentConfig.globalPuzzleImageStoragePaths[key]?.trim(),
+      'cartas_gemelas' =>
+        _gameContentConfig.globalMemoryImageStoragePaths[key]?.trim(),
       _ => null,
     };
   }
@@ -2091,6 +2120,26 @@ class AppController extends ChangeNotifier {
           )..[key] = uploaded.data!.storagePath,
         );
         break;
+      case 'puzzle':
+        nextConfig = _gameContentConfig.copyWith(
+          globalPuzzleImageOverrides: Map<String, String>.from(
+            _gameContentConfig.globalPuzzleImageOverrides,
+          )..[key] = uploaded.data!.downloadUrl,
+          globalPuzzleImageStoragePaths: Map<String, String>.from(
+            _gameContentConfig.globalPuzzleImageStoragePaths,
+          )..[key] = uploaded.data!.storagePath,
+        );
+        break;
+      case 'cartas_gemelas':
+        nextConfig = _gameContentConfig.copyWith(
+          globalMemoryImageOverrides: Map<String, String>.from(
+            _gameContentConfig.globalMemoryImageOverrides,
+          )..[key] = uploaded.data!.downloadUrl,
+          globalMemoryImageStoragePaths: Map<String, String>.from(
+            _gameContentConfig.globalMemoryImageStoragePaths,
+          )..[key] = uploaded.data!.storagePath,
+        );
+        break;
       default:
         await _authService.deleteCustomImageFileBestEffort(
           uploaded.data!.storagePath,
@@ -2250,6 +2299,48 @@ class AppController extends ChangeNotifier {
         nextConfig = _gameContentConfig.copyWith(
           globalSoundImageOverrides: nextOverrides,
           globalSoundImageStoragePaths: nextStorage,
+        );
+        break;
+      case 'puzzle':
+        final hasOverride = _gameContentConfig.globalPuzzleImageOverrides
+                .containsKey(key) ||
+            _gameContentConfig.globalPuzzleImageStoragePaths.containsKey(key);
+        if (!hasOverride && previousStoragePath == null) {
+          return const ActionResult(
+            ok: false,
+            message: 'Ese elemento ya usa la imagen predeterminada original.',
+          );
+        }
+        final nextOverrides = Map<String, String>.from(
+          _gameContentConfig.globalPuzzleImageOverrides,
+        )..remove(key);
+        final nextStorage = Map<String, String>.from(
+          _gameContentConfig.globalPuzzleImageStoragePaths,
+        )..remove(key);
+        nextConfig = _gameContentConfig.copyWith(
+          globalPuzzleImageOverrides: nextOverrides,
+          globalPuzzleImageStoragePaths: nextStorage,
+        );
+        break;
+      case 'cartas_gemelas':
+        final hasOverride = _gameContentConfig.globalMemoryImageOverrides
+                .containsKey(key) ||
+            _gameContentConfig.globalMemoryImageStoragePaths.containsKey(key);
+        if (!hasOverride && previousStoragePath == null) {
+          return const ActionResult(
+            ok: false,
+            message: 'Ese elemento ya usa la imagen predeterminada original.',
+          );
+        }
+        final nextOverrides = Map<String, String>.from(
+          _gameContentConfig.globalMemoryImageOverrides,
+        )..remove(key);
+        final nextStorage = Map<String, String>.from(
+          _gameContentConfig.globalMemoryImageStoragePaths,
+        )..remove(key);
+        nextConfig = _gameContentConfig.copyWith(
+          globalMemoryImageOverrides: nextOverrides,
+          globalMemoryImageStoragePaths: nextStorage,
         );
         break;
       default:

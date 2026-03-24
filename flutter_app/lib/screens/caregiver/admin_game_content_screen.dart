@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,7 +10,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/app_controller.dart';
+import '../../core/data/memory_catalog.dart';
+import '../../core/data/puzzle_catalog.dart';
 import '../../models/game_content_config.dart';
+import '../../services/image_ai_review_service.dart';
 import '../../services/image_preparation_service.dart';
 import '../../widgets/cosmic_background.dart';
 import '../../widgets/nebula_button.dart';
@@ -370,8 +374,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     });
   }
 
-  Future<void> _addMemoryItem() async {
-    final imagePath = _memoryImageController.text.trim();
+  Future<bool> _addMemoryItemFromSource(String imagePath) async {
     final audioSource = _memoryAudioController.text.trim();
     if (imagePath.isEmpty) {
       NebulaSnack.show(
@@ -379,16 +382,16 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         message: 'Completa la ruta de imagen.',
         ok: false,
       );
-      return;
+      return false;
     }
     final imageOk = await _validateImageSource(
       imagePath,
       label: 'imagen',
     );
-    if (!imageOk) return;
+    if (!imageOk) return false;
     if (audioSource.isNotEmpty) {
       final audioOk = await _validateAudioSource(audioSource);
-      if (!audioOk) return;
+      if (!audioOk) return false;
     }
 
     final item = MemoryContentItem(
@@ -405,6 +408,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       _memoryImageController.clear();
       _memoryAudioController.clear();
     });
+    return true;
+  }
+
+  Future<void> _addMemoryItem() async {
+    await _addMemoryItemFromSource(_memoryImageController.text.trim());
   }
 
   void _toggleMemoryItem(String id, bool value) {
@@ -417,11 +425,25 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     });
   }
 
-  void _removeMemoryItem(String id) {
-    final next = _working.memoryItems.where((item) => item.id != id).toList();
-    setState(() {
-      _working = _working.copyWith(memoryItems: next);
-    });
+  Future<void> _replaceMemoryItemImage({
+    required MemoryContentItem item,
+    required ImageSource source,
+  }) async {
+    await _pickNewItemImage(
+      targetKey: 'memory_edit_${item.id}',
+      gameKey: 'cartas_gemelas',
+      source: source,
+      onUploaded: (url) {
+        setState(() {
+          final next = _working.memoryItems.map((current) {
+            if (current.id != item.id) return current;
+            return current.copyWith(imagePath: url);
+          }).toList();
+          _working = _working.copyWith(memoryItems: next);
+        });
+        return true;
+      },
+    );
   }
 
   String _prettyNameFromSource(String source) {
@@ -524,6 +546,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         (_working.globalEmotionImageOverrides[key]?.trim().isNotEmpty ?? false),
       'sonidos' =>
         (_working.globalSoundImageOverrides[key]?.trim().isNotEmpty ?? false),
+      'puzzle' =>
+        (_working.globalPuzzleImageOverrides[key]?.trim().isNotEmpty ?? false),
+      'cartas_gemelas' =>
+        (_working.globalMemoryImageOverrides[key]?.trim().isNotEmpty ?? false),
       _ => false,
     };
   }
@@ -537,12 +563,16 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     final pool = switch (normalizedGame) {
       'emociones' => _defaultEmotionImages,
       'sonidos' => _defaultSoundImages,
+      'puzzle' => defaultPuzzleImageSources,
+      'cartas_gemelas' => defaultMemoryImageSources,
       _ => const <String>[],
     };
     for (final source in pool) {
       final sourceItemId =
           widget.controller.customContentItemId(source: source);
-      if (sourceItemId.trim().toLowerCase() == normalizedItemId) {
+      final normalizedSource = source.trim().toLowerCase();
+      if (sourceItemId.trim().toLowerCase() == normalizedItemId ||
+          normalizedSource == normalizedItemId) {
         return source;
       }
     }
@@ -578,6 +608,39 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       return _prettyEmotionName(_emotionFromSource(defaultSource));
     }
     return _prettyNameFromSource(defaultSource);
+  }
+
+  Future<bool> _reviewAdminImageUpload({
+    required String filePath,
+    required String gameKey,
+    required String itemId,
+    List<String> expectedConcepts = const <String>[],
+    String expectedEmotion = '',
+    String expectedDescription = '',
+  }) async {
+    final concepts = expectedConcepts
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final review = await ImageAiReviewService.reviewImage(
+      filePath: filePath,
+      context: ImageAiReviewContext(
+        gameKey: gameKey,
+        itemId: itemId,
+        expectedConcepts: concepts,
+        expectedEmotion: expectedEmotion.trim(),
+        expectedDescription: expectedDescription.trim(),
+      ),
+    );
+    if (review.ok) return true;
+    if (!mounted) return false;
+    await NebulaSnack.show(
+      context,
+      message: review.message,
+      ok: false,
+    );
+    return false;
   }
 
   Future<void> _pickGlobalImage({
@@ -727,11 +790,159 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     );
   }
 
+  Future<bool> _confirmDeleteContentItem({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC93C4C),
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return accepted ?? false;
+  }
+
+  Future<void> _showContentImagePreview({
+    required String title,
+    required String imageSource,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: PuzzleImageAdapter(
+                  imageSource: imageSource,
+                  size: 260,
+                  borderRadius: 20,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cerrar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openExistingItemImageSheet({
+    required String title,
+    required Future<void> Function(ImageSource source) onPick,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Tomar foto'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await onPick(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Usar galería'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await onPick(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteMemoryItem(MemoryContentItem item) async {
+    final accepted = await _confirmDeleteContentItem(
+      title: 'Eliminar imagen de Cartas gemelas',
+      message:
+          'Esta acción quitará esta imagen del contenido global de Cartas gemelas en futuras partidas. No elimina personalizaciones de niños ni borra otros archivos ya usados. ¿Deseas continuar?',
+      confirmLabel: 'Eliminar',
+    );
+    if (!accepted) return;
+    setState(() {
+      final next = _working.memoryItems
+          .where((current) => current.id != item.id)
+          .toList();
+      _working = _working.copyWith(memoryItems: next);
+    });
+  }
+
+  Future<void> _deletePuzzleItem(PuzzleContentItem item) async {
+    final accepted = await _confirmDeleteContentItem(
+      title: 'Eliminar imagen de rompecabezas',
+      message:
+          'Esta acción quitará esta imagen del contenido global de Arma la imagen en futuras partidas. No elimina personalizaciones de niños ni borra otros archivos ya usados. ¿Deseas continuar?',
+      confirmLabel: 'Eliminar',
+    );
+    if (!accepted) return;
+    setState(() {
+      final next = _working.puzzleItems
+          .where((current) => current.id != item.id)
+          .toList();
+      _working = _working.copyWith(puzzleItems: next);
+    });
+  }
+
   Future<void> _pickNewItemImage({
     required String targetKey,
     required String gameKey,
     required ImageSource source,
-    required void Function(String url) onUploaded,
+    required FutureOr<bool> Function(String url) onUploaded,
+    String successMessage = 'Imagen subida. Completa los campos y agrega el item.',
+    List<String> expectedConcepts = const <String>[],
+    String expectedEmotion = '',
+    String expectedDescription = '',
   }) async {
     if (_newItemBusyKey != null) return;
     if (!widget.controller.firebaseEnabled) {
@@ -783,10 +994,20 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         );
         return;
       }
+      final uploadItemId = 'content_${DateTime.now().microsecondsSinceEpoch}';
+      final reviewOk = await _reviewAdminImageUpload(
+        filePath: prepared.filePath,
+        gameKey: gameKey,
+        itemId: uploadItemId,
+        expectedConcepts: expectedConcepts,
+        expectedEmotion: expectedEmotion,
+        expectedDescription: expectedDescription,
+      );
+      if (!reviewOk) return;
 
       final upload = await widget.controller.authService.uploadGlobalGameImageFile(
         gameKey: gameKey,
-        itemId: 'content_${DateTime.now().microsecondsSinceEpoch}',
+        itemId: uploadItemId,
         filePath: prepared.filePath,
       );
       if (!mounted) return;
@@ -798,10 +1019,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         );
         return;
       }
-      onUploaded(upload.data!.downloadUrl);
+      final handled = await onUploaded(upload.data!.downloadUrl);
+      if (!handled) return;
       await NebulaSnack.show(
         context,
-        message: 'Imagen subida. Completa los campos y agrega el item.',
+        message: successMessage,
         ok: true,
       );
     } finally {
@@ -933,6 +1155,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       final audioOk = await _validateAudioSource(audioSource);
       if (!audioOk) return;
     }
+    final reviewOk = await _reviewAdminImageUpload(
+      filePath: picked.path,
+      gameKey: 'puzzle',
+      itemId: 'puzzle_${DateTime.now().microsecondsSinceEpoch}',
+      expectedDescription: 'rompecabezas',
+    );
+    if (!reviewOk) return;
 
     final mime = _mimeForPath(picked.name);
     final sourceValue = 'data:$mime;base64,${base64Encode(bytes)}';
@@ -1144,11 +1373,46 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     });
   }
 
-  void _removePuzzleItem(String id) {
-    final next = _working.puzzleItems.where((item) => item.id != id).toList();
-    setState(() {
-      _working = _working.copyWith(puzzleItems: next);
-    });
+  Future<void> _replacePuzzleItemImage({
+    required PuzzleContentItem item,
+    required ImageSource source,
+  }) async {
+    await _pickNewItemImage(
+      targetKey: 'puzzle_edit_${item.id}',
+      gameKey: 'puzzle',
+      source: source,
+      onUploaded: (url) {
+        setState(() {
+          final next = _working.puzzleItems.map((current) {
+            if (current.id != item.id) return current;
+            return current.copyWith(
+              imageSource: url,
+              width: 0,
+              height: 0,
+            );
+          }).toList();
+          _working = _working.copyWith(puzzleItems: next);
+        });
+        return true;
+      },
+    );
+  }
+
+  List<_GlobalDefaultImageItem> _mergeConfiguredItemsIntoDefaults({
+    required List<_GlobalDefaultImageItem> defaults,
+    required Iterable<_GlobalDefaultImageItem> configuredItems,
+  }) {
+    final seen = <String>{
+      ...defaults.map((item) => item.defaultSource.trim().toLowerCase()),
+    };
+    final merged = <_GlobalDefaultImageItem>[...defaults];
+    for (final item in configuredItems) {
+      final sourceKey = item.defaultSource.trim().toLowerCase();
+      if (sourceKey.isEmpty || seen.contains(sourceKey)) continue;
+      seen.add(sourceKey);
+      merged.add(item);
+    }
+    return merged;
   }
 
   Widget _buildGlobalDefaultsCard({
@@ -1209,7 +1473,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                       Text(
                         hasOverride
                             ? 'Usando predeterminada actualizada por admin.'
-                            : 'Usando imagen original de la app.',
+                            : (item.isOriginalAppDefault
+                                ? 'Usando imagen original de la app.'
+                                : 'Usando imagen agregada por admin.'),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: hasOverride
                                   ? const Color(0xFF1B8B3B)
@@ -1301,6 +1567,66 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
           ),
         )
         .toList();
+    final defaultMemoryItems = defaultMemoryImageSources
+        .map(
+          (source) => _GlobalDefaultImageItem(
+            gameKey: 'cartas_gemelas',
+            itemId: source,
+            title: _prettyNameFromSource(source),
+            subtitle: 'Se usa como imagen base global en Cartas gemelas.',
+            defaultSource: source,
+            expectedConcepts: _expectedConceptsFromSource(source),
+            expectedDescription: _prettyNameFromSource(source),
+          ),
+        )
+        .toList();
+    final defaultPuzzleItems = defaultPuzzleImageSources
+        .map(
+          (source) => _GlobalDefaultImageItem(
+            gameKey: 'puzzle',
+            itemId: source,
+            title: _prettyNameFromSource(source),
+            subtitle: 'Se usa como imagen base global en Arma la imagen.',
+            defaultSource: source,
+            expectedConcepts: _expectedConceptsFromSource(source),
+            expectedDescription: _prettyNameFromSource(source),
+          ),
+        )
+        .toList();
+    final mergedMemoryItems = _mergeConfiguredItemsIntoDefaults(
+      defaults: defaultMemoryItems,
+      configuredItems: memoryItems
+          .where((item) => item.imagePath.trim().isNotEmpty)
+          .map(
+            (item) => _GlobalDefaultImageItem(
+              gameKey: 'cartas_gemelas',
+              itemId: item.imagePath.trim(),
+              title: _prettyNameFromSource(item.imagePath),
+              subtitle: 'Imagen agregada por admin a Cartas gemelas.',
+              defaultSource: item.imagePath.trim(),
+              expectedConcepts: _expectedConceptsFromSource(item.imagePath),
+              expectedDescription: _prettyNameFromSource(item.imagePath),
+              isOriginalAppDefault: false,
+            ),
+          ),
+    );
+    final mergedPuzzleItems = _mergeConfiguredItemsIntoDefaults(
+      defaults: defaultPuzzleItems,
+      configuredItems: puzzleItems
+          .where((item) => item.imageSource.trim().isNotEmpty)
+          .map(
+            (item) => _GlobalDefaultImageItem(
+              gameKey: 'puzzle',
+              itemId: item.imageSource.trim(),
+              title: _prettyNameFromSource(item.imageSource),
+              subtitle: 'Imagen agregada por admin a Arma la imagen.',
+              defaultSource: item.imageSource.trim(),
+              expectedConcepts: _expectedConceptsFromSource(item.imageSource),
+              expectedDescription: _prettyNameFromSource(item.imageSource),
+              isOriginalAppDefault: false,
+            ),
+          ),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -1352,6 +1678,20 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
               description:
                   'Estas imagenes son la base global del juego. Las personalizaciones del cuidador por nino siguen teniendo prioridad.',
               items: defaultSoundItems,
+            ),
+            const SizedBox(height: 10),
+            _buildGlobalDefaultsCard(
+              title: 'Predeterminadas globales Â· Cartas gemelas',
+              description:
+                  'Estas imagenes base se usan en Cartas gemelas para todos los usuarios que no tengan una personalizacion propia.',
+              items: mergedMemoryItems,
+            ),
+            const SizedBox(height: 10),
+            _buildGlobalDefaultsCard(
+              title: 'Predeterminadas globales Â· Arma la imagen',
+              description:
+                  'Estas imagenes base se usan en Arma la imagen para todos los usuarios. Puedes verlas, cambiarlas o restaurarlas.',
+              items: mergedPuzzleItems,
             ),
             const SizedBox(height: 10),
             Card(
@@ -1416,7 +1756,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                         setState(() {
                                           _emotionImageController.text = url;
                                         });
+                                        return true;
                                       },
+                                      expectedEmotion:
+                                          _emotionCorrectController.text.trim(),
+                                      expectedDescription:
+                                          _emotionCorrectController.text.trim(),
                                     ),
                           ),
                         ),
@@ -1436,7 +1781,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                         setState(() {
                                           _emotionImageController.text = url;
                                         });
+                                        return true;
                                       },
+                                      expectedEmotion:
+                                          _emotionCorrectController.text.trim(),
+                                      expectedDescription:
+                                          _emotionCorrectController.text.trim(),
                                     ),
                           ),
                         ),
@@ -1546,7 +1896,24 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                         setState(() {
                                           _soundImageController.text = url;
                                         });
+                                        return true;
                                       },
+                                      expectedConcepts: <String>[
+                                        ..._expectedConceptsFromSource(
+                                          _soundAssetController.text,
+                                        ),
+                                        _soundCategoryController.text.trim(),
+                                      ],
+                                      expectedDescription:
+                                          _prettyNameFromSource(
+                                                    _soundAssetController.text,
+                                                  ) ==
+                                                  'Elemento'
+                                              ? _soundCategoryController.text
+                                                  .trim()
+                                              : _prettyNameFromSource(
+                                                  _soundAssetController.text,
+                                                ),
                                     ),
                           ),
                         ),
@@ -1566,7 +1933,24 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                         setState(() {
                                           _soundImageController.text = url;
                                         });
+                                        return true;
                                       },
+                                      expectedConcepts: <String>[
+                                        ..._expectedConceptsFromSource(
+                                          _soundAssetController.text,
+                                        ),
+                                        _soundCategoryController.text.trim(),
+                                      ],
+                                      expectedDescription:
+                                          _prettyNameFromSource(
+                                                    _soundAssetController.text,
+                                                  ) ==
+                                                  'Elemento'
+                                              ? _soundCategoryController.text
+                                                  .trim()
+                                              : _prettyNameFromSource(
+                                                  _soundAssetController.text,
+                                                ),
                                     ),
                           ),
                         ),
@@ -1678,7 +2062,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                             setState(() {
                                               _diloImageController.text = url;
                                             });
+                                            return true;
                                           },
+                                          expectedConcepts: <String>[
+                                            _diloTextController.text.trim(),
+                                          ],
+                                          expectedDescription:
+                                              _diloTextController.text.trim(),
                                         ),
                           ),
                         ),
@@ -1781,11 +2171,14 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                           targetKey: 'memory_image',
                                           gameKey: 'cartas_gemelas',
                                           source: ImageSource.gallery,
-                                          onUploaded: (url) {
+                                          onUploaded: (url) async {
                                             setState(() {
                                               _memoryImageController.text = url;
                                             });
-                                      },
+                                            return _addMemoryItemFromSource(url);
+                                          },
+                                          successMessage:
+                                              'Imagen subida y agregada a Cartas gemelas.',
                                     ),
                           ),
                         ),
@@ -1802,11 +2195,14 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                           targetKey: 'memory_image',
                                           gameKey: 'cartas_gemelas',
                                           source: ImageSource.camera,
-                                          onUploaded: (url) {
+                                          onUploaded: (url) async {
                                             setState(() {
                                               _memoryImageController.text = url;
                                             });
-                                      },
+                                            return _addMemoryItemFromSource(url);
+                                          },
+                                          successMessage:
+                                              'Imagen subida y agregada a Cartas gemelas.',
                                     ),
                           ),
                         ),
@@ -1839,27 +2235,125 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     if (memoryItems.isEmpty)
                       const Text('Sin imagenes personalizadas.')
                     else
-                      ...memoryItems.map((item) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Switch(
-                              value: item.enabled,
-                              onChanged: (value) =>
-                                  _toggleMemoryItem(item.id, value),
-                            ),
-                            title: Text(item.id),
-                            subtitle: Text(
-                              item.audioSource.isEmpty
-                                  ? item.imagePath
-                                  : '${item.imagePath} | Audio: ${item.audioSource}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _removeMemoryItem(item.id),
-                            ),
-                          )),
+                      ...memoryItems.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        final busy = _newItemBusyKey == 'memory_edit_${item.id}';
+                        return Container(
+                          margin: const EdgeInsets.only(top: 10),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF6F8FC),
+                            borderRadius: BorderRadius.circular(14),
+                            border:
+                                Border.all(color: const Color(0xFFDCE4F2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => _showContentImagePreview(
+                                      title: 'Carta ${index + 1}',
+                                      imageSource: item.imagePath,
+                                    ),
+                                    child: PuzzleImageAdapter(
+                                      imageSource: item.imagePath,
+                                      size: 88,
+                                      borderRadius: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Carta ${index + 1}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item.audioSource.isEmpty
+                                              ? item.imagePath
+                                              : '${item.imagePath}\nAudio: ${item.audioSource}',
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: item.enabled,
+                                    onChanged: (value) =>
+                                        _toggleMemoryItem(item.id, value),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () => _showContentImagePreview(
+                                      title: 'Carta ${index + 1}',
+                                      imageSource: item.imagePath,
+                                    ),
+                                    icon: const Icon(Icons.visibility_outlined),
+                                    label: const Text('Ver'),
+                                  ),
+                                  FilledButton.icon(
+                                    onPressed: busy
+                                        ? null
+                                        : () => _openExistingItemImageSheet(
+                                              title:
+                                                  'Cambiar imagen de Carta ${index + 1}',
+                                              onPick: (source) =>
+                                                  _replaceMemoryItemImage(
+                                                item: item,
+                                                source: source,
+                                              ),
+                                            ),
+                                    icon: busy
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.edit_outlined),
+                                    label: Text(
+                                      busy
+                                          ? 'Subiendo...'
+                                          : 'Cambiar imagen',
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _deleteMemoryItem(item),
+                                    icon: const Icon(Icons.delete_outline),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFFC93C4C),
+                                    ),
+                                    label: const Text('Eliminar'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -1942,42 +2436,127 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     if (puzzleItems.isEmpty)
                       const Text('Sin imagenes de puzzle configuradas.')
                     else
-                      ...puzzleItems.map((item) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Switch(
-                              value: item.enabled,
-                              onChanged: (value) =>
-                                  _togglePuzzleItem(item.id, value),
-                            ),
-                            title: Text(
-                              item.width > 0 && item.height > 0
-                                  ? '${item.width}x${item.height}'
-                                  : 'Fuente manual',
-                            ),
-                            subtitle: Text(
-                              item.audioSource.isEmpty
-                                  ? item.imageSource
-                                  : '${item.imageSource} | Audio: ${item.audioSource}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: Wrap(
-                              spacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                PuzzleImageAdapter(
-                                  imageSource: item.imageSource,
-                                  size: 34,
-                                  borderRadius: 6,
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () => _removePuzzleItem(item.id),
-                                ),
-                              ],
-                            ),
-                          )),
+                      ...puzzleItems.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        final busy = _newItemBusyKey == 'puzzle_edit_${item.id}';
+                        final sizeLabel =
+                            item.width > 0 && item.height > 0
+                                ? '${item.width}x${item.height}'
+                                : 'Imagen configurada';
+                        return Container(
+                          margin: const EdgeInsets.only(top: 10),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF6F8FC),
+                            borderRadius: BorderRadius.circular(14),
+                            border:
+                                Border.all(color: const Color(0xFFDCE4F2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => _showContentImagePreview(
+                                      title: 'Imagen ${index + 1}',
+                                      imageSource: item.imageSource,
+                                    ),
+                                    child: PuzzleImageAdapter(
+                                      imageSource: item.imageSource,
+                                      size: 88,
+                                      borderRadius: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Imagen ${index + 1}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '$sizeLabel\n${item.audioSource.isEmpty ? item.imageSource : '${item.imageSource}\nAudio: ${item.audioSource}'}',
+                                          maxLines: 4,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: item.enabled,
+                                    onChanged: (value) =>
+                                        _togglePuzzleItem(item.id, value),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () => _showContentImagePreview(
+                                      title: 'Imagen ${index + 1}',
+                                      imageSource: item.imageSource,
+                                    ),
+                                    icon: const Icon(Icons.visibility_outlined),
+                                    label: const Text('Ver'),
+                                  ),
+                                  FilledButton.icon(
+                                    onPressed: busy
+                                        ? null
+                                        : () => _openExistingItemImageSheet(
+                                              title:
+                                                  'Cambiar imagen de rompecabezas ${index + 1}',
+                                              onPick: (source) =>
+                                                  _replacePuzzleItemImage(
+                                                item: item,
+                                                source: source,
+                                              ),
+                                            ),
+                                    icon: busy
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.edit_outlined),
+                                    label: Text(
+                                      busy
+                                          ? 'Subiendo...'
+                                          : 'Cambiar imagen',
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _deletePuzzleItem(item),
+                                    icon: const Icon(Icons.delete_outline),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFFC93C4C),
+                                    ),
+                                    label: const Text('Eliminar'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -2089,6 +2668,7 @@ class _GlobalDefaultImageItem {
     this.expectedConcepts = const <String>[],
     this.expectedEmotion = '',
     this.expectedDescription = '',
+    this.isOriginalAppDefault = true,
   });
 
   final String gameKey;
@@ -2099,4 +2679,5 @@ class _GlobalDefaultImageItem {
   final List<String> expectedConcepts;
   final String expectedEmotion;
   final String expectedDescription;
+  final bool isOriginalAppDefault;
 }

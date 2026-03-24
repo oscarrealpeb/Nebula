@@ -148,6 +148,12 @@ class AuthService {
 
     if (_useFirebase) {
       final firebaseUser = _firebaseAuth?.currentUser;
+      if (sessionUser.role == UserRole.admin && firebaseUser == null) {
+        _currentUser = null;
+        _activePortalRole = PortalRole.caregiver;
+        await _store.clearSession();
+        return null;
+      }
       if (firebaseUser != null) {
         final verificationGate = await _enforceVerifiedEmailForPasswordUser(
           firebaseUser,
@@ -239,7 +245,6 @@ class AuthService {
     );
 
     try {
-      await _store.writeAdminConfig(normalized.toJson());
       if (_useFirebase) {
         if (_firebaseAuth!.currentUser == null) {
           return ServiceResult(
@@ -249,7 +254,15 @@ class AuthService {
             data: normalized,
           );
         }
-        await _ensureAdminRoleInCloud();
+        final adminReady = await _ensureAdminRoleInCloud();
+        if (!adminReady) {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos confirmar los permisos admin en Firestore. Vuelve a iniciar sesi\u00f3n admin y reintenta.',
+            data: normalized,
+          );
+        }
         try {
           await _firestore!
               .collection('app')
@@ -261,28 +274,40 @@ class AuthService {
               docId: 'admin_config',
               payload: normalized.toJson(),
             );
-            if (retryOk) {
+            if (!retryOk) {
               return ServiceResult(
-                ok: true,
-                message: 'Config admin guardada.',
+                ok: false,
+                message:
+                    'Firestore rechazó el cambio global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
                 data: normalized,
               );
             }
+          } else {
             return ServiceResult(
               ok: false,
               message:
-                  'Firestore rechazó el cambio global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
+                  'No pudimos publicar la config admin en la nube: ${e.message ?? e.code}',
               data: normalized,
             );
           }
+        }
+        try {
+          await _store.writeAdminConfig(normalized.toJson());
+        } catch (e) {
           return ServiceResult(
-            ok: false,
+            ok: true,
             message:
-                'No pudimos publicar la config admin en la nube: ${e.message ?? e.code}',
+                'La config admin sí se publicó globalmente, pero no pudimos guardar la copia local: $e',
             data: normalized,
           );
         }
+        return ServiceResult(
+          ok: true,
+          message: 'Config admin guardada.',
+          data: normalized,
+        );
       }
+      await _store.writeAdminConfig(normalized.toJson());
       return ServiceResult(
         ok: true,
         message: 'Config admin guardada.',
@@ -305,23 +330,25 @@ class AuthService {
     if (!_useFirebase || user == null || user.role != UserRole.admin) {
       return false;
     }
-    try {
-      final firebaseUid = _firebaseAuth?.currentUser?.uid ?? '';
-      final cloudUser = firebaseUid.isNotEmpty && firebaseUid != user.id
-          ? _copyUserWithId(user, firebaseUid)
-          : user;
-      await _firestore!
-          .collection('users')
-          .doc(cloudUser.id)
-          .set(_toCloudUserData(cloudUser), SetOptions(merge: true));
-      await _firestore!
-          .collection('app')
-          .doc(docId)
-          .set(payload, SetOptions(merge: true));
-      return true;
-    } catch (_) {
-      return false;
+    final adminReady = await _ensureAdminRoleInCloud();
+    if (!adminReady) return false;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await _firestore!
+            .collection('app')
+            .doc(docId)
+            .set(payload, SetOptions(merge: true));
+        return true;
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied' || attempt == 3) {
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
     }
+    return false;
   }
 
   Future<bool> _ensureAdminRoleInCloud() async {
@@ -331,23 +358,42 @@ class AuthService {
     }
     final uid = _firebaseAuth?.currentUser?.uid ?? '';
     if (uid.isEmpty) return false;
-    try {
-      await _firestore!.collection('users').doc(uid).set(
-        {
-          'id': uid,
-          'name': user.name,
-          'username': user.username,
-          'usernameLower': user.username.toLowerCase(),
-          'email': user.email,
-          'emailLower': user.email.toLowerCase(),
-          'role': UserRole.admin,
-        },
-        SetOptions(merge: true),
-      );
-      return true;
-    } catch (_) {
-      return false;
+    final cloudUser = uid != user.id ? _copyUserWithId(user, uid) : user;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await _firestore!
+            .collection('users')
+            .doc(uid)
+            .set(_adminRoleSeedData(cloudUser), SetOptions(merge: true));
+        final snapshot = await _firestore!
+            .collection('users')
+            .doc(uid)
+            .get(const GetOptions(source: Source.server));
+        final data = snapshot.data();
+        final role =
+            (data?['role'] as String?)?.trim().toLowerCase() ?? '';
+        if (role == UserRole.admin) {
+          return true;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
     }
+    return false;
+  }
+
+  Map<String, dynamic> _adminRoleSeedData(NebulaUser user) {
+    final email = user.email.trim();
+    final username = user.username.trim();
+    final name = user.name.trim();
+    return {
+      'id': user.id,
+      if (name.isNotEmpty) 'name': name,
+      if (username.isNotEmpty) 'username': username,
+      if (username.isNotEmpty) 'usernameLower': username.toLowerCase(),
+      if (email.isNotEmpty) 'email': email,
+      if (email.isNotEmpty) 'emailLower': email.toLowerCase(),
+      'role': user.role,
+    };
   }
 
   Future<ServiceResult<GameContentConfig>> fetchGameContentConfig({
@@ -510,6 +556,24 @@ class AuthService {
             (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
           ),
     );
+    final puzzleOverrides = Map<String, String>.fromEntries(
+      config.globalPuzzleImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final memoryOverrides = Map<String, String>.fromEntries(
+      config.globalMemoryImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
     final emotionStoragePaths = Map<String, String>.fromEntries(
       config.globalEmotionImageStoragePaths.entries
           .map(
@@ -528,6 +592,24 @@ class AuthService {
             (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
           ),
     );
+    final puzzleStoragePaths = Map<String, String>.fromEntries(
+      config.globalPuzzleImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final memoryStoragePaths = Map<String, String>.fromEntries(
+      config.globalMemoryImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
     final normalized = GameContentConfig(
       emotionItems: emotions,
       soundItems: sounds,
@@ -536,13 +618,16 @@ class AuthService {
       memoryItems: memoryItems,
       globalEmotionImageOverrides: emotionOverrides,
       globalSoundImageOverrides: soundOverrides,
+      globalPuzzleImageOverrides: puzzleOverrides,
+      globalMemoryImageOverrides: memoryOverrides,
       globalEmotionImageStoragePaths: emotionStoragePaths,
       globalSoundImageStoragePaths: soundStoragePaths,
+      globalPuzzleImageStoragePaths: puzzleStoragePaths,
+      globalMemoryImageStoragePaths: memoryStoragePaths,
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
 
     try {
-      await _store.writeGameContentConfig(normalized.toJson());
       if (_useFirebase) {
         if (_firebaseAuth!.currentUser == null) {
           return ServiceResult(
@@ -552,7 +637,15 @@ class AuthService {
             data: normalized,
           );
         }
-        await _ensureAdminRoleInCloud();
+        final adminReady = await _ensureAdminRoleInCloud();
+        if (!adminReady) {
+          return ServiceResult(
+            ok: false,
+            message:
+                'No pudimos confirmar los permisos admin en Firestore. Vuelve a iniciar sesi\u00f3n admin y reintenta.',
+            data: normalized,
+          );
+        }
         try {
           await _firestore!
               .collection('app')
@@ -564,28 +657,40 @@ class AuthService {
               docId: 'game_content_config',
               payload: normalized.toJson(),
             );
-            if (retryOk) {
+            if (!retryOk) {
               return ServiceResult(
-                ok: true,
-                message: 'Contenido de juegos guardado.',
+                ok: false,
+                message:
+                    'Firestore rechazó la publicación global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
                 data: normalized,
               );
             }
+          } else {
             return ServiceResult(
               ok: false,
               message:
-                  'Firestore rechazó la publicación global por permisos. Inicia sesión admin en Firebase y revisa reglas de Firestore.',
+                  'No pudimos publicar el contenido global en la nube: ${e.message ?? e.code}',
               data: normalized,
             );
           }
+        }
+        try {
+          await _store.writeGameContentConfig(normalized.toJson());
+        } catch (e) {
           return ServiceResult(
-            ok: false,
+            ok: true,
             message:
-                'No pudimos publicar el contenido global en la nube: ${e.message ?? e.code}',
+                'El contenido global sí se publicó, pero no pudimos guardar la copia local: $e',
             data: normalized,
           );
         }
+        return ServiceResult(
+          ok: true,
+          message: 'Contenido de juegos guardado.',
+          data: normalized,
+        );
       }
+      await _store.writeGameContentConfig(normalized.toJson());
       return ServiceResult(
         ok: true,
         message: 'Contenido de juegos guardado.',
