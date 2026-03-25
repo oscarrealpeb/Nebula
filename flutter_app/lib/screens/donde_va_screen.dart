@@ -6,6 +6,7 @@ import 'package:lottie/lottie.dart';
 import '../controllers/app_controller.dart';
 import '../core/data/donde_va_catalog.dart';
 import '../widgets/cosmic_background.dart';
+import '../widgets/puzzle_image_adapter.dart';
 
 class DondeVaScreen extends StatefulWidget {
   const DondeVaScreen({
@@ -50,7 +51,11 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
 
   void _startSession() {
     _startedAt = DateTime.now();
-    _session = buildDondeVaGameSession(_difficultyStars, _random);
+    _session = buildDondeVaGameSessionWithItems(
+      _difficultyStars,
+      _random,
+      widget.controller.gameContentConfig.dondeVaItems,
+    );
     _roundIndex = 0;
     _mistakes = 0;
     _totalAttempts = 0;
@@ -253,13 +258,13 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                _GameHeader(
-                  accent: accent,
-                  currentRound: _roundIndex + 1,
-                  totalRounds: _session.rounds.length,
-                  mistakes: _mistakes,
-                  difficultyStars: _difficultyStars,
-                ),
+                      _GameHeader(
+                        accent: accent,
+                        currentRound: _roundIndex + 1,
+                        totalRounds: _session.rounds.length,
+                        mistakes: _mistakes,
+                        difficultyStars: _difficultyStars,
+                      ),
                       const SizedBox(height: 14),
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 220),
@@ -332,17 +337,23 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
                         child: _ObjectCard(
                           accent: accent,
                           item: _currentRound.item,
-                          assetPath: widget.controller.resolvedGameImageSourceFor(
+                          assetPath:
+                              widget.controller.resolvedGameImageSourceFor(
                             gameKey: 'donde_va',
                             itemId: dondeVaGlobalItemId(
                               categoryId: _currentRound.correctCategory.id,
                               itemId: _currentRound.item.id,
                             ),
-                            defaultSource: dondeVaItemAssetPath(
-                              categoryId: _currentRound.correctCategory.id,
-                              itemId: _currentRound.item.id,
-                              extension: _currentRound.item.assetExtension,
-                            ),
+                            defaultSource:
+                                _currentRound.item.imageSource.trim().isNotEmpty
+                                    ? _currentRound.item.imageSource.trim()
+                                    : dondeVaItemAssetPath(
+                                        categoryId:
+                                            _currentRound.correctCategory.id,
+                                        itemId: _currentRound.item.id,
+                                        extension:
+                                            _currentRound.item.assetExtension,
+                                      ),
                           ),
                         ),
                       ),
@@ -350,12 +361,12 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
                       Text(
                         'Escoge la caja correcta para este objeto.',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: const Color(0xFF253760),
-                              fontWeight: FontWeight.w700,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: const Color(0xFF253760),
+                                  fontWeight: FontWeight.w700,
+                                ),
                       ),
-
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -429,9 +440,7 @@ class _GameHeader extends StatelessWidget {
                     right: index == totalRounds - 1 ? 0 : 8,
                   ),
                   decoration: BoxDecoration(
-                    color: isCompleted
-                        ? accent
-                        : const Color(0xFFE1E1E4),
+                    color: isCompleted ? accent : const Color(0xFFE1E1E4),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -497,7 +506,8 @@ class _CategoryBox extends StatelessWidget {
         scale: pressed ? 0.96 : 1,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          constraints: const BoxConstraints(minHeight: 176, maxHeight: 176),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
           decoration: BoxDecoration(
             color: baseColor,
             borderRadius: BorderRadius.circular(20),
@@ -515,21 +525,39 @@ class _CategoryBox extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                category.emoji,
-                style: const TextStyle(fontSize: 30),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: category.emojis
+                    .map(
+                      (emoji) => Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 28),
+                      ),
+                    )
+                    .toList(),
               ),
-              const SizedBox(height: 8),
-              Text(
-                category.label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color:
-                      disabled ? Colors.grey.shade700 : const Color(0xFF253760),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 46,
+                child: Center(
+                  child: Text(
+                    category.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: disabled
+                          ? Colors.grey.shade700
+                          : const Color(0xFF253760),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               Icon(
                 disabled
                     ? Icons.block_rounded
@@ -541,6 +569,7 @@ class _CategoryBox extends StatelessWidget {
                     : isCorrect
                         ? const Color(0xFF2D8B57)
                         : const Color(0xFF253760),
+                size: 28,
               ),
             ],
           ),
@@ -598,18 +627,15 @@ class _ObjectCard extends StatelessWidget {
               ),
               child: AspectRatio(
                 aspectRatio: 1,
-                child: Image.asset(
-                  assetPath,
+                child: PuzzleImageAdapter(
+                  imageSource: assetPath,
+                  size: 140,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, error, stackTrace) {
-                    debugPrint(
-                      'No se pudo cargar asset de Donde Va: $assetPath',
-                    );
-                    return Text(
-                      item.emoji,
-                      style: const TextStyle(fontSize: 56),
-                    );
-                  },
+                  borderRadius: 16,
+                  errorChild: Text(
+                    item.emoji,
+                    style: const TextStyle(fontSize: 56),
+                  ),
                 ),
               ),
             ),

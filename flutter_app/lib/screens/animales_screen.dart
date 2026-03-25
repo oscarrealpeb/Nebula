@@ -200,6 +200,12 @@ class _AnimalesScreenState extends State<AnimalesScreen> {
   }
 
   @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final animal = animales[animalIndex];
     final color = Theme.of(context).colorScheme.primary;
@@ -218,7 +224,6 @@ class _AnimalesScreenState extends State<AnimalesScreen> {
               ),
             ),
             const SizedBox(height: 10),
-
             Expanded(
               flex: 3,
               child: Container(
@@ -246,9 +251,7 @@ class _AnimalesScreenState extends State<AnimalesScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             Expanded(
               flex: 2,
               child: Row(

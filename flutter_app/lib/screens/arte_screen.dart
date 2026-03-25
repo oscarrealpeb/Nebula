@@ -153,11 +153,16 @@ class _ArteScreenState extends State<ArteScreen> {
     String voice = narrator == 'narrator_1' ? 'm' : 'f';
     String item = arte[itemIndex]['nombre'];
 
-    String path =
-        'sounds/explora/arte/$item/${voice}_${factIndex + 1}.mp3';
+    String path = 'sounds/explora/arte/$item/${voice}_${factIndex + 1}.mp3';
 
     await player.stop();
     await player.play(AssetSource(path));
+  }
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
   }
 
   @override
@@ -192,9 +197,7 @@ class _ArteScreenState extends State<ArteScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 10),
-
             Expanded(
               flex: 3,
               child: Container(
@@ -222,9 +225,7 @@ class _ArteScreenState extends State<ArteScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             Expanded(
               flex: 2,
               child: Row(

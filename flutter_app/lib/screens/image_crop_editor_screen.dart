@@ -61,48 +61,52 @@ class _ImageCropEditorScreenState extends State<ImageCropEditorScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: Crop(
-                    image: widget.imageBytes,
-                    controller: _cropController,
-                    interactive: true,
-                    baseColor: const Color(0xFF020617),
-                    maskColor: Colors.black.withValues(alpha: 0.45),
-                    radius: 18,
-                    aspectRatio: _aspectRatio,
-                    initialRectBuilder: InitialRectBuilder.withSizeAndRatio(
-                      size: 0.85,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Crop(
+                      image: widget.imageBytes,
+                      controller: _cropController,
+                      interactive: true,
+                      baseColor: const Color(0xFF020617),
+                      maskColor: Colors.black.withValues(alpha: 0.45),
+                      radius: 18,
+                      clipBehavior: Clip.none,
                       aspectRatio: _aspectRatio,
-                    ),
-                    onCropped: (result) {
-                      if (!mounted) return;
-                      switch (result) {
-                        case CropSuccess(:final croppedImage):
-                          Navigator.of(context).pop(croppedImage);
-                        case CropFailure():
-                          setState(() => _cropping = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'No pudimos recortar la imagen. Intenta de nuevo.',
+                      initialRectBuilder: InitialRectBuilder.withSizeAndRatio(
+                        size: 0.82,
+                        aspectRatio: _aspectRatio,
+                      ),
+                      onCropped: (result) {
+                        if (!mounted) return;
+                        switch (result) {
+                          case CropSuccess(:final croppedImage):
+                            Navigator.of(context).pop(croppedImage);
+                          case CropFailure():
+                            setState(() => _cropping = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'No pudimos recortar la imagen. Intenta de nuevo.',
+                                ),
                               ),
-                            ),
-                          );
-                      }
-                    },
-                    cornerDotBuilder: (size, _) => Container(
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: const Color(0xFF0F172A),
-                          width: 1.6,
+                            );
+                        }
+                      },
+                      cornerDotBuilder: (size, _) => Container(
+                        width: size,
+                        height: size,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: const Color(0xFF0F172A),
+                            width: 1.6,
+                          ),
                         ),
                       ),
-                    ),
-                    overlayBuilder: (context, rect) => const IgnorePointer(
-                      child: CustomPaint(painter: _GridPainter()),
+                      overlayBuilder: (context, rect) => const IgnorePointer(
+                        child: CustomPaint(painter: _GridPainter()),
+                      ),
                     ),
                   ),
                 ),

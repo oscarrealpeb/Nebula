@@ -4,186 +4,366 @@ class ExploreCategoryDefinition {
   const ExploreCategoryDefinition({
     required this.id,
     required this.label,
+    required this.subtitle,
+    required this.coverImagePath,
   });
 
   final String id;
   final String label;
+  final String subtitle;
+  final String coverImagePath;
+}
+
+class ExploreBuiltInItem {
+  const ExploreBuiltInItem({
+    required this.id,
+    required this.categoryId,
+    required this.title,
+    required this.description,
+    required this.imageSource,
+    required this.audioKey,
+    this.historyPrefix = '',
+  });
+
+  final String id;
+  final String categoryId;
+  final String title;
+  final String description;
+  final String imageSource;
+  final String audioKey;
+  final String historyPrefix;
+
+  bool get usesHistoryNarration => historyPrefix.isNotEmpty;
+
+  String audioSourceForNarrator(String narratorId) {
+    final normalizedNarrator = narratorId.trim().toLowerCase();
+    if (usesHistoryNarration) {
+      final fileName = normalizedNarrator == 'narrator_2'
+          ? 'm${historyPrefix}1.mp3'
+          : '${historyPrefix}1.mp3';
+      return 'sounds/explora/historia/$audioKey/$fileName';
+    }
+    final voice = normalizedNarrator == 'narrator_2' ? 'f' : 'm';
+    return 'sounds/explora/$categoryId/$audioKey/${voice}_1.mp3';
+  }
+
+  ExploreContentItem toContentItem() {
+    return ExploreContentItem(
+      id: id,
+      categoryId: categoryId,
+      title: title,
+      description: description,
+      imageSource: imageSource,
+    );
+  }
+}
+
+ExploreBuiltInItem _animal(String id, String title, String description) {
+  return ExploreBuiltInItem(
+    id: 'explora_animales_$id',
+    categoryId: 'animales',
+    title: title,
+    description: description,
+    imageSource: 'assets/images/explora/animales/$id.png',
+    audioKey: id,
+  );
+}
+
+ExploreBuiltInItem _art(String id, String title, String description) {
+  return ExploreBuiltInItem(
+    id: 'explora_arte_$id',
+    categoryId: 'arte',
+    title: title,
+    description: description,
+    imageSource: 'assets/images/explora/arte/$id.png',
+    audioKey: id,
+  );
+}
+
+ExploreBuiltInItem _history(
+  String id,
+  String title,
+  String description,
+  String prefix,
+) {
+  return ExploreBuiltInItem(
+    id: 'explora_historia_$id',
+    categoryId: 'historia',
+    title: title,
+    description: description,
+    imageSource: 'assets/images/explora/historia/$id.png',
+    audioKey: id,
+    historyPrefix: prefix,
+  );
 }
 
 const List<ExploreCategoryDefinition> exploreCategoryDefinitions =
     <ExploreCategoryDefinition>[
-  ExploreCategoryDefinition(id: 'animales', label: 'Animales'),
-  ExploreCategoryDefinition(id: 'cosas', label: 'Cosas'),
-  ExploreCategoryDefinition(id: 'emociones', label: 'Emociones'),
+  ExploreCategoryDefinition(
+    id: 'animales',
+    label: 'Animales',
+    subtitle: 'Curiosidades del mundo animal',
+    coverImagePath: 'assets/images/explora/animales.png',
+  ),
+  ExploreCategoryDefinition(
+    id: 'historia',
+    label: 'Historia',
+    subtitle: 'Viajes y datos del pasado',
+    coverImagePath: 'assets/images/explora/historia.png',
+  ),
+  ExploreCategoryDefinition(
+    id: 'arte',
+    label: 'Arte',
+    subtitle: 'Obras y artistas famosos',
+    coverImagePath: 'assets/images/explora/arte.png',
+  ),
 ];
 
-const List<ExploreContentItem> defaultExploreItems = <ExploreContentItem>[
-  ExploreContentItem(
-    id: 'animales_perro',
-    categoryId: 'animales',
-    title: 'Perro',
-    description:
-        'El perro suele convivir con las personas y puede aprender rutinas sencillas.',
+final List<ExploreBuiltInItem> defaultExploreBuiltInItems =
+    <ExploreBuiltInItem>[
+  _animal(
+    'perro',
+    'Perro',
+    'Los perros tienen un olfato muy fuerte y suelen ser compa\u00f1eros leales.',
   ),
-  ExploreContentItem(
-    id: 'animales_gato',
-    categoryId: 'animales',
-    title: 'Gato',
-    description:
-        'El gato se mueve con cuidado, escucha bien y suele descansar muchas horas.',
+  _animal(
+    'gato',
+    'Gato',
+    'Los gatos son \u00e1giles, curiosos y pueden ver mejor que nosotros en la oscuridad.',
   ),
-  ExploreContentItem(
-    id: 'animales_pajaro',
-    categoryId: 'animales',
-    title: 'Pajaro',
-    description:
-        'Muchos pajaros tienen plumas, alas y hacen sonidos para comunicarse.',
+  _animal(
+    'conejo',
+    'Conejo',
+    'Los conejos tienen orejas largas, saltan r\u00e1pido y comen muchas plantas.',
   ),
-  ExploreContentItem(
-    id: 'animales_leon',
-    categoryId: 'animales',
-    title: 'Leon',
-    description:
-        'El leon es un animal fuerte que vive en grupo y se reconoce por su melena.',
+  _animal(
+    'vaca',
+    'Vaca',
+    'Las vacas producen leche, pasan mucho tiempo comiendo pasto y tienen gran memoria.',
   ),
-  ExploreContentItem(
-    id: 'animales_elefante',
-    categoryId: 'animales',
-    title: 'Elefante',
-    description:
-        'El elefante tiene trompa, orejas grandes y muy buena memoria.',
+  _animal(
+    'caballo',
+    'Caballo',
+    'Los caballos pueden correr r\u00e1pido y han acompa\u00f1ado a las personas durante siglos.',
   ),
-  ExploreContentItem(
-    id: 'animales_pinguino',
-    categoryId: 'animales',
-    title: 'Pinguino',
-    description:
-        'El pinguino camina erguido, vive en lugares frios y se desplaza bien en el agua.',
+  _animal(
+    'elefante',
+    'Elefante',
+    'Los elefantes son enormes, usan la trompa para muchas tareas y recuerdan mucho.',
   ),
-  ExploreContentItem(
-    id: 'animales_delfin',
-    categoryId: 'animales',
-    title: 'Delfin',
-    description:
-        'El delfin nada rapido, respira aire y suele vivir en grupos.',
+  _animal(
+    'leon',
+    'Le\u00f3n',
+    'El le\u00f3n vive en manadas, ruge muy fuerte y es uno de los grandes felinos.',
   ),
-  ExploreContentItem(
-    id: 'animales_lobo',
-    categoryId: 'animales',
-    title: 'Lobo',
-    description:
-        'El lobo se comunica con aullidos y trabaja en equipo con su manada.',
+  _animal(
+    'tigre',
+    'Tigre',
+    'Cada tigre tiene rayas \u00fanicas y es uno de los felinos m\u00e1s grandes del planeta.',
   ),
-  ExploreContentItem(
-    id: 'cosas_pelota',
-    categoryId: 'cosas',
-    title: 'Pelota',
-    description:
-        'La pelota puede botar o rodar y se usa en muchos juegos de movimiento.',
+  _animal(
+    'jirafa',
+    'Jirafa',
+    'La jirafa es el animal m\u00e1s alto del mundo y usa su cuello para alcanzar hojas altas.',
   ),
-  ExploreContentItem(
-    id: 'cosas_libro',
-    categoryId: 'cosas',
-    title: 'Libro',
-    description:
-        'El libro guarda historias e informacion en hojas ordenadas.',
+  _animal(
+    'mono',
+    'Mono',
+    'Los monos viven en grupos, trepan \u00e1rboles y usan manos y cola para moverse.',
   ),
-  ExploreContentItem(
-    id: 'cosas_avion',
-    categoryId: 'cosas',
-    title: 'Avion',
-    description:
-        'El avion despega, vuela alto y transporta personas o carga.',
+  _animal(
+    'oso',
+    'Oso',
+    'Los osos son fuertes, huelen muy bien y algunos hibernan durante el invierno.',
   ),
-  ExploreContentItem(
-    id: 'cosas_bicicleta',
-    categoryId: 'cosas',
-    title: 'Bicicleta',
-    description:
-        'La bicicleta tiene dos ruedas y se mueve con pedales.',
+  _animal(
+    'delfin',
+    'Delf\u00edn',
+    'Los delfines son mam\u00edferos marinos inteligentes que se comunican con sonidos.',
   ),
-  ExploreContentItem(
-    id: 'cosas_reloj',
-    categoryId: 'cosas',
-    title: 'Reloj',
-    description:
-        'El reloj ayuda a medir el tiempo y a organizar actividades del dia.',
+  _animal(
+    'tucan',
+    'Tuc\u00e1n',
+    'El tuc\u00e1n destaca por su pico grande y colorido, ideal para alcanzar frutas.',
   ),
-  ExploreContentItem(
-    id: 'cosas_luna',
-    categoryId: 'cosas',
-    title: 'Luna',
-    description:
-        'La luna cambia de forma segun la fase y se ve con frecuencia en la noche.',
+  _animal(
+    'pinguino',
+    'Ping\u00fcino',
+    'Los ping\u00fcinos no vuelan, pero nadan muy bien y viven en lugares fr\u00edos.',
   ),
-  ExploreContentItem(
-    id: 'cosas_cohete',
-    categoryId: 'cosas',
-    title: 'Cohete',
-    description:
-        'El cohete se diseña para viajar muy alto y explorar el espacio.',
+  _animal(
+    'tortuga',
+    'Tortuga',
+    'Las tortugas tienen caparaz\u00f3n, se mueven despacio y algunas viven much\u00edsimos a\u00f1os.',
   ),
-  ExploreContentItem(
-    id: 'cosas_planeta',
-    categoryId: 'cosas',
-    title: 'Planeta',
-    description:
-        'Un planeta gira alrededor de una estrella y puede tener lunas.',
+  _art(
+    'mona_lisa',
+    'La Mona Lisa',
+    'La Mona Lisa es una de las pinturas m\u00e1s famosas del mundo y su sonrisa parece misteriosa.',
   ),
-  ExploreContentItem(
-    id: 'emociones_feliz',
-    categoryId: 'emociones',
-    title: 'Feliz',
-    description:
-        'Cuando una persona esta feliz suele sonreir, jugar y disfrutar el momento.',
+  _art(
+    'noche_estrellada',
+    'La noche estrellada',
+    'Van Gogh pint\u00f3 un cielo lleno de movimiento y colores brillantes en esta obra.',
   ),
-  ExploreContentItem(
-    id: 'emociones_triste',
-    categoryId: 'emociones',
-    title: 'Triste',
-    description:
-        'La tristeza puede hacer que alguien quiera estar en calma o necesite consuelo.',
+  _art(
+    'girasoles',
+    'Los girasoles',
+    'Los girasoles de Van Gogh usan el amarillo para transmitir luz, energ\u00eda y vida.',
   ),
-  ExploreContentItem(
-    id: 'emociones_enojado',
-    categoryId: 'emociones',
-    title: 'Enojado',
-    description:
-        'El enojo aparece cuando algo molesta y se puede regular con ayuda y respiracion.',
+  _art(
+    'el_grito',
+    'El grito',
+    'Esta obra de Edvard Munch transmite una emoci\u00f3n intensa de miedo o ansiedad.',
   ),
-  ExploreContentItem(
-    id: 'emociones_sorprendido',
-    categoryId: 'emociones',
-    title: 'Sorprendido',
-    description:
-        'La sorpresa aparece cuando pasa algo inesperado o nuevo.',
+  _art(
+    'joven_perla',
+    'La joven de la perla',
+    'La joven de la perla es famosa por su mirada, la luz en su rostro y su gran misterio.',
   ),
-  ExploreContentItem(
-    id: 'emociones_calmado',
-    categoryId: 'emociones',
-    title: 'Calmado',
-    description:
-        'Sentirse calmado ayuda a pensar mejor y a responder sin prisa.',
+  _art(
+    'da_vinci',
+    'Leonardo da Vinci',
+    'Leonardo da Vinci fue pintor, inventor y uno de los grandes genios del Renacimiento.',
   ),
-  ExploreContentItem(
-    id: 'emociones_asustado',
-    categoryId: 'emociones',
-    title: 'Asustado',
-    description:
-        'El miedo avisa de un posible peligro y poco a poco puede bajar al sentirse seguro.',
+  _art(
+    'van_gogh',
+    'Vincent van Gogh',
+    'Van Gogh pint\u00f3 con colores intensos y pinceladas muy expresivas.',
+  ),
+  _art(
+    'picasso',
+    'Pablo Picasso',
+    'Picasso fue un artista espa\u00f1ol muy famoso y creador del cubismo.',
+  ),
+  _art(
+    'frida_kahlo',
+    'Frida Kahlo',
+    'Frida Kahlo fue una artista mexicana conocida por sus autorretratos y su estilo \u00fanico.',
+  ),
+  _art(
+    'dali',
+    'Salvador Dal\u00ed',
+    'Salvador Dal\u00ed es uno de los artistas m\u00e1s reconocidos del surrealismo.',
+  ),
+  _history(
+    'dinosaurios',
+    'Dinosaurios',
+    'Los dinosaurios vivieron hace millones de a\u00f1os y algunos eran enormes, tranquilos o feroces.',
+    'DIN',
+  ),
+  _history(
+    'ciudades',
+    'Ciudades antiguas',
+    'Las primeras ciudades ten\u00edan casas simples, mercados y reglas para convivir.',
+    'CIU',
+  ),
+  _history(
+    'piratas',
+    'Piratas',
+    'Los piratas viajaban por el mar, segu\u00edan mapas y buscaban tesoros escondidos.',
+    'PIR',
+  ),
+  _history(
+    'egipcios',
+    'Egipcios',
+    'Los egipcios construyeron pir\u00e1mides, escribieron jerogl\u00edficos y vivieron junto al Nilo.',
+    'EGI',
+  ),
+  _history(
+    'castillos',
+    'Castillos',
+    'Los castillos ten\u00edan muros altos, torres y caballeros que proteg\u00edan a sus reinos.',
+    'CAS',
+  ),
+  _history(
+    'vikingos',
+    'Vikingos',
+    'Los vikingos navegaban en barcos largos y contaban historias de dioses y h\u00e9roes.',
+    'VIK',
+  ),
+  _history(
+    'romanos',
+    'Romanos',
+    'Los romanos construyeron caminos, coliseos y un imperio enorme.',
+    'ROM',
+  ),
+  _history(
+    'exploradores',
+    'Exploradores',
+    'Muchos exploradores viajaron durante meses, gui\u00e1ndose por mapas, estrellas y diarios.',
+    'EXP',
+  ),
+  _history(
+    'reyes',
+    'Reyes',
+    'Reyes y reinas viv\u00edan en palacios, usaban coronas y tomaban decisiones importantes.',
+    'REY',
+  ),
+  _history(
+    'transportes',
+    'Transportes antiguos',
+    'Antes la gente viajaba en barcos de vela, carros con caballos y trenes de vapor.',
+    'TRA',
+  ),
+  _history(
+    'civilizaciones',
+    'Civilizaciones',
+    'Las civilizaciones antiguas levantaron ciudades, calendarios y sistemas de escritura.',
+    'CIV',
+  ),
+  _history(
+    'descubrimientos',
+    'Descubrimientos',
+    'Inventos como el fuego, la rueda y la imprenta cambiaron la historia.',
+    'DES',
+  ),
+  _history(
+    'inventos',
+    'Inventos',
+    'El papel, la br\u00fajula y el \u00e1baco ayudaron a aprender, viajar y hacer cuentas.',
+    'INV',
+  ),
+  _history(
+    'ninos',
+    'Ni\u00f1os de la antig\u00fcedad',
+    'En otras \u00e9pocas, muchos ni\u00f1os ayudaban a sus familias y jugaban con objetos simples.',
+    'NIN',
+  ),
+  _history(
+    'maravillas',
+    'Maravillas',
+    'Obras como la Gran Muralla, Machu Picchu o Chich\u00e9n Itz\u00e1 siguen sorprendiendo al mundo.',
+    'MAR',
   ),
 ];
+
+final List<ExploreContentItem> defaultExploreItems = defaultExploreBuiltInItems
+    .map((item) => item.toContentItem())
+    .toList(growable: false);
+
+final Map<String, ExploreBuiltInItem> _defaultExploreBuiltInById = {
+  for (final item in defaultExploreBuiltInItems) item.id.trim().toLowerCase(): item,
+};
 
 final Set<String> _defaultExploreItemIds = defaultExploreItems
     .map((item) => item.id.trim().toLowerCase())
     .toSet();
 
-String exploreCategoryLabelFor(String categoryId) {
+ExploreCategoryDefinition? exploreCategoryDefinitionFor(String categoryId) {
   final normalized = categoryId.trim().toLowerCase();
   for (final category in exploreCategoryDefinitions) {
-    if (category.id == normalized) return category.label;
+    if (category.id == normalized) return category;
   }
-  return 'Categoria';
+  return null;
+}
+
+String exploreCategoryLabelFor(String categoryId) {
+  return exploreCategoryDefinitionFor(categoryId)?.label ?? 'Categor\u00eda';
+}
+
+ExploreBuiltInItem? defaultExploreBuiltInItemById(String itemId) {
+  return _defaultExploreBuiltInById[itemId.trim().toLowerCase()];
 }
 
 bool isDefaultExploreItemId(String itemId) {

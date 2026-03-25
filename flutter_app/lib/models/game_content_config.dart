@@ -172,7 +172,9 @@ class DiloContentItem {
     required this.difficultyStars,
     required this.imagePath,
     required this.text,
-    required this.audioSource,
+    this.audioSource = '',
+    this.audioSourceMale = '',
+    this.audioSourceFemale = '',
     this.enabled = true,
   });
 
@@ -181,7 +183,20 @@ class DiloContentItem {
   final String imagePath;
   final String text;
   final String audioSource;
+  final String audioSourceMale;
+  final String audioSourceFemale;
   final bool enabled;
+
+  String audioSourceForNarrator(String narratorId) {
+    final normalized = narratorId.trim().toLowerCase();
+    final preferred =
+        normalized == 'narrator_2' ? audioSourceFemale : audioSourceMale;
+    if (preferred.trim().isNotEmpty) return preferred.trim();
+    if (audioSource.trim().isNotEmpty) return audioSource.trim();
+    final fallback =
+        normalized == 'narrator_2' ? audioSourceMale : audioSourceFemale;
+    return fallback.trim();
+  }
 
   DiloContentItem copyWith({
     String? id,
@@ -189,6 +204,8 @@ class DiloContentItem {
     String? imagePath,
     String? text,
     String? audioSource,
+    String? audioSourceMale,
+    String? audioSourceFemale,
     bool? enabled,
   }) {
     return DiloContentItem(
@@ -197,6 +214,8 @@ class DiloContentItem {
       imagePath: imagePath ?? this.imagePath,
       text: text ?? this.text,
       audioSource: audioSource ?? this.audioSource,
+      audioSourceMale: audioSourceMale ?? this.audioSourceMale,
+      audioSourceFemale: audioSourceFemale ?? this.audioSourceFemale,
       enabled: enabled ?? this.enabled,
     );
   }
@@ -208,6 +227,8 @@ class DiloContentItem {
       'imagePath': imagePath,
       'text': text,
       'audioSource': audioSource,
+      'audioSourceMale': audioSourceMale,
+      'audioSourceFemale': audioSourceFemale,
       'enabled': enabled,
     };
   }
@@ -219,6 +240,8 @@ class DiloContentItem {
       imagePath: (json['imagePath'] as String?) ?? '',
       text: (json['text'] as String?) ?? '',
       audioSource: (json['audioSource'] as String?) ?? '',
+      audioSourceMale: (json['audioSourceMale'] as String?) ?? '',
+      audioSourceFemale: (json['audioSourceFemale'] as String?) ?? '',
       enabled: (json['enabled'] as bool?) ?? true,
     );
   }
@@ -276,6 +299,10 @@ class ExploreContentItem {
     required this.categoryId,
     required this.title,
     required this.description,
+    required this.imageSource,
+    this.audioSource = '',
+    this.audioSourceMale = '',
+    this.audioSourceFemale = '',
     this.enabled = true,
   });
 
@@ -283,13 +310,32 @@ class ExploreContentItem {
   final String categoryId;
   final String title;
   final String description;
+  final String imageSource;
+  final String audioSource;
+  final String audioSourceMale;
+  final String audioSourceFemale;
   final bool enabled;
+
+  String audioSourceForNarrator(String narratorId) {
+    final normalized = narratorId.trim().toLowerCase();
+    final preferred =
+        normalized == 'narrator_2' ? audioSourceFemale : audioSourceMale;
+    if (preferred.trim().isNotEmpty) return preferred.trim();
+    if (audioSource.trim().isNotEmpty) return audioSource.trim();
+    final fallback =
+        normalized == 'narrator_2' ? audioSourceMale : audioSourceFemale;
+    return fallback.trim();
+  }
 
   ExploreContentItem copyWith({
     String? id,
     String? categoryId,
     String? title,
     String? description,
+    String? imageSource,
+    String? audioSource,
+    String? audioSourceMale,
+    String? audioSourceFemale,
     bool? enabled,
   }) {
     return ExploreContentItem(
@@ -297,6 +343,10 @@ class ExploreContentItem {
       categoryId: categoryId ?? this.categoryId,
       title: title ?? this.title,
       description: description ?? this.description,
+      imageSource: imageSource ?? this.imageSource,
+      audioSource: audioSource ?? this.audioSource,
+      audioSourceMale: audioSourceMale ?? this.audioSourceMale,
+      audioSourceFemale: audioSourceFemale ?? this.audioSourceFemale,
       enabled: enabled ?? this.enabled,
     );
   }
@@ -307,6 +357,10 @@ class ExploreContentItem {
       'categoryId': categoryId,
       'title': title,
       'description': description,
+      'imageSource': imageSource,
+      'audioSource': audioSource,
+      'audioSourceMale': audioSourceMale,
+      'audioSourceFemale': audioSourceFemale,
       'enabled': enabled,
     };
   }
@@ -317,6 +371,62 @@ class ExploreContentItem {
       categoryId: (json['categoryId'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
       description: (json['description'] as String?) ?? '',
+      imageSource: (json['imageSource'] as String?) ?? '',
+      audioSource: (json['audioSource'] as String?) ?? '',
+      audioSourceMale: (json['audioSourceMale'] as String?) ?? '',
+      audioSourceFemale: (json['audioSourceFemale'] as String?) ?? '',
+      enabled: (json['enabled'] as bool?) ?? true,
+    );
+  }
+}
+
+class DondeVaContentItem {
+  const DondeVaContentItem({
+    required this.id,
+    required this.categoryId,
+    required this.label,
+    required this.imageSource,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String categoryId;
+  final String label;
+  final String imageSource;
+  final bool enabled;
+
+  DondeVaContentItem copyWith({
+    String? id,
+    String? categoryId,
+    String? label,
+    String? imageSource,
+    bool? enabled,
+  }) {
+    return DondeVaContentItem(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      label: label ?? this.label,
+      imageSource: imageSource ?? this.imageSource,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'categoryId': categoryId,
+      'label': label,
+      'imageSource': imageSource,
+      'enabled': enabled,
+    };
+  }
+
+  factory DondeVaContentItem.fromJson(Map<String, dynamic> json) {
+    return DondeVaContentItem(
+      id: (json['id'] as String?) ?? '',
+      categoryId: (json['categoryId'] as String?) ?? '',
+      label: (json['label'] as String?) ?? '',
+      imageSource: (json['imageSource'] as String?) ?? '',
       enabled: (json['enabled'] as bool?) ?? true,
     );
   }
@@ -330,6 +440,7 @@ class GameContentConfig {
     this.diloItems = const [],
     this.memoryItems = const [],
     this.exploreItems = const [],
+    this.dondeVaItems = const [],
     this.globalEmotionImageOverrides = const {},
     this.globalSoundImageOverrides = const {},
     this.globalPuzzleImageOverrides = const {},
@@ -349,6 +460,7 @@ class GameContentConfig {
   final List<DiloContentItem> diloItems;
   final List<MemoryContentItem> memoryItems;
   final List<ExploreContentItem> exploreItems;
+  final List<DondeVaContentItem> dondeVaItems;
   final Map<String, String> globalEmotionImageOverrides;
   final Map<String, String> globalSoundImageOverrides;
   final Map<String, String> globalPuzzleImageOverrides;
@@ -368,6 +480,7 @@ class GameContentConfig {
     List<DiloContentItem>? diloItems,
     List<MemoryContentItem>? memoryItems,
     List<ExploreContentItem>? exploreItems,
+    List<DondeVaContentItem>? dondeVaItems,
     Map<String, String>? globalEmotionImageOverrides,
     Map<String, String>? globalSoundImageOverrides,
     Map<String, String>? globalPuzzleImageOverrides,
@@ -387,6 +500,7 @@ class GameContentConfig {
       diloItems: diloItems ?? this.diloItems,
       memoryItems: memoryItems ?? this.memoryItems,
       exploreItems: exploreItems ?? this.exploreItems,
+      dondeVaItems: dondeVaItems ?? this.dondeVaItems,
       globalEmotionImageOverrides:
           globalEmotionImageOverrides ?? this.globalEmotionImageOverrides,
       globalSoundImageOverrides:
@@ -420,6 +534,7 @@ class GameContentConfig {
       'diloItems': diloItems.map((item) => item.toJson()).toList(),
       'memoryItems': memoryItems.map((item) => item.toJson()).toList(),
       'exploreItems': exploreItems.map((item) => item.toJson()).toList(),
+      'dondeVaItems': dondeVaItems.map((item) => item.toJson()).toList(),
       'globalEmotionImageOverrides': globalEmotionImageOverrides,
       'globalSoundImageOverrides': globalSoundImageOverrides,
       'globalPuzzleImageOverrides': globalPuzzleImageOverrides,
@@ -480,6 +595,14 @@ class GameContentConfig {
           .whereType<Map>()
           .map(
             (item) => ExploreContentItem.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(),
+      dondeVaItems: (json['dondeVaItems'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => DondeVaContentItem.fromJson(
               Map<String, dynamic>.from(item),
             ),
           )

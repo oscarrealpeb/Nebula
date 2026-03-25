@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -104,6 +104,43 @@ class AuthService {
   bool get hasActiveFirebaseSession =>
       !_useFirebase || _firebaseAuth?.currentUser != null;
   String get currentFirebaseUid => _firebaseAuth?.currentUser?.uid ?? '';
+
+  Future<ServiceResult<NebulaUser>> ensureAdminFirebaseSession({
+    required String plainPassword,
+  }) async {
+    final localAdmin = _currentUser;
+    if (!_useFirebase) {
+      return ServiceResult(
+        ok: true,
+        message: 'Firebase no activo.',
+        data: localAdmin,
+      );
+    }
+    if (localAdmin == null || localAdmin.role != UserRole.admin) {
+      return const ServiceResult(
+        ok: false,
+        message: 'No hay una sesión admin local disponible.',
+      );
+    }
+    if (_firebaseAuth!.currentUser != null) {
+      return ServiceResult(
+        ok: true,
+        message: 'Sesión admin Firebase activa.',
+        data: localAdmin,
+      );
+    }
+
+    final synced = await _ensureFirebaseAdminSession(
+      localAdmin: localAdmin,
+      plainPassword: plainPassword,
+    );
+    if (synced.ok && synced.data != null) {
+      _currentUser = synced.data;
+      _activePortalRole = PortalRole.admin;
+      await _persistSessionState(synced.data!);
+    }
+    return synced;
+  }
 
   bool get isCurrentUserGoogleProvider {
     if (!_useFirebase) return false;
@@ -325,6 +362,7 @@ class AuthService {
   Future<bool> _retryAdminWrite({
     required String docId,
     required Map<String, dynamic> payload,
+    bool merge = true,
   }) async {
     final user = _currentUser;
     if (!_useFirebase || user == null || user.role != UserRole.admin) {
@@ -337,7 +375,7 @@ class AuthService {
         await _firestore!
             .collection('app')
             .doc(docId)
-            .set(payload, SetOptions(merge: true));
+            .set(payload, SetOptions(merge: merge));
         return true;
       } on FirebaseException catch (e) {
         if (e.code != 'permission-denied' || attempt == 3) {
@@ -370,8 +408,7 @@ class AuthService {
             .doc(uid)
             .get(const GetOptions(source: Source.server));
         final data = snapshot.data();
-        final role =
-            (data?['role'] as String?)?.trim().toLowerCase() ?? '';
+        final role = (data?['role'] as String?)?.trim().toLowerCase() ?? '';
         if (role == UserRole.admin) {
           return true;
         }
@@ -511,21 +548,34 @@ class AuthService {
         .toList();
     final diloItems = config.diloItems
         .where(
-          (item) =>
-              item.id.trim().isNotEmpty &&
-              item.imagePath.trim().isNotEmpty &&
-              item.text.trim().isNotEmpty &&
-              item.audioSource.trim().isNotEmpty,
-        )
+      (item) =>
+          item.id.trim().isNotEmpty &&
+          item.imagePath.trim().isNotEmpty &&
+          item.text.trim().isNotEmpty &&
+          (item.audioSourceMale.trim().isNotEmpty ||
+              item.audioSource.trim().isNotEmpty) &&
+          (item.audioSourceFemale.trim().isNotEmpty ||
+              item.audioSource.trim().isNotEmpty),
+    )
         .map(
-          (item) => item.copyWith(
-            difficultyStars: item.difficultyStars.clamp(1, 3),
-            imagePath: item.imagePath.trim(),
-            text: item.text.trim(),
-            audioSource: item.audioSource.trim(),
-          ),
-        )
-        .toList();
+      (item) {
+        final legacy = item.audioSource.trim();
+        final male = item.audioSourceMale.trim().isNotEmpty
+            ? item.audioSourceMale.trim()
+            : legacy;
+        final female = item.audioSourceFemale.trim().isNotEmpty
+            ? item.audioSourceFemale.trim()
+            : legacy;
+        return item.copyWith(
+          difficultyStars: item.difficultyStars.clamp(1, 3),
+          imagePath: item.imagePath.trim(),
+          text: item.text.trim(),
+          audioSource: legacy,
+          audioSourceMale: male,
+          audioSourceFemale: female,
+        );
+      },
+    ).toList();
     final memoryItems = config.memoryItems
         .where(
           (item) =>
@@ -535,6 +585,51 @@ class AuthService {
           (item) => item.copyWith(
             imagePath: item.imagePath.trim(),
             audioSource: item.audioSource.trim(),
+          ),
+        )
+        .toList();
+    final exploreItems = config.exploreItems
+        .where(
+      (item) =>
+          item.id.trim().isNotEmpty &&
+          item.categoryId.trim().isNotEmpty &&
+          item.title.trim().isNotEmpty &&
+          item.description.trim().isNotEmpty &&
+          item.imageSource.trim().isNotEmpty,
+    )
+        .map(
+      (item) {
+        final legacy = item.audioSource.trim();
+        final male = item.audioSourceMale.trim().isNotEmpty
+            ? item.audioSourceMale.trim()
+            : legacy;
+        final female = item.audioSourceFemale.trim().isNotEmpty
+            ? item.audioSourceFemale.trim()
+            : legacy;
+        return item.copyWith(
+          categoryId: item.categoryId.trim().toLowerCase(),
+          title: item.title.trim(),
+          description: item.description.trim(),
+          imageSource: item.imageSource.trim(),
+          audioSource: legacy,
+          audioSourceMale: male,
+          audioSourceFemale: female,
+        );
+      },
+    ).toList();
+    final dondeVaItems = config.dondeVaItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty &&
+              item.categoryId.trim().isNotEmpty &&
+              item.label.trim().isNotEmpty &&
+              item.imageSource.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            categoryId: item.categoryId.trim().toLowerCase(),
+            label: item.label.trim(),
+            imageSource: item.imageSource.trim(),
           ),
         )
         .toList();
@@ -610,20 +705,42 @@ class AuthService {
             (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
           ),
     );
+    final dondeVaOverrides = Map<String, String>.fromEntries(
+      config.globalDondeVaImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final dondeVaStoragePaths = Map<String, String>.fromEntries(
+      config.globalDondeVaImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
     final normalized = GameContentConfig(
       emotionItems: emotions,
       soundItems: sounds,
       puzzleItems: puzzles,
       diloItems: diloItems,
       memoryItems: memoryItems,
+      exploreItems: exploreItems,
+      dondeVaItems: dondeVaItems,
       globalEmotionImageOverrides: emotionOverrides,
       globalSoundImageOverrides: soundOverrides,
       globalPuzzleImageOverrides: puzzleOverrides,
       globalMemoryImageOverrides: memoryOverrides,
+      globalDondeVaImageOverrides: dondeVaOverrides,
       globalEmotionImageStoragePaths: emotionStoragePaths,
       globalSoundImageStoragePaths: soundStoragePaths,
       globalPuzzleImageStoragePaths: puzzleStoragePaths,
       globalMemoryImageStoragePaths: memoryStoragePaths,
+      globalDondeVaImageStoragePaths: dondeVaStoragePaths,
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -650,12 +767,13 @@ class AuthService {
           await _firestore!
               .collection('app')
               .doc('game_content_config')
-              .set(normalized.toJson(), SetOptions(merge: true));
+              .set(normalized.toJson());
         } on FirebaseException catch (e) {
           if (e.code == 'permission-denied') {
             final retryOk = await _retryAdminWrite(
               docId: 'game_content_config',
               payload: normalized.toJson(),
+              merge: false,
             );
             if (!retryOk) {
               return ServiceResult(
@@ -1753,9 +1871,8 @@ class AuthService {
     }
 
     final contentType = _contentTypeForExtension(extension);
-    final childSegment = childId.trim().isEmpty
-        ? 'global'
-        : _sanitizeStorageSegment(childId);
+    final childSegment =
+        childId.trim().isEmpty ? 'global' : _sanitizeStorageSegment(childId);
     final gameSegment = _sanitizeStorageSegment(gameKey);
     final itemSegment = _sanitizeStorageSegment(itemId);
     final ownerUid = currentFirebaseUid.trim().isNotEmpty
@@ -1795,7 +1912,8 @@ class AuthService {
     if (!_useStorage) {
       return const ServiceResult(
         ok: false,
-        message: 'La sincronización global de imágenes requiere Firebase Storage.',
+        message:
+            'La sincronización global de imágenes requiere Firebase Storage.',
       );
     }
 
@@ -1837,8 +1955,7 @@ class AuthService {
     final contentType = _contentTypeForExtension(extension);
     final gameSegment = _sanitizeStorageSegment(gameKey);
     final itemSegment = _sanitizeStorageSegment(itemId);
-    final storagePath =
-        'app/game_content/$gameSegment/$itemSegment.$extension';
+    final storagePath = 'app/game_content/$gameSegment/$itemSegment.$extension';
 
     try {
       final ref = _storage!.ref().child(storagePath);
@@ -4578,5 +4695,3 @@ class AuthService {
     _pendingGoogleNameForConfirm = null;
   }
 }
-
-

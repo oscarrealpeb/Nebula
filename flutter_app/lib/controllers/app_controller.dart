@@ -669,7 +669,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> enterChildPortal(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
@@ -742,7 +743,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       _activePortalRole = PortalRole.admin;
@@ -779,7 +781,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> setCaregiverChildContext(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
@@ -841,6 +844,40 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
+  Future<ActionResult> _ensureAdminFirebaseSessionIfNeeded() async {
+    if (!_firebaseEnabled || !isAdmin) {
+      return const ActionResult(ok: true, message: 'No requiere recuperación.');
+    }
+    if (_authService.hasActiveFirebaseSession) {
+      return const ActionResult(ok: true, message: 'Sesión Firebase activa.');
+    }
+
+    final recovered = await _authService.ensureAdminFirebaseSession(
+      plainPassword: hiddenAdminPassword,
+    );
+    if (!recovered.ok || recovered.data == null) {
+      return ActionResult(
+        ok: false,
+        message: recovered.message.isEmpty
+            ? 'Tu sesión de Firebase no está activa. Cierra sesión y vuelve a entrar.'
+            : recovered.message,
+      );
+    }
+
+    _currentUser = recovered.data;
+    _activePortalRole = PortalRole.admin;
+    _activeChildProfileId = _resolveActiveChildId(
+      user: _currentUser,
+      requestedChildId: _activeChildProfileId,
+    );
+    _needsPortalSelection = false;
+    notifyListeners();
+    return const ActionResult(
+      ok: true,
+      message: 'Sesión admin Firebase recuperada.',
+    );
+  }
+
   Future<ActionResult> reloadAppAdminConfig({bool notify = true}) async {
     final result = await _authService.fetchAppAdminConfig();
     if (result.data != null) {
@@ -859,6 +896,10 @@ class AppController extends ChangeNotifier {
         ok: false,
         message: 'Solo el admin puede modificar esta configuraci\u00f3n.',
       );
+    }
+    final firebaseSession = await _ensureAdminFirebaseSessionIfNeeded();
+    if (!firebaseSession.ok) {
+      return firebaseSession;
     }
     final result = await _authService.saveAppAdminConfig(config);
     if (result.ok && result.data != null) {
@@ -904,6 +945,10 @@ class AppController extends ChangeNotifier {
         ok: false,
         message: 'Solo el admin puede editar contenido de juegos.',
       );
+    }
+    final firebaseSession = await _ensureAdminFirebaseSessionIfNeeded();
+    if (!firebaseSession.ok) {
+      return firebaseSession;
     }
     final result = await _authService.saveGameContentConfig(config);
     if (result.ok && result.data != null) {
@@ -1084,7 +1129,8 @@ class AppController extends ChangeNotifier {
     if (!_authService.isValidEmailFormat(normalizedEmail)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo v\u00e1lido para reenviar verificaci\u00f3n.',
+        message:
+            'Escribe un correo v\u00e1lido para reenviar verificaci\u00f3n.',
       );
     }
     if (password.trim().isEmpty) {
@@ -1123,7 +1169,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestProfilePasswordReset() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final key = 'profile_reset_${user.id}';
     final remaining = _cooldownService.remainingSeconds(key);
@@ -1172,7 +1219,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (_firebaseEnabled) {
       await refreshOnlineStatus();
@@ -1217,7 +1265,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> activateParentalPin(String pin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.setParentalPin(pin: pin);
     if (result.ok && result.data != null) {
@@ -1233,7 +1282,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.changeParentalPin(
       currentPin: currentPin,
@@ -1249,7 +1299,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deactivateParentalPin(String currentPin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result =
         await _authService.disableParentalPin(currentPin: currentPin);
@@ -1263,7 +1314,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestParentalPinRecoveryEmail() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.sendParentalPinRecoveryEmail();
     return ActionResult(ok: result.ok, message: result.message);
@@ -1275,7 +1327,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.recoverParentalPinWithPassword(
       accountPassword: accountPassword,
@@ -1293,7 +1346,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.recoverParentalPinWithGoogle(
       newPin: newPin,
@@ -1322,7 +1376,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
 
     final result = await _authService.updateProfile(
@@ -1919,7 +1974,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!_firebaseEnabled) {
       return const ActionResult(
@@ -2079,12 +2135,9 @@ class AppController extends ChangeNotifier {
         message: 'Esta funci\u00f3n requiere sincronizaci\u00f3n con Firebase.',
       );
     }
-    if (!_authService.hasActiveFirebaseSession) {
-      return const ActionResult(
-        ok: false,
-        message:
-            'Tu sesi\u00f3n de Firebase no est\u00e1 activa. Cierra sesi\u00f3n y vuelve a entrar antes de sincronizar im\u00e1genes globales.',
-      );
+    final firebaseSession = await _ensureAdminFirebaseSessionIfNeeded();
+    if (!firebaseSession.ok) {
+      return firebaseSession;
     }
     await refreshOnlineStatus();
     final normalizedPath = filePath.trim();
@@ -2238,7 +2291,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (_firebaseEnabled && !_authService.hasActiveFirebaseSession) {
       return const ActionResult(
@@ -2306,6 +2360,10 @@ class AppController extends ChangeNotifier {
         message:
             'Solo el administrador puede restaurar im\u00e1genes predeterminadas.',
       );
+    }
+    final firebaseSession = await _ensureAdminFirebaseSessionIfNeeded();
+    if (!firebaseSession.ok) {
+      return firebaseSession;
     }
     final key = _globalGameImageStorageMapKey(gameKey: gameKey, itemId: itemId);
     final previousStoragePath = _globalGameImageStoragePathFor(
@@ -2481,7 +2539,8 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -2586,7 +2645,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deleteChildProfile(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
 
     final targetChildId = childId.trim();
@@ -2702,7 +2762,24 @@ class AppController extends ChangeNotifier {
       ParentalControl nextControl) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
+    }
+    final hasStart = nextControl.allowedStartHour >= 0;
+    final hasEnd = nextControl.allowedEndHour >= 0;
+    if (hasStart != hasEnd) {
+      return const ActionResult(
+        ok: false,
+        message: 'Completa ambos horarios o deja ambos en "Sin horario".',
+      );
+    }
+    if (hasStart &&
+        hasEnd &&
+        nextControl.allowedStartHour >= nextControl.allowedEndHour) {
+      return const ActionResult(
+        ok: false,
+        message: 'El horario "Desde" debe ser anterior al horario "Hasta".',
+      );
     }
     final normalized = nextControl.copyWith(
       dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
@@ -2866,7 +2943,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReports() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
@@ -2907,7 +2985,8 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReportsForAllUsers() async {
     final current = _currentUser;
     if (current == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!isAdmin) {
       return const ActionResult(
@@ -3027,7 +3106,8 @@ class AppController extends ChangeNotifier {
   ActionResult canLaunchGame(String gameKey) {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
+      return const ActionResult(
+          ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!isAdmin && _appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
@@ -3655,4 +3735,3 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
-

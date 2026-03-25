@@ -2,18 +2,22 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../models/game_content_config.dart';
+
 class DondeVaItem {
   const DondeVaItem({
     required this.id,
     required this.label,
     required this.emoji,
     this.assetExtension = 'png',
+    this.imageSource = '',
   });
 
   final String id;
   final String label;
   final String emoji;
   final String assetExtension;
+  final String imageSource;
 }
 
 class DondeVaCategory {
@@ -21,6 +25,7 @@ class DondeVaCategory {
     required this.id,
     required this.label,
     required this.emoji,
+    required this.emojis,
     required this.color,
     required this.items,
   });
@@ -28,6 +33,7 @@ class DondeVaCategory {
   final String id;
   final String label;
   final String emoji;
+  final List<String> emojis;
   final Color color;
   final List<DondeVaItem> items;
 }
@@ -83,7 +89,8 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
   DondeVaCategory(
     id: 'cocina',
     label: 'Cocina',
-    emoji: '🍳',
+    emoji: '🍔',
+    emojis: <String>['🍔', '🍗', '👨‍🍳'],
     color: Color(0xFFFFD39A),
     items: <DondeVaItem>[
       DondeVaItem(id: 'olla', label: 'Olla', emoji: '🍲'),
@@ -104,6 +111,7 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
     id: 'dormitorio',
     label: 'Dormitorio',
     emoji: '🛏️',
+    emojis: <String>['🛏️', '🧸', '🌙'],
     color: Color(0xFFCFE2FF),
     items: <DondeVaItem>[
       DondeVaItem(id: 'cama', label: 'Cama', emoji: '🛏️'),
@@ -117,7 +125,7 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
       ),
       DondeVaItem(
         id: 'lampara_de_noche',
-        label: 'Lampara de noche',
+        label: 'Lámpara de noche',
         emoji: '💡',
       ),
       DondeVaItem(id: 'armario', label: 'Armario', emoji: '🚪'),
@@ -133,10 +141,11 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
     id: 'escuela',
     label: 'Escuela',
     emoji: '🎒',
+    emojis: <String>['🎒', '📓', '✏️'],
     color: Color(0xFFFFE9A8),
     items: <DondeVaItem>[
       DondeVaItem(id: 'cuaderno', label: 'Cuaderno', emoji: '📓'),
-      DondeVaItem(id: 'lapiz', label: 'Lapiz', emoji: '✏️'),
+      DondeVaItem(id: 'lapiz', label: 'Lápiz', emoji: '✏️'),
       DondeVaItem(id: 'borrador', label: 'Borrador', emoji: '🩹'),
       DondeVaItem(id: 'regla', label: 'Regla', emoji: '📏'),
       DondeVaItem(id: 'mochila', label: 'Mochila', emoji: '🎒'),
@@ -159,10 +168,11 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
     id: 'centro_comercial',
     label: 'Centro comercial',
     emoji: '🛍️',
+    emojis: <String>['🛍️', '🛒', '🏬'],
     color: Color(0xFFFFD6EB),
     items: <DondeVaItem>[
       DondeVaItem(id: 'vitrina', label: 'Vitrina', emoji: '🪟'),
-      DondeVaItem(id: 'maniqui', label: 'Maniqui', emoji: '🧍'),
+      DondeVaItem(id: 'maniqui', label: 'Maniquí', emoji: '🧍'),
       DondeVaItem(
         id: 'bolsa_de_compras',
         label: 'Bolsa de compras',
@@ -170,7 +180,7 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
       ),
       DondeVaItem(
         id: 'escalera_electrica',
-        label: 'Escalera electrica',
+        label: 'Escalera eléctrica',
         emoji: '🛗',
       ),
       DondeVaItem(
@@ -202,6 +212,7 @@ const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
     id: 'granja',
     label: 'Granja',
     emoji: '🚜',
+    emojis: <String>['🚜', '🐄', '🐔'],
     color: Color(0xFFD8F2C2),
     items: <DondeVaItem>[
       DondeVaItem(id: 'vaca', label: 'Vaca', emoji: '🐄'),
@@ -234,9 +245,70 @@ DondeVaGameConfig dondeVaConfigForDifficulty(int difficultyStars) {
 }
 
 DondeVaGameSession buildDondeVaGameSession(int difficultyStars, Random random) {
+  return buildDondeVaGameSessionWithItems(
+    difficultyStars,
+    random,
+    const <DondeVaContentItem>[],
+  );
+}
+
+List<DondeVaCategory> mergeDondeVaCategories(
+  Iterable<DondeVaContentItem> configuredItems,
+) {
+  final merged = <DondeVaCategory>[
+    for (final category in dondeVaCategories)
+      DondeVaCategory(
+        id: category.id,
+        label: category.label,
+        emoji: category.emoji,
+        emojis: List<String>.from(category.emojis),
+        color: category.color,
+        items: List<DondeVaItem>.from(category.items),
+      ),
+  ];
+
+  for (final item in configuredItems) {
+    if (!item.enabled) continue;
+    final categoryIndex = merged.indexWhere(
+      (category) =>
+          category.id.trim().toLowerCase() ==
+          item.categoryId.trim().toLowerCase(),
+    );
+    if (categoryIndex < 0) continue;
+    final category = merged[categoryIndex];
+    final normalizedItemId = item.id.trim().toLowerCase();
+    final nextItems = <DondeVaItem>[
+      for (final current in category.items)
+        if (current.id.trim().toLowerCase() != normalizedItemId) current,
+      DondeVaItem(
+        id: item.id.trim(),
+        label: item.label.trim(),
+        emoji: '📦',
+        imageSource: item.imageSource.trim(),
+      ),
+    ];
+    merged[categoryIndex] = DondeVaCategory(
+      id: category.id,
+      label: category.label,
+      emoji: category.emoji,
+      emojis: List<String>.from(category.emojis),
+      color: category.color,
+      items: nextItems,
+    );
+  }
+
+  return merged;
+}
+
+DondeVaGameSession buildDondeVaGameSessionWithItems(
+  int difficultyStars,
+  Random random,
+  Iterable<DondeVaContentItem> configuredItems,
+) {
   final config = dondeVaConfigForDifficulty(difficultyStars);
-  final visibleCategories = List<DondeVaCategory>.from(dondeVaCategories)
-    ..shuffle(random);
+  final visibleCategories = List<DondeVaCategory>.from(
+    mergeDondeVaCategories(configuredItems),
+  )..shuffle(random);
   final selectedCategories =
       visibleCategories.take(config.visibleCategoryCount).toList();
 

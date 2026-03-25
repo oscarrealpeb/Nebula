@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/app_controller.dart';
+import '../../core/data/donde_va_catalog.dart';
+import '../../core/data/explore_catalog.dart';
 import '../../core/data/puzzle_catalog.dart';
 import '../../services/image_preparation_service.dart';
 import '../../widgets/cosmic_background.dart';
@@ -115,7 +117,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     'assets/images/conecta/claxon.jpg',
     'assets/images/conecta/centro_comercial.jpg',
     'assets/images/conecta/restaurante.jpg',
-    'assets/images/conecta/niños.jpg',
+    'assets/images/conecta/ni\u00f1os.jpg',
     'assets/images/conecta/tormenta.jpg',
     'assets/images/conecta/coro.jpg',
   ];
@@ -144,6 +146,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
       _emotionSection(),
       _soundSection(),
       _puzzleSection(),
+      _exploreSection(),
+      _dondeVaSection(),
     ];
     if (!mounted) return;
     setState(() => _sections = sections);
@@ -179,7 +183,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         title: item.correctEmotion.trim().isEmpty
             ? _prettyNameFromSource(source)
             : item.correctEmotion.trim(),
-        subtitle: 'Nivel ${item.difficultyStars} · contenido actual',
+        subtitle: 'Nivel ${item.difficultyStars} Â· contenido actual',
         defaultSource: source,
         expectedEmotion: item.correctEmotion.trim(),
         expectedDescription: item.correctEmotion.trim(),
@@ -191,7 +195,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
     return _GameImageSection(
       title: 'Emociones',
-      description: 'Imágenes usadas en reconocimiento emocional.',
+      description: 'ImÃ¡genes usadas en reconocimiento emocional.',
       items: sorted,
     );
   }
@@ -205,7 +209,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         gameKey: 'sonidos',
         itemId: itemId,
         title: _prettyNameFromSource(source),
-        subtitle: 'Set actual de sonidos e imágenes',
+        subtitle: 'Set actual de sonidos e imÃ¡genes',
         defaultSource: source,
         expectedConcepts: _expectedConceptsFromSource(source),
         expectedDescription: _prettyNameFromSource(source),
@@ -225,8 +229,8 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
         itemId: itemId,
         title: _prettyNameFromSource(source),
         subtitle: category.isEmpty
-            ? 'Nivel ${item.difficultyStars} · contenido actual'
-            : '$category · nivel ${item.difficultyStars}',
+            ? 'Nivel ${item.difficultyStars} Â· contenido actual'
+            : '$category Â· nivel ${item.difficultyStars}',
         defaultSource: source,
         expectedConcepts: _expectedConceptsFromSource(
           source,
@@ -241,7 +245,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
     return _GameImageSection(
       title: 'Conecta sonidos',
-      description: 'Imágenes que acompañan sonidos y opciones del juego.',
+      description: 'ImÃ¡genes que acompaÃ±an sonidos y opciones del juego.',
       items: sorted,
     );
   }
@@ -287,21 +291,94 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
     return _GameImageSection(
       title: 'Arma la imagen',
-      description: 'Imágenes usadas en los rompecabezas del niño.',
+      description: 'Im\u00e1genes usadas en los rompecabezas del ni\u00f1o.',
       items: sorted,
+    );
+  }
+
+  _GameImageSection _exploreSection() {
+    final merged = mergeExploreItems(
+      widget.controller.gameContentConfig.exploreItems,
+    );
+    final items = merged
+        .where((item) => item.enabled)
+        .map((item) {
+          final builtIn = defaultExploreBuiltInItemById(item.id);
+          final categoryLabel = exploreCategoryLabelFor(item.categoryId);
+          final defaultSource = item.imageSource.trim().isNotEmpty
+              ? item.imageSource.trim()
+              : builtIn?.imageSource ?? '';
+          final title = item.title.trim().isNotEmpty
+              ? item.title.trim()
+              : builtIn?.title ?? 'Explora';
+          return _GameImageItem(
+            gameKey: 'explora_aprende',
+            itemId: item.id,
+            title: title,
+            subtitle: '$categoryLabel \u00b7 contenido actual',
+            defaultSource: defaultSource,
+            expectedConcepts: <String>[title, categoryLabel],
+            expectedDescription: title,
+          );
+        })
+        .toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+    return _GameImageSection(
+      title: 'Explora y aprende',
+      description: 'Im\u00e1genes usadas en Animales, Historia y Arte.',
+      items: items,
+    );
+  }
+
+  _GameImageSection _dondeVaSection() {
+    final mergedCategories = mergeDondeVaCategories(
+      widget.controller.gameContentConfig.dondeVaItems,
+    );
+    final items = <_GameImageItem>[];
+    for (final category in mergedCategories) {
+      for (final item in category.items) {
+        items.add(
+          _GameImageItem(
+            gameKey: 'donde_va',
+            itemId: dondeVaGlobalItemId(
+              categoryId: category.id,
+              itemId: item.id,
+            ),
+            title: item.label,
+            subtitle: '${category.label} \u00b7 contenido actual',
+            defaultSource: item.imageSource.trim().isNotEmpty
+                ? item.imageSource.trim()
+                : dondeVaItemAssetPath(
+                    categoryId: category.id,
+                    itemId: item.id,
+                    extension: item.assetExtension,
+                  ),
+            expectedConcepts: <String>[item.label, category.label],
+            expectedDescription: item.label,
+          ),
+        );
+      }
+    }
+    items.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+    return _GameImageSection(
+      title: '\u00bfD\u00f3nde va?',
+      description: 'Objetos que el ni\u00f1o clasifica por categor\u00eda.',
+      items: items,
     );
   }
 
   String _emotionLevelLabel(String source) {
     final normalized = source.toLowerCase();
     if (normalized.contains('/facil/')) {
-      return 'Aparece en dificultad fácil · contenido actual';
+      return 'Aparece en dificultad fÃ¡cil Â· contenido actual';
     }
     if (normalized.contains('/medio/')) {
-      return 'Aparece en dificultad media · contenido actual';
+      return 'Aparece en dificultad media Â· contenido actual';
     }
     if (normalized.contains('/dificil/')) {
-      return 'Aparece en dificultad difícil · contenido actual';
+      return 'Aparece en dificultad difÃ­cil Â· contenido actual';
     }
     return 'Contenido actual';
   }
@@ -353,13 +430,13 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
       final normalized = raw
           .trim()
           .toLowerCase()
-          .replaceAll('á', 'a')
-          .replaceAll('é', 'e')
-          .replaceAll('í', 'i')
-          .replaceAll('ó', 'o')
-          .replaceAll('ú', 'u')
-          .replaceAll('ü', 'u')
-          .replaceAll('ñ', 'n')
+          .replaceAll('Ã¡', 'a')
+          .replaceAll('Ã©', 'e')
+          .replaceAll('Ã­', 'i')
+          .replaceAll('Ã³', 'o')
+          .replaceAll('Ãº', 'u')
+          .replaceAll('Ã¼', 'u')
+          .replaceAll('Ã±', 'n')
           .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
@@ -385,7 +462,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     for (final child in widget.controller.childProfiles) {
       if (child.id != _selectedChildId) continue;
       final name = child.name.trim();
-      return name.isEmpty ? 'niño sin nombre' : name;
+      return name.isEmpty ? 'niÃ±o sin nombre' : name;
     }
     return 'este perfil';
   }
@@ -491,7 +568,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     if (_selectedChildId.trim().isEmpty) {
       await NebulaSnack.show(
         context,
-        message: 'Primero selecciona un perfil de niño.',
+        message: 'Primero selecciona un perfil de niÃ±o.',
         ok: false,
       );
       return;
@@ -515,7 +592,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Usar galería'),
+                title: const Text('Usar galerÃ­a'),
                 onTap: () async {
                   Navigator.of(context).pop();
                   await _pickImage(item: item, source: ImageSource.gallery);
@@ -543,7 +620,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: const Text('Personalización de contenido'),
+        title: const Text('PersonalizaciÃ³n de contenido'),
       ),
       body: CosmicBackground(
         child: ListView(
@@ -556,14 +633,14 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Personaliza imágenes por niño y por juego',
+                      'Personaliza imÃ¡genes por niÃ±o y por juego',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Las imágenes se sincronizan entre dispositivos del cuidador. Formatos permitidos: JPG y PNG. Tamaño máximo: 5 MB por imagen. Antes de guardarlas también se revisa que el recorte y el contenido sean adecuados para el juego.',
+                      'Las imÃ¡genes se sincronizan entre dispositivos del cuidador. Formatos permitidos: JPG y PNG. TamaÃ±o mÃ¡ximo: 5 MB por imagen. Antes de guardarlas tambiÃ©n se revisa que el recorte y el contenido sean adecuados para el juego.',
                     ),
                   ],
                 ),
@@ -575,7 +652,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                 child: Padding(
                   padding: EdgeInsets.all(14),
                   child: Text(
-                    'No hay perfiles de niño disponibles. Crea uno primero desde la zona de cuidador.',
+                    'No hay perfiles de niÃ±o disponibles. Crea uno primero desde la zona de cuidador.',
                   ),
                 ),
               )
@@ -586,7 +663,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                   child: DropdownButtonFormField<String>(
                     initialValue: previewChildId,
                     decoration: const InputDecoration(
-                      labelText: 'Perfil de niño',
+                      labelText: 'Perfil de niÃ±o',
                     ),
                     items: children
                         .map(
@@ -594,7 +671,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                             value: child.id,
                             child: Text(
                               child.name.trim().isEmpty
-                                  ? 'Niño sin nombre'
+                                  ? 'NiÃ±o sin nombre'
                                   : child.name,
                             ),
                           ),
@@ -615,7 +692,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                   child: ExpansionTile(
                     title: Text(section.title),
                     subtitle: Text(
-                      '${section.items.length} imágenes · ${section.description}',
+                      '${section.items.length} imÃ¡genes Â· ${section.description}',
                     ),
                     childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     children: section.items.map((item) {

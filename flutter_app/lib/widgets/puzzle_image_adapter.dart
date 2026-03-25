@@ -55,12 +55,14 @@ class PuzzleImageAdapter extends StatelessWidget {
     required this.size,
     this.borderRadius = 12,
     this.fit = BoxFit.cover,
+    this.errorChild,
   });
 
   final String imageSource;
   final double size;
   final double borderRadius;
   final BoxFit fit;
+  final Widget? errorChild;
 
   @override
   Widget build(BuildContext context) {
@@ -71,16 +73,16 @@ class PuzzleImageAdapter extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
         child: provider == null
-            ? const ColoredBox(
-                color: Color(0xFFE8ECF7),
-                child: Icon(Icons.broken_image_outlined),
+            ? ColoredBox(
+                color: const Color(0xFFE8ECF7),
+                child: errorChild ?? const Icon(Icons.broken_image_outlined),
               )
             : Image(
                 image: provider,
                 fit: fit,
-                errorBuilder: (_, __, ___) => const ColoredBox(
-                  color: Color(0xFFE8ECF7),
-                  child: Icon(Icons.broken_image_outlined),
+                errorBuilder: (_, __, ___) => ColoredBox(
+                  color: const Color(0xFFE8ECF7),
+                  child: errorChild ?? const Icon(Icons.broken_image_outlined),
                 ),
               ),
       ),

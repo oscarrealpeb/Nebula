@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {setGlobalOptions} = require("firebase-functions/v2");
@@ -101,14 +101,27 @@ exports.reviewCustomImage = onCall(async (request) => {
           reviewed: true,
         };
       }
-      if (!matchesExpectedEmotion(faceAnnotations, expectedEmotion)) {
+      const emotionSignals = getEmotionSignals(faceAnnotations);
+      const detectedEmotion = inferDetectedEmotion(emotionSignals);
+      if (!matchesExpectedEmotion(emotionSignals, expectedEmotion)) {
         return {
           ok: false,
-          message: `La imagen no parece corresponder a la emocion esperada (${expectedDescription || expectedEmotion}).`,
+          message: buildEmotionMismatchMessage({
+            expectedEmotion,
+            expectedDescription,
+            detectedEmotion,
+          }),
           reviewed: true,
+          detectedEmotion: detectedEmotion.id,
+          emotionSignals,
         };
       }
-      return {ok: true, reviewed: true};
+      return {
+        ok: true,
+        reviewed: true,
+        detectedEmotion: detectedEmotion.id,
+        emotionSignals,
+      };
     }
 
     if (expectedConcepts.length) {
@@ -146,7 +159,7 @@ function getUnsafeCategories(safeSearch) {
   return flagged;
 }
 
-function matchesExpectedEmotion(faceAnnotations, expectedEmotion) {
+function getEmotionSignals(faceAnnotations) {
   let strongestJoy = 0;
   let strongestSorrow = 0;
   let strongestAnger = 0;
@@ -168,6 +181,20 @@ function matchesExpectedEmotion(faceAnnotations, expectedEmotion) {
     );
   }
 
+  return {
+    joy: strongestJoy,
+    sorrow: strongestSorrow,
+    anger: strongestAnger,
+    surprise: strongestSurprise,
+  };
+}
+
+function matchesExpectedEmotion(emotionSignals, expectedEmotion) {
+  const strongestJoy = emotionSignals.joy || 0;
+  const strongestSorrow = emotionSignals.sorrow || 0;
+  const strongestAnger = emotionSignals.anger || 0;
+  const strongestSurprise = emotionSignals.surprise || 0;
+
   switch (expectedEmotion) {
     case "feliz":
       return strongestJoy >= 3;
@@ -182,6 +209,66 @@ function matchesExpectedEmotion(faceAnnotations, expectedEmotion) {
     default:
       return true;
   }
+}
+
+function inferDetectedEmotion(emotionSignals) {
+  const joy = emotionSignals.joy || 0;
+  const sorrow = emotionSignals.sorrow || 0;
+  const anger = emotionSignals.anger || 0;
+  const surprise = emotionSignals.surprise || 0;
+
+  if (surprise >= 3 && sorrow >= 4) {
+    return {
+      id: "asustado",
+      clear: true,
+      label: "asustado",
+    };
+  }
+
+  const ranked = [
+    {id: "feliz", score: joy},
+    {id: "triste", score: sorrow},
+    {id: "enojado", score: anger},
+    {id: "sorprendido", score: surprise},
+  ].sort((a, b) => b.score - a.score);
+
+  const strongest = ranked[0];
+  const second = ranked[1];
+
+  if (!strongest || strongest.score < 3) {
+    return {
+      id: "indefinida",
+      clear: false,
+      label: "ninguna emoción clara",
+    };
+  }
+
+  if (second && strongest.score == second.score) {
+    return {
+      id: "mezclada",
+      clear: false,
+      label: "una emoción mezclada",
+    };
+  }
+
+  return {
+    id: strongest.id,
+    clear: true,
+    label: strongest.id,
+  };
+}
+
+function buildEmotionMismatchMessage({
+  expectedEmotion,
+  expectedDescription,
+  detectedEmotion,
+}) {
+  const expectedLabel = expectedDescription || expectedEmotion;
+  if (!detectedEmotion || !detectedEmotion.clear) {
+    return `La imagen no parece corresponder a la emoción esperada (${expectedLabel}). La IA no detecta una emoción dominante con suficiente claridad.`;
+  }
+
+  return `La imagen no parece corresponder a la emoción esperada (${expectedLabel}). La IA la percibe más como ${detectedEmotion.label}.`;
 }
 
 function getCandidateLabels(result) {
@@ -294,3 +381,4 @@ const conceptAliasMap = {
   "naranja": ["orange", "fruit"],
   "uva": ["grape", "fruit"],
 };
+

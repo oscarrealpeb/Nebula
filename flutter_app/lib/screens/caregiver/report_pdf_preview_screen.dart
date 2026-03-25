@@ -205,7 +205,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
               '$activeDays días',
             ],
             [
-              'Promedio diario (base ${data.periodDays} días)',
+              'Promedio diario (últimos ${data.periodDays} días)',
               '${avgDailyMinutes.toStringAsFixed(1)} min/día'
             ],
             [

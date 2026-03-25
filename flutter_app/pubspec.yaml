@@ -54,6 +54,10 @@ flutter:
     - assets/images/cards/frutas/
     - assets/images/cards/instrumentos/
     - assets/images/cards/transporte/
+    - assets/images/explora/
+    - assets/images/explora/animales/
+    - assets/images/explora/arte/
+    - assets/images/explora/historia/
     - assets/images/donde_va/
     - assets/images/donde_va/cocina/
     - assets/images/donde_va/dormitorio/
@@ -64,6 +68,50 @@ flutter:
     - assets/images/planets/
     - assets/secuencias/
     - assets/sounds/
+    - assets/sounds/explora/
+    - assets/sounds/explora/animales/
+    - assets/sounds/explora/animales/caballo/
+    - assets/sounds/explora/animales/conejo/
+    - assets/sounds/explora/animales/delfin/
+    - assets/sounds/explora/animales/elefante/
+    - assets/sounds/explora/animales/gato/
+    - assets/sounds/explora/animales/jirafa/
+    - assets/sounds/explora/animales/leon/
+    - assets/sounds/explora/animales/mono/
+    - assets/sounds/explora/animales/oso/
+    - assets/sounds/explora/animales/perro/
+    - assets/sounds/explora/animales/pinguino/
+    - assets/sounds/explora/animales/tigre/
+    - assets/sounds/explora/animales/tortuga/
+    - assets/sounds/explora/animales/tucan/
+    - assets/sounds/explora/animales/vaca/
+    - assets/sounds/explora/arte/
+    - assets/sounds/explora/arte/da_vinci/
+    - assets/sounds/explora/arte/dali/
+    - assets/sounds/explora/arte/el_grito/
+    - assets/sounds/explora/arte/frida_kahlo/
+    - assets/sounds/explora/arte/girasoles/
+    - assets/sounds/explora/arte/joven_perla/
+    - assets/sounds/explora/arte/mona_lisa/
+    - assets/sounds/explora/arte/noche_estrellada/
+    - assets/sounds/explora/arte/picasso/
+    - assets/sounds/explora/arte/van_gogh/
+    - assets/sounds/explora/historia/
+    - assets/sounds/explora/historia/castillos/
+    - assets/sounds/explora/historia/ciudades/
+    - assets/sounds/explora/historia/civilizaciones/
+    - assets/sounds/explora/historia/descubrimientos/
+    - assets/sounds/explora/historia/dinosaurios/
+    - assets/sounds/explora/historia/egipcios/
+    - assets/sounds/explora/historia/exploradores/
+    - assets/sounds/explora/historia/inventos/
+    - assets/sounds/explora/historia/maravillas/
+    - assets/sounds/explora/historia/ninos/
+    - assets/sounds/explora/historia/piratas/
+    - assets/sounds/explora/historia/reyes/
+    - assets/sounds/explora/historia/romanos/
+    - assets/sounds/explora/historia/transportes/
+    - assets/sounds/explora/historia/vikingos/
     - assets/narration/narrador-hombre/
     - assets/narration/narrador-mujer/
     - assets/dilo/

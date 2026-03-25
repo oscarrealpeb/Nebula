@@ -24,17 +24,39 @@ class ImageAiReviewResult {
     required this.ok,
     required this.reviewed,
     required this.message,
+    required this.detectedEmotion,
+    required this.emotionSignals,
   });
 
-  const ImageAiReviewResult.pass({bool reviewed = true})
-      : this._(ok: true, reviewed: reviewed, message: '');
+  const ImageAiReviewResult.pass({
+    bool reviewed = true,
+    String detectedEmotion = '',
+    Map<String, int> emotionSignals = const <String, int>{},
+  }) : this._(
+          ok: true,
+          reviewed: reviewed,
+          message: '',
+          detectedEmotion: detectedEmotion,
+          emotionSignals: emotionSignals,
+        );
 
-  const ImageAiReviewResult.block(String message)
-      : this._(ok: false, reviewed: true, message: message);
+  const ImageAiReviewResult.block(
+    String message, {
+    String detectedEmotion = '',
+    Map<String, int> emotionSignals = const <String, int>{},
+  }) : this._(
+          ok: false,
+          reviewed: true,
+          message: message,
+          detectedEmotion: detectedEmotion,
+          emotionSignals: emotionSignals,
+        );
 
   final bool ok;
   final bool reviewed;
   final String message;
+  final String detectedEmotion;
+  final Map<String, int> emotionSignals;
 }
 
 class ImageAiReviewService {
@@ -87,13 +109,26 @@ class ImageAiReviewService {
       final ok = data['ok'] == true;
       final reviewed = data['reviewed'] != false;
       final message = (data['message'] as String?)?.trim() ?? '';
+      final detectedEmotion = (data['detectedEmotion'] as String?)?.trim() ?? '';
+      final emotionSignals = _asIntMap(data['emotionSignals']);
       if (ok) {
-        return ImageAiReviewResult.pass(reviewed: reviewed);
+        return ImageAiReviewResult.pass(
+          reviewed: reviewed,
+          detectedEmotion: detectedEmotion,
+          emotionSignals: emotionSignals,
+        );
       }
+      final fallbackMessage = message.isEmpty
+          ? 'La imagen no pudo validarse correctamente.'
+          : message;
       return ImageAiReviewResult.block(
-        message.isEmpty
-            ? 'La imagen no pudo validarse correctamente.'
-            : message,
+        _decorateEmotionMessage(
+          baseMessage: fallbackMessage,
+          context: context,
+          detectedEmotion: detectedEmotion,
+        ),
+        detectedEmotion: detectedEmotion,
+        emotionSignals: emotionSignals,
       );
     } on FirebaseFunctionsException catch (error) {
       final message = _messageForFunctionsError(error);
@@ -113,6 +148,52 @@ class ImageAiReviewService {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return const <String, dynamic>{};
+  }
+
+  static Map<String, int> _asIntMap(Object? value) {
+    final map = _asMap(value);
+    return map.map((key, rawValue) => MapEntry(
+          key,
+          rawValue is num ? rawValue.toInt() : 0,
+        ));
+  }
+
+  static String _decorateEmotionMessage({
+    required String baseMessage,
+    required ImageAiReviewContext context,
+    required String detectedEmotion,
+  }) {
+    if (context.expectedEmotion.trim().isEmpty) return baseMessage;
+    if (detectedEmotion.isEmpty) return baseMessage;
+    if (baseMessage.toLowerCase().contains('la ia la percibe')) {
+      return baseMessage;
+    }
+
+    final detectedLabel = _prettyEmotionLabel(detectedEmotion);
+    if (detectedLabel.isEmpty) return baseMessage;
+
+    if (detectedEmotion == 'indefinida' || detectedEmotion == 'mezclada') {
+      return '$baseMessage La IA no detecta una emoción dominante con suficiente claridad.';
+    }
+
+    return '$baseMessage La IA la percibe más como $detectedLabel.';
+  }
+
+  static String _prettyEmotionLabel(String emotionId) {
+    switch (emotionId.trim().toLowerCase()) {
+      case 'feliz':
+        return 'feliz';
+      case 'triste':
+        return 'triste';
+      case 'enojado':
+        return 'enojado';
+      case 'sorprendido':
+        return 'sorprendido';
+      case 'asustado':
+        return 'asustado';
+      default:
+        return '';
+    }
   }
 
   static String _messageForFunctionsError(FirebaseFunctionsException error) {

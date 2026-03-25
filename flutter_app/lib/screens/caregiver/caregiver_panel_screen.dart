@@ -118,7 +118,6 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
   bool _savingAdmin = false;
   bool _loadingAdminDashboard = false;
   AdminDashboardStats? _adminStats;
-  List<DeletedAccountRecord> _deletedAccounts = const [];
 
   @override
   void initState() {
@@ -264,7 +263,7 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     final next = AppAdminConfig(
       maintenanceMode: _maintenanceMode,
       maintenanceMessage: _maintenanceMessageController.text,
-      minimumVersion: _minimumVersionController.text,
+      minimumVersion: widget.controller.appAdminConfig.minimumVersion,
       blockedGameKeys: _adminBlockedGameKeys.toList(),
       gameLabels: labels,
       updatedAtMillis: widget.controller.appAdminConfig.updatedAtMillis,
@@ -295,7 +294,6 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     if (!mounted) return;
     setState(() {
       _adminStats = widget.controller.adminDashboardStats;
-      _deletedAccounts = widget.controller.deletedAccounts;
       _loadingAdminDashboard = false;
     });
     if (showSnack) {
@@ -353,11 +351,9 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
             _AdminTab(
               controller: widget.controller,
               dashboardStats: _adminStats,
-              deletedAccounts: _deletedAccounts,
               loadingDashboard: _loadingAdminDashboard,
               maintenanceMode: _maintenanceMode,
               maintenanceMessageController: _maintenanceMessageController,
-              minimumVersionController: _minimumVersionController,
               blockedGameKeys: _adminBlockedGameKeys,
               gameLabelControllers: _gameLabelControllers,
               saving: _savingAdmin,
@@ -395,7 +391,8 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
               onCreateChildProfile: () => _openChildProfileEditor(),
               onEditChildProfile: (childId) =>
                   _openChildProfileEditor(childId: childId),
-              onDeleteChildProfile: (child) => _confirmDeleteChildProfile(child),
+              onDeleteChildProfile: (child) =>
+                  _confirmDeleteChildProfile(child),
               onChildContextChanged: _changeChildContext,
             ),
             _ReportsTab(
@@ -690,7 +687,7 @@ class _SummaryTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         NebulaPrimaryButton(
-          text: 'Personalizacion de contenido',
+          text: 'Personalización de contenido',
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -774,7 +771,8 @@ class _ReportsTab extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       final result = controller.isAdmin
-                          ? await controller.seedDemoChildForReportsForAllUsers()
+                          ? await controller
+                              .seedDemoChildForReportsForAllUsers()
                           : await controller.seedDemoChildForReports();
                       if (result.ok && !controller.isAdmin) {
                         final demoChildId = controller.activeChildProfileId;
@@ -1170,8 +1168,7 @@ class _ReportsTab extends StatelessWidget {
           2 => 2.5,
           _ => 5.0,
         };
-        final score =
-            (accuracy * 85.0) + (speedScore * 10.0) + difficultyBonus;
+        final score = (accuracy * 85.0) + (speedScore * 10.0) + difficultyBonus;
         totalScore += score.clamp(0.0, 100.0);
       }
       result[skillId] = (totalScore / entries.length, entries.length);
@@ -1323,7 +1320,7 @@ class _SkillsTab extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Que es: ${skill.description}'),
+                          Text('Qué es: ${skill.description}'),
                           const SizedBox(height: 8),
                           Text('Ejemplo cotidiano: ${skill.everydayExamples}'),
                           const SizedBox(height: 8),
@@ -1563,9 +1560,9 @@ class _ControlTab extends StatelessWidget {
                 const SizedBox(height: 8),
                 ...controller.effectiveGameLabels.entries
                     .where(
-                      (entry) =>
-                          !adminBlocked.contains(entry.key.trim().toLowerCase()),
-                    )
+                  (entry) =>
+                      !adminBlocked.contains(entry.key.trim().toLowerCase()),
+                )
                     .map((entry) {
                   final blocked = blockedGameKeys.contains(entry.key);
                   return CheckboxListTile(
@@ -1599,11 +1596,9 @@ class _AdminTab extends StatelessWidget {
   const _AdminTab({
     required this.controller,
     required this.dashboardStats,
-    required this.deletedAccounts,
     required this.loadingDashboard,
     required this.maintenanceMode,
     required this.maintenanceMessageController,
-    required this.minimumVersionController,
     required this.blockedGameKeys,
     required this.gameLabelControllers,
     required this.saving,
@@ -1617,11 +1612,9 @@ class _AdminTab extends StatelessWidget {
 
   final AppController controller;
   final AdminDashboardStats? dashboardStats;
-  final List<DeletedAccountRecord> deletedAccounts;
   final bool loadingDashboard;
   final bool maintenanceMode;
   final TextEditingController maintenanceMessageController;
-  final TextEditingController minimumVersionController;
   final Set<String> blockedGameKeys;
   final Map<String, TextEditingController> gameLabelControllers;
   final bool saving;
@@ -1700,7 +1693,7 @@ class _AdminTab extends StatelessWidget {
                 if (loadingDashboard) const LinearProgressIndicator(),
                 const SizedBox(height: 8),
                 if (stats == null)
-                  const Text('Sin datos aún. Pulsa "Actualizar".')
+                  const Text('Sin datos a\u00fan. Pulsa "Actualizar".')
                 else ...[
                   Wrap(
                     spacing: 8,
@@ -1731,7 +1724,7 @@ class _AdminTab extends StatelessWidget {
                         value: '${stats.totalGameSessions}',
                       ),
                       _MetricChip(
-                        label: 'Sesiones 7 días',
+                        label: 'Sesiones 7 d\u00edas',
                         value: '${stats.sessionsLast7Days}',
                       ),
                       _MetricChip(
@@ -1739,21 +1732,17 @@ class _AdminTab extends StatelessWidget {
                         value: _formatMinutes(stats.totalUsageMinutes),
                       ),
                       _MetricChip(
-                        label: 'Uso 7 días',
+                        label: 'Uso 7 d\u00edas',
                         value: _formatMinutes(stats.usageMinutesLast7Days),
                       ),
                       _MetricChip(
-                        label: 'Precisión',
+                        label: 'Precisi\u00f3n',
                         value:
                             '${stats.averageAccuracyPercent.toStringAsFixed(1)}%',
                       ),
                       _MetricChip(
                         label: 'Eliminadas',
                         value: '${stats.deletedAccounts}',
-                      ),
-                      _MetricChip(
-                        label: 'Eliminadas 30 días',
-                        value: '${stats.deletedAccountsLast30Days}',
                       ),
                     ],
                   ),
@@ -1764,7 +1753,7 @@ class _AdminTab extends StatelessWidget {
                   if (topGames.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Juegos con más sesiones',
+                      'Juegos con m\u00e1s sesiones',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -1815,47 +1804,6 @@ class _AdminTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Cuentas eliminadas recientes',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                if (deletedAccounts.isEmpty)
-                  const Text('Sin cuentas eliminadas registradas.')
-                else
-                  ...deletedAccounts.take(15).map((item) {
-                    final role = _roleLabel(
-                        item.role.trim().isEmpty ? 'caregiver' : item.role);
-                    final primary = item.email.trim().isNotEmpty
-                        ? item.email
-                        : item.username;
-                    final title =
-                        primary.trim().isNotEmpty ? primary : item.userId;
-                    final reason =
-                        item.reason.trim().isEmpty ? 'sin motivo' : item.reason;
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.person_remove_alt_1_outlined),
-                      title: Text(title),
-                      subtitle: Text(
-                        'Rol: $role | Motivo: $reason | ${_formatDateTime(item.deletedAtMillis)}',
-                      ),
-                    );
-                  }),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
                   'Estado de la app',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -1875,13 +1823,6 @@ class _AdminTab extends StatelessWidget {
                   controller: maintenanceMessageController,
                   decoration: const InputDecoration(
                     labelText: 'Mensaje de mantenimiento',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: minimumVersionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Versión mínima sugerida (ej: 1.2.0)',
                   ),
                 ),
               ],

@@ -169,13 +169,18 @@ class _GamediloscreenState extends State<Gamediloscreen> {
               item.difficultyStars == stars &&
               item.imagePath.trim().isNotEmpty &&
               item.text.trim().isNotEmpty &&
-              item.audioSource.trim().isNotEmpty,
+              item
+                  .audioSourceForNarrator(widget.controller.selectedNarratorId)
+                  .trim()
+                  .isNotEmpty,
         )
         .map(
           (item) => _DiloItem(
             imageSource: item.imagePath.trim(),
             text: item.text.trim(),
-            audioSource: item.audioSource.trim(),
+            audioSource: item
+                .audioSourceForNarrator(widget.controller.selectedNarratorId)
+                .trim(),
           ),
         )
         .toList();
