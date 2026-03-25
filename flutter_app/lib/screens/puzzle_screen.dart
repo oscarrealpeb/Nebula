@@ -149,14 +149,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
   }
 
   int _rewardForDifficulty(int stars) {
-    switch (stars) {
-      case 1:
-        return 20;
-      case 2:
-        return 25;
-      default:
-        return 30;
-    }
+    return widget.controller.starsRewardForGame(
+      gameKey: 'arma_imagen',
+      difficultyStars: stars,
+      mistakes: 0,
+    );
   }
 
   void _startPuzzle(int stars) {

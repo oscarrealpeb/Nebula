@@ -563,13 +563,11 @@ class _EmotionGameScreenState extends State<EmotionGameScreen> {
     // if (_isFinishing) return;
     _isFinishing = true;
 
-    final baseByDifficulty = switch (widget.difficultyStars.clamp(1, 3)) {
-      1 => 20,
-      2 => 25,
-      _ => 30,
-    };
-    final penalty = totalMistakes > 3 ? 10 : 0;
-    final baseStars = (baseByDifficulty - penalty).clamp(0, 30).toInt();
+    final baseStars = widget.controller.starsRewardForGame(
+      gameKey: 'descubre_emocion',
+      difficultyStars: widget.difficultyStars,
+      mistakes: totalMistakes,
+    );
 
     try {
       await widget.controller

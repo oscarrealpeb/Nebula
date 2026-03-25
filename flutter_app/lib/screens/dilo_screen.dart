@@ -500,13 +500,11 @@ class _GamediloscreenState extends State<Gamediloscreen> {
     if (_completing) return;
     setState(() => _completing = true);
 
-    final baseByDifficulty = switch (widget.difficultyStars.clamp(1, 3)) {
-      1 => 20,
-      2 => 25,
-      _ => 30,
-    };
-    final penalty = _totalMistakes > 3 ? 10 : 0;
-    final earnedStars = (baseByDifficulty - penalty).clamp(0, 30).toInt();
+    final earnedStars = widget.controller.starsRewardForGame(
+      gameKey: widget.gameKey,
+      difficultyStars: widget.difficultyStars,
+      mistakes: _totalMistakes,
+    );
     _totalStarsEarned = earnedStars;
 
     await widget.controller.addStars(_totalStarsEarned);

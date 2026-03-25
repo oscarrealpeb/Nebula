@@ -65,14 +65,11 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
   }
 
   int _starsReward() {
-    switch (_difficultyStars) {
-      case 1:
-        return 20;
-      case 2:
-        return 25;
-      default:
-        return 30;
-    }
+    return widget.controller.starsRewardForGame(
+      gameKey: 'donde_va',
+      difficultyStars: _difficultyStars,
+      mistakes: _mistakes,
+    );
   }
 
   Future<void> _selectCategory(DondeVaCategory category) async {

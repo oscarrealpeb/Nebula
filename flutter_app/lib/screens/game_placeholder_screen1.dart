@@ -28,14 +28,11 @@ class _GamePlaceholderScreenState extends State<GamePlaceholderScreen> {
   bool _completing = false;
 
   int _starsForDifficulty(int stars) {
-    switch (stars) {
-      case 1:
-        return 20;
-      case 2:
-        return 25;
-      default:
-        return 30;
-    }
+    return widget.controller.starsRewardForGame(
+      gameKey: widget.gameKey,
+      difficultyStars: stars,
+      mistakes: 0,
+    );
   }
 
   Future<void> _completeGame() async {

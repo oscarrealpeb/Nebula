@@ -478,13 +478,16 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     // if (_isFinishing) return;
     _isFinishing = true;
 
-    int difficultyBonus = switch (widget.difficulty) {
-      GameDifficulty.easy => 20,
-      GameDifficulty.medium => 25,
-      GameDifficulty.hard => 30,
+    final difficultyStars = switch (widget.difficulty) {
+      GameDifficulty.easy => 1,
+      GameDifficulty.medium => 2,
+      GameDifficulty.hard => 3,
     };
-    final penalty = _totalMistakes > 3 ? 10 : 0;
-    final total = (difficultyBonus - penalty).clamp(0, 30).toInt();
+    final total = widget.controller.starsRewardForGame(
+      gameKey: 'conecta_sonidos',
+      difficultyStars: difficultyStars,
+      mistakes: _totalMistakes,
+    );
 
     try {
       await widget.controller
@@ -493,11 +496,6 @@ class _ConnectSoundGameScreenState extends State<ConnectSoundGameScreen> {
     } catch (_) {}
 
     try {
-      final difficultyStars = switch (widget.difficulty) {
-        GameDifficulty.easy => 1,
-        GameDifficulty.medium => 2,
-        GameDifficulty.hard => 3,
-      };
       await widget.controller.recordGameSession(
         gameKey: 'conecta_sonidos',
         startedAt: _startedAt,

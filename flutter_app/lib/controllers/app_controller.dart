@@ -51,6 +51,12 @@ class AppController extends ChangeNotifier {
     'png',
   ];
   static const int _dailyUsagePersistThresholdSeconds = 10;
+  static const Set<String> _minigameKeys = <String>{
+    'cartas_gemelas',
+    'que_sigue',
+    'donde_va',
+    'arma_imagen',
+  };
 
   AppController._(
     this._authService,
@@ -395,6 +401,26 @@ class AppController extends ChangeNotifier {
     final hue = currentAccentHue;
     final intensity = currentAccentIntensity;
     return HSVColor.fromAHSV(1, hue, 0.60, intensity).toColor();
+  }
+
+  int starsRewardForGame({
+    required String gameKey,
+    required int difficultyStars,
+    int mistakes = 0,
+  }) {
+    final normalizedKey = gameKey.trim().toLowerCase();
+    final safeDifficulty = difficultyStars.clamp(1, 3).toInt();
+    var reward = switch (safeDifficulty) {
+      1 => 20,
+      2 => 25,
+      _ => 30,
+    };
+
+    final isMinigame = _minigameKeys.contains(normalizedKey);
+    if (!isMinigame && mistakes >= 3 && safeDifficulty >= 2) {
+      reward -= 5;
+    }
+    return reward;
   }
 
   // Home UI token from merged branch; mapped to current dynamic accent.

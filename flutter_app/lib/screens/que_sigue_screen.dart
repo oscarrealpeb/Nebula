@@ -72,14 +72,11 @@ class _QueSigueScreenState extends State<QueSigueScreen> {
   }
 
   int _starsReward(int stars) {
-    switch (stars) {
-      case 1:
-        return 20;
-      case 2:
-        return 25;
-      default:
-        return 30;
-    }
+    return widget.controller.starsRewardForGame(
+      gameKey: 'que_sigue',
+      difficultyStars: stars,
+      mistakes: _mistakes,
+    );
   }
 
   Future<bool> _onWillPop() async {

@@ -114,14 +114,11 @@ class _CartasGemelasGameState extends State<CartasGemelasGame> {
   }
 
   int _starsReward(int stars) {
-    switch (stars) {
-      case 1:
-        return 20;
-      case 2:
-        return 25;
-      default:
-        return 30;
-    }
+    return widget.controller.starsRewardForGame(
+      gameKey: 'cartas_gemelas',
+      difficultyStars: stars,
+      mistakes: _mistakes,
+    );
   }
 
   Future<void> _tapCard(int index) async {
