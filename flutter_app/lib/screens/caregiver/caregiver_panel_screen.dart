@@ -77,6 +77,16 @@ int _hourlyChartScaleMax(Map<int, int> hourly) {
   return rounded < 30 ? 30 : rounded;
 }
 
+int _dailyChartScaleMax(Map<String, int> dailyMinutes) {
+  final rawMax = dailyMinutes.values.fold<int>(
+    0,
+    (max, value) => value > max ? value : max,
+  );
+  if (rawMax <= 0) return 30;
+  final rounded = ((rawMax + 14) ~/ 15) * 15;
+  return rounded < 30 ? 30 : rounded;
+}
+
 class CaregiverPanelScreen extends StatefulWidget {
   const CaregiverPanelScreen({
     super.key,
@@ -187,9 +197,9 @@ class _CaregiverPanelScreenState extends State<CaregiverPanelScreen> {
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Eliminar perfil de nino'),
+            title: const Text('Eliminar perfil de niño'),
             content: Text(
-              'Vas a eliminar $childName. Esta accion es irreversible y tambien borrara su progreso, sesiones y logros asociados.',
+              'Vas a eliminar $childName. Esta acción es irreversible y también borrará su progreso, sesiones y logros asociados.',
             ),
             actions: [
               TextButton(
@@ -716,6 +726,7 @@ class _ReportsTab extends StatelessWidget {
     final activeChildId = controller.childProfile?.id.trim() ?? '';
     final sessions = controller.sessionsForLastDays(30, childId: activeChildId);
     final dayData = _dailyMinutes(controller, childId: activeChildId);
+    final dailyScaleMax = _dailyChartScaleMax(dayData);
     final hourly =
         controller.usageMinutesByHour(days: 14, childId: activeChildId);
     final hourlyScaleMax = _hourlyChartScaleMax(hourly);
@@ -843,7 +854,7 @@ class _ReportsTab extends StatelessWidget {
                 const SizedBox(height: 8),
                 ...dayData.entries.map((entry) {
                   final value = entry.value;
-                  final ratio = (value / 120).clamp(0.0, 1.0);
+                  final ratio = (value / dailyScaleMax).clamp(0.0, 1.0);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
@@ -858,6 +869,11 @@ class _ReportsTab extends StatelessWidget {
                     ),
                   );
                 }),
+                const SizedBox(height: 4),
+                Text(
+                  'Escala máxima: $dailyScaleMax min.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -948,7 +964,7 @@ class _ReportsTab extends StatelessWidget {
                     '0h                                12h                                23h'),
                 const SizedBox(height: 4),
                 Text(
-                  'Cada barra representa minutos acumulados en sesiones iniciadas en esa hora durante los ultimos 14 dias. Escala maxima: $hourlyScaleMax min.',
+                  'Cada barra representa minutos acumulados en sesiones iniciadas en esa hora durante los últimos 14 días. Escala máxima: $hourlyScaleMax min.',
                 ),
               ],
             ),
@@ -966,6 +982,11 @@ class _ReportsTab extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Puntaje estimado con base en precisión, ritmo de respuesta y dificultad jugada. La evidencia indica cuántas sesiones respaldan el cálculo.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
                 if (skillData.isEmpty)
@@ -1139,25 +1160,56 @@ class _ReportsTab extends StatelessWidget {
       if (entries.isEmpty) return;
       var totalScore = 0.0;
       for (final item in entries) {
-        final rounds = item.rounds <= 0 ? 1 : item.rounds;
-        final safeMistakes = item.mistakes.clamp(0, 500);
-        final accuracy = ((rounds - safeMistakes) / rounds).clamp(0.0, 1.0);
-        final independence =
-            (1 - (safeMistakes / (safeMistakes + rounds))).clamp(0.0, 1.0);
-        final durationSeconds = _effectiveDurationSeconds(item);
-        final speedRaw = durationSeconds <= 0
-            ? 1.0
-            : (rounds * 20.0 / durationSeconds).clamp(0.0, 1.0);
-        final consistency = 0.7 + ((item.difficultyStars - 1) * 0.1);
-        final score = (accuracy * 0.45) +
-            (independence * 0.25) +
-            (speedRaw * 0.20) +
-            (consistency * 0.10);
-        totalScore += (score * 100);
+        final attempts = _sessionAttempts(item);
+        final correctAnswers = _sessionCorrectAnswers(item, attempts);
+        final accuracy =
+            attempts <= 0 ? 0.0 : (correctAnswers / attempts).clamp(0.0, 1.0);
+        final speedScore = _sessionSpeedScore(item, attempts);
+        final difficultyBonus = switch (item.difficultyStars.clamp(1, 3)) {
+          1 => 0.0,
+          2 => 2.5,
+          _ => 5.0,
+        };
+        final score =
+            (accuracy * 85.0) + (speedScore * 10.0) + difficultyBonus;
+        totalScore += score.clamp(0.0, 100.0);
       }
       result[skillId] = (totalScore / entries.length, entries.length);
     });
     return result;
+  }
+
+  int _sessionAttempts(GameSessionRecord session) {
+    final recordedAttempts = session.totalAttempts.clamp(0, 10000);
+    if (recordedAttempts > 0) return recordedAttempts;
+
+    final inferredFromAnswers =
+        (session.correctAnswers + session.mistakes).clamp(0, 10000);
+    if (inferredFromAnswers > 0) return inferredFromAnswers;
+
+    return session.rounds.clamp(0, 10000);
+  }
+
+  int _sessionCorrectAnswers(GameSessionRecord session, int attempts) {
+    if (attempts <= 0) return 0;
+
+    final recordedCorrect = session.correctAnswers.clamp(0, 10000);
+    if (recordedCorrect > 0 || session.totalAttempts > 0) {
+      return recordedCorrect.clamp(0, attempts);
+    }
+
+    final inferred = attempts - session.mistakes.clamp(0, attempts);
+    return inferred.clamp(0, attempts);
+  }
+
+  double _sessionSpeedScore(GameSessionRecord session, int attempts) {
+    if (attempts <= 0) return 0.5;
+
+    final durationSeconds = _effectiveDurationSeconds(session);
+    if (durationSeconds <= 0) return 0.5;
+
+    final secondsPerAttempt = durationSeconds / attempts;
+    return ((30.0 - secondsPerAttempt) / 24.0).clamp(0.0, 1.0);
   }
 
   Map<String, double> _errorRateBySkill(List<GameSessionRecord> sessions) {
@@ -1233,7 +1285,7 @@ class _SkillsTab extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Cada habilidad incluye: que es, un ejemplo cotidiano, como se evalua y que juego la fortalece.',
+                    'Cada habilidad incluye: qué es, un ejemplo cotidiano, cómo se evalúa y qué juego la fortalece.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -1275,7 +1327,7 @@ class _SkillsTab extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text('Ejemplo cotidiano: ${skill.everydayExamples}'),
                           const SizedBox(height: 8),
-                          Text('Como evaluamos: ${skill.evaluationNotes}'),
+                          Text('Cómo evaluamos: ${skill.evaluationNotes}'),
                           const SizedBox(height: 10),
                           Text(
                             'Juegos que la fortalecen',
@@ -1425,7 +1477,7 @@ class _ControlTab extends StatelessWidget {
                   controller: dailyLimitController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Limite diario en minutos (0 = sin limite)',
+                    labelText: 'Límite diario en minutos (0 = sin límite)',
                   ),
                 ),
               ],
@@ -1687,11 +1739,11 @@ class _AdminTab extends StatelessWidget {
                         value: _formatMinutes(stats.totalUsageMinutes),
                       ),
                       _MetricChip(
-                        label: 'Uso 7 dias',
+                        label: 'Uso 7 días',
                         value: _formatMinutes(stats.usageMinutesLast7Days),
                       ),
                       _MetricChip(
-                        label: 'Precision',
+                        label: 'Precisión',
                         value:
                             '${stats.averageAccuracyPercent.toStringAsFixed(1)}%',
                       ),
@@ -1700,7 +1752,7 @@ class _AdminTab extends StatelessWidget {
                         value: '${stats.deletedAccounts}',
                       ),
                       _MetricChip(
-                        label: 'Eliminadas 30 dias',
+                        label: 'Eliminadas 30 días',
                         value: '${stats.deletedAccountsLast30Days}',
                       ),
                     ],

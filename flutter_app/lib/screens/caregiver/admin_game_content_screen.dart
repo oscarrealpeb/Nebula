@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/app_controller.dart';
+import '../../core/data/donde_va_catalog.dart';
+import '../../core/data/explore_catalog.dart';
 import '../../core/data/memory_catalog.dart';
 import '../../core/data/puzzle_catalog.dart';
 import '../../models/game_content_config.dart';
@@ -129,7 +130,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     'assets/images/conecta/claxon.jpg',
     'assets/images/conecta/centro_comercial.jpg',
     'assets/images/conecta/restaurante.jpg',
-    'assets/images/conecta/niños.jpg',
+    'assets/images/conecta/ni\u00f1os.jpg',
     'assets/images/conecta/tormenta.jpg',
     'assets/images/conecta/coro.jpg',
   ];
@@ -139,13 +140,14 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
   final _soundAssetController = TextEditingController();
   final _soundImageController = TextEditingController();
   final _soundCategoryController = TextEditingController();
-  final _puzzleSourceController = TextEditingController();
   final _puzzleAudioController = TextEditingController();
   final _diloImageController = TextEditingController();
   final _diloTextController = TextEditingController();
   final _diloAudioController = TextEditingController();
   final _memoryImageController = TextEditingController();
   final _memoryAudioController = TextEditingController();
+  final _exploreTitleController = TextEditingController();
+  final _exploreDescriptionController = TextEditingController();
   final _picker = ImagePicker();
 
   static const int _maxPuzzleImages = 8;
@@ -156,6 +158,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
   int _emotionDifficulty = 1;
   int _soundDifficulty = 1;
   int _diloDifficulty = 1;
+  String _exploreCategoryId = exploreCategoryDefinitions.first.id;
+  String? _editingExploreItemId;
   bool _saving = false;
   bool _loading = false;
   String? _globalBusyKey;
@@ -179,13 +183,14 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     _soundAssetController.dispose();
     _soundImageController.dispose();
     _soundCategoryController.dispose();
-    _puzzleSourceController.dispose();
     _puzzleAudioController.dispose();
     _diloImageController.dispose();
     _diloTextController.dispose();
     _diloAudioController.dispose();
     _memoryImageController.dispose();
     _memoryAudioController.dispose();
+    _exploreTitleController.dispose();
+    _exploreDescriptionController.dispose();
     super.dispose();
   }
 
@@ -217,7 +222,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     if (imagePath.isEmpty || correctEmotion.isEmpty) {
       NebulaSnack.show(
         context,
-        message: 'Completa ruta de imagen y emocion correcta.',
+        message:
+            'Selecciona una imagen y completa la emoci\u00f3n correcta.',
         ok: false,
       );
       return;
@@ -269,7 +275,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     if (soundAsset.isEmpty || correctImage.isEmpty) {
       NebulaSnack.show(
         context,
-        message: 'Completa ruta del sonido y de la imagen correcta.',
+        message: 'Completa el sonido base y selecciona la imagen correcta.',
         ok: false,
       );
       return;
@@ -374,12 +380,144 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     });
   }
 
+  List<ExploreContentItem> _effectiveExploreItems() {
+    return mergeExploreItems(_working.exploreItems);
+  }
+
+  ExploreContentItem? _effectiveExploreItemById(String id) {
+    final normalized = id.trim().toLowerCase();
+    for (final item in _effectiveExploreItems()) {
+      if (item.id.trim().toLowerCase() == normalized) return item;
+    }
+    return null;
+  }
+
+  void _startExploreEdit(ExploreContentItem item) {
+    setState(() {
+      _editingExploreItemId = item.id;
+      _exploreCategoryId = item.categoryId;
+      _exploreTitleController.text = item.title;
+      _exploreDescriptionController.text = item.description;
+    });
+  }
+
+  void _cancelExploreEdit() {
+    setState(() {
+      _editingExploreItemId = null;
+      _exploreCategoryId = exploreCategoryDefinitions.first.id;
+      _exploreTitleController.clear();
+      _exploreDescriptionController.clear();
+    });
+  }
+
+  Future<void> _submitExploreItem() async {
+    final title = _exploreTitleController.text.trim();
+    final description = _exploreDescriptionController.text.trim();
+    if (title.isEmpty || description.isEmpty) {
+      await NebulaSnack.show(
+        context,
+        message: 'Completa el titulo y la descripcion del elemento.',
+        ok: false,
+      );
+      return;
+    }
+
+    final editingId = _editingExploreItemId;
+    final current =
+        editingId == null ? null : _effectiveExploreItemById(editingId);
+    final nextItem = ExploreContentItem(
+      id: editingId ?? 'explore_${DateTime.now().microsecondsSinceEpoch}',
+      categoryId: _exploreCategoryId,
+      title: title,
+      description: description,
+      enabled: current?.enabled ?? true,
+    );
+
+    final nextItems = List<ExploreContentItem>.from(_working.exploreItems);
+    final existingIndex = nextItems.indexWhere(
+      (item) => item.id.trim().toLowerCase() == nextItem.id.trim().toLowerCase(),
+    );
+    if (existingIndex >= 0) {
+      nextItems[existingIndex] = nextItem;
+    } else {
+      nextItems.add(nextItem);
+    }
+
+    setState(() {
+      _working = _working.copyWith(exploreItems: nextItems);
+    });
+    _cancelExploreEdit();
+    await NebulaSnack.show(
+      context,
+      message: editingId == null
+          ? 'Elemento de Explora agregado.'
+          : 'Elemento de Explora actualizado.',
+      ok: true,
+    );
+  }
+
+  void _toggleExploreItem(ExploreContentItem item, bool value) {
+    final nextItems = List<ExploreContentItem>.from(_working.exploreItems);
+    final existingIndex = nextItems.indexWhere(
+      (entry) => entry.id.trim().toLowerCase() == item.id.trim().toLowerCase(),
+    );
+    final updated = item.copyWith(enabled: value);
+    if (existingIndex >= 0) {
+      nextItems[existingIndex] = updated;
+    } else {
+      nextItems.add(updated);
+    }
+    setState(() {
+      _working = _working.copyWith(exploreItems: nextItems);
+    });
+  }
+
+  Future<void> _deleteExploreItem(ExploreContentItem item) async {
+    final isDefault = isDefaultExploreItemId(item.id);
+    final accepted = await _confirmDeleteContentItem(
+      title: isDefault
+          ? 'Ocultar elemento predeterminado'
+          : 'Eliminar elemento de Explora',
+      message: isDefault
+          ? 'Este elemento viene con la app. Si continuas, dejara de aparecer en Explora y aprende hasta que lo vuelvas a activar o edites de nuevo.'
+          : 'Esta acci\u00f3n eliminar\u00e1 este elemento personalizado de Explora y aprende en futuras sesiones. \u00bfDeseas continuar?',
+      confirmLabel: isDefault ? 'Ocultar' : 'Eliminar',
+    );
+    if (!accepted) return;
+
+    final nextItems = List<ExploreContentItem>.from(_working.exploreItems);
+    final existingIndex = nextItems.indexWhere(
+      (entry) => entry.id.trim().toLowerCase() == item.id.trim().toLowerCase(),
+    );
+
+    if (isDefault) {
+      final updated = item.copyWith(enabled: false);
+      if (existingIndex >= 0) {
+        nextItems[existingIndex] = updated;
+      } else {
+        nextItems.add(updated);
+      }
+    } else if (existingIndex >= 0) {
+      nextItems.removeAt(existingIndex);
+    }
+
+    setState(() {
+      _working = _working.copyWith(exploreItems: nextItems);
+      if (_editingExploreItemId == item.id) {
+        _editingExploreItemId = null;
+        _exploreCategoryId = exploreCategoryDefinitions.first.id;
+        _exploreTitleController.clear();
+        _exploreDescriptionController.clear();
+      }
+    });
+  }
+
   Future<bool> _addMemoryItemFromSource(String imagePath) async {
     final audioSource = _memoryAudioController.text.trim();
     if (imagePath.isEmpty) {
       NebulaSnack.show(
         context,
-        message: 'Completa la ruta de imagen.',
+        message: 'Selecciona una imagen.',
         ok: false,
       );
       return false;
@@ -409,10 +547,6 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       _memoryAudioController.clear();
     });
     return true;
-  }
-
-  Future<void> _addMemoryItem() async {
-    await _addMemoryItemFromSource(_memoryImageController.text.trim());
   }
 
   void _toggleMemoryItem(String id, bool value) {
@@ -479,7 +613,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
 
   String _prettyEmotionName(String emotion) {
     final normalized = emotion.trim().toLowerCase();
-    if (normalized.isEmpty) return 'emocion esperada';
+    if (normalized.isEmpty) return 'emoci\u00f3n esperada';
     return normalized[0].toUpperCase() + normalized.substring(1);
   }
 
@@ -493,15 +627,15 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       final normalized = raw
           .trim()
           .toLowerCase()
-          .replaceAll('á', 'a')
-          .replaceAll('é', 'e')
-          .replaceAll('í', 'i')
-          .replaceAll('ó', 'o')
-          .replaceAll('ú', 'u')
-          .replaceAll('ü', 'u')
-          .replaceAll('ñ', 'n')
+          .replaceAll('\\u00e1', 'a')
+          .replaceAll('\\u00e9', 'e')
+          .replaceAll('\\u00ed', 'i')
+          .replaceAll('\\u00f3', 'o')
+          .replaceAll('\\u00fa', 'u')
+          .replaceAll('\\u00fc', 'u')
+          .replaceAll('\\u00f1', 'n')
           .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
+          .replaceAll(RegExp(r'\\s+'), ' ')
           .trim();
       if (normalized.isEmpty) return;
       concepts.add(normalized);
@@ -524,13 +658,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
   String _emotionDifficultyLabel(String source) {
     final normalized = source.toLowerCase();
     if (normalized.contains('/facil/')) {
-      return 'Aparece en dificultad fácil';
+      return 'Aparece en dificultad facil';
     }
     if (normalized.contains('/medio/')) {
       return 'Aparece en dificultad media';
     }
     if (normalized.contains('/dificil/')) {
-      return 'Aparece en dificultad difícil';
+      return 'Aparece en dificultad dificil';
     }
     return 'Contenido predeterminado';
   }
@@ -550,64 +684,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         (_working.globalPuzzleImageOverrides[key]?.trim().isNotEmpty ?? false),
       'cartas_gemelas' =>
         (_working.globalMemoryImageOverrides[key]?.trim().isNotEmpty ?? false),
+      'donde_va' =>
+        (_working.globalDondeVaImageOverrides[key]?.trim().isNotEmpty ?? false),
       _ => false,
     };
-  }
-
-  String _defaultSourceFor({
-    required String gameKey,
-    required String itemId,
-  }) {
-    final normalizedGame = gameKey.trim().toLowerCase();
-    final normalizedItemId = itemId.trim().toLowerCase();
-    final pool = switch (normalizedGame) {
-      'emociones' => _defaultEmotionImages,
-      'sonidos' => _defaultSoundImages,
-      'puzzle' => defaultPuzzleImageSources,
-      'cartas_gemelas' => defaultMemoryImageSources,
-      _ => const <String>[],
-    };
-    for (final source in pool) {
-      final sourceItemId =
-          widget.controller.customContentItemId(source: source);
-      final normalizedSource = source.trim().toLowerCase();
-      if (sourceItemId.trim().toLowerCase() == normalizedItemId ||
-          normalizedSource == normalizedItemId) {
-        return source;
-      }
-    }
-    return '';
-  }
-
-  List<String> _expectedConceptsForGlobalItem({
-    required String gameKey,
-    required String itemId,
-  }) {
-    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
-    if (gameKey.trim().toLowerCase() == 'emociones') {
-      return const <String>[];
-    }
-    return _expectedConceptsFromSource(defaultSource);
-  }
-
-  String _expectedEmotionForGlobalItem({
-    required String gameKey,
-    required String itemId,
-  }) {
-    if (gameKey.trim().toLowerCase() != 'emociones') return '';
-    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
-    return _emotionFromSource(defaultSource);
-  }
-
-  String _expectedDescriptionForGlobalItem({
-    required String gameKey,
-    required String itemId,
-  }) {
-    final defaultSource = _defaultSourceFor(gameKey: gameKey, itemId: itemId);
-    if (gameKey.trim().toLowerCase() == 'emociones') {
-      return _prettyEmotionName(_emotionFromSource(defaultSource));
-    }
-    return _prettyNameFromSource(defaultSource);
   }
 
   Future<bool> _reviewAdminImageUpload({
@@ -643,19 +723,49 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     return false;
   }
 
-  Future<void> _pickGlobalImage({
-    required String gameKey,
-    required String itemId,
+  bool _hasGlobalOverrideForItem(_GlobalDefaultImageItem item) {
+    if (_hasGlobalOverride(gameKey: item.gameKey, itemId: item.itemId)) {
+      return true;
+    }
+    final legacyItemId = item.defaultSource.trim();
+    if (legacyItemId.isEmpty ||
+        legacyItemId.toLowerCase() == item.itemId.trim().toLowerCase()) {
+      return false;
+    }
+    return _hasGlobalOverride(gameKey: item.gameKey, itemId: legacyItemId);
+  }
+
+  String _effectiveGlobalImageSourceForItem(_GlobalDefaultImageItem item) {
+    final primary = widget.controller.resolvedGameImageSourceFor(
+      gameKey: item.gameKey,
+      itemId: item.itemId,
+      defaultSource: item.defaultSource,
+    );
+    if (primary.trim().isNotEmpty && primary.trim() != item.defaultSource) {
+      return primary;
+    }
+    final legacyItemId = item.defaultSource.trim();
+    if (legacyItemId.isEmpty ||
+        legacyItemId.toLowerCase() == item.itemId.trim().toLowerCase()) {
+      return primary;
+    }
+    return widget.controller.resolvedGameImageSourceFor(
+      gameKey: item.gameKey,
+      itemId: legacyItemId,
+      defaultSource: item.defaultSource,
+    );
+  }
+
+  Future<void> _pickGlobalImageForItem({
+    required _GlobalDefaultImageItem item,
     required ImageSource source,
   }) async {
+    final gameKey = item.gameKey;
+    final itemId = item.itemId;
     final busyKey = '$gameKey::$itemId';
     setState(() => _globalBusyKey = busyKey);
     try {
-      final previousSource = widget.controller.resolvedGameImageSourceFor(
-        gameKey: gameKey,
-        itemId: itemId,
-        defaultSource: _defaultSourceFor(gameKey: gameKey, itemId: itemId),
-      );
+      final previousSource = _effectiveGlobalImageSourceForItem(item);
       final file = await _picker.pickImage(source: source, imageQuality: 80);
       if (file == null) return;
       if (!mounted) return;
@@ -676,26 +786,13 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         gameKey: gameKey,
         itemId: itemId,
         filePath: prepared.filePath,
-        expectedConcepts: _expectedConceptsForGlobalItem(
-          gameKey: gameKey,
-          itemId: itemId,
-        ),
-        expectedEmotion: _expectedEmotionForGlobalItem(
-          gameKey: gameKey,
-          itemId: itemId,
-        ),
-        expectedDescription: _expectedDescriptionForGlobalItem(
-          gameKey: gameKey,
-          itemId: itemId,
-        ),
+        expectedConcepts: item.expectedConcepts,
+        expectedEmotion: item.expectedEmotion,
+        expectedDescription: item.expectedDescription,
       );
       if (!mounted) return;
       if (result.ok) {
-        final nextSource = widget.controller.resolvedGameImageSourceFor(
-          gameKey: gameKey,
-          itemId: itemId,
-          defaultSource: _defaultSourceFor(gameKey: gameKey, itemId: itemId),
-        );
+        final nextSource = _effectiveGlobalImageSourceForItem(item);
         await evictPuzzleImageSource(previousSource);
         if (nextSource != previousSource) {
           await evictPuzzleImageSource(nextSource);
@@ -714,26 +811,19 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     }
   }
 
-  Future<void> _restoreGlobalImage({
-    required String gameKey,
-    required String itemId,
-  }) async {
-    final previousSource = widget.controller.resolvedGameImageSourceFor(
-      gameKey: gameKey,
-      itemId: itemId,
-      defaultSource: _defaultSourceFor(gameKey: gameKey, itemId: itemId),
-    );
+  Future<void> _restoreGlobalImageForItem(_GlobalDefaultImageItem item) async {
+    final restoreItemId =
+        _hasGlobalOverride(gameKey: item.gameKey, itemId: item.itemId)
+            ? item.itemId
+            : item.defaultSource;
+    final previousSource = _effectiveGlobalImageSourceForItem(item);
     final result = await widget.controller.restoreGlobalGameImage(
-      gameKey: gameKey,
-      itemId: itemId,
+      gameKey: item.gameKey,
+      itemId: restoreItemId,
     );
     if (!mounted) return;
     if (result.ok) {
-      final nextSource = widget.controller.resolvedGameImageSourceFor(
-        gameKey: gameKey,
-        itemId: itemId,
-        defaultSource: _defaultSourceFor(gameKey: gameKey, itemId: itemId),
-      );
+      final nextSource = _effectiveGlobalImageSourceForItem(item);
       await evictPuzzleImageSource(previousSource);
       if (nextSource != previousSource) {
         await evictPuzzleImageSource(nextSource);
@@ -747,10 +837,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     await NebulaSnack.show(context, message: result.message, ok: result.ok);
   }
 
-  Future<void> _openGlobalSourceSheet({
-    required String gameKey,
-    required String itemId,
-  }) async {
+  Future<void> _openGlobalSourceSheet(_GlobalDefaultImageItem item) async {
     await showModalBottomSheet<void>(
       context: context,
       builder: (context) => SafeArea(
@@ -764,21 +851,19 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                 title: const Text('Tomar foto'),
                 onTap: () async {
                   Navigator.of(context).pop();
-                  await _pickGlobalImage(
-                    gameKey: gameKey,
-                    itemId: itemId,
+                  await _pickGlobalImageForItem(
+                    item: item,
                     source: ImageSource.camera,
                   );
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Usar galería'),
+                title: const Text('Usar galer\u00eda'),
                 onTap: () async {
                   Navigator.of(context).pop();
-                  await _pickGlobalImage(
-                    gameKey: gameKey,
-                    itemId: itemId,
+                  await _pickGlobalImageForItem(
+                    item: item,
                     source: ImageSource.gallery,
                   );
                 },
@@ -889,7 +974,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Usar galería'),
+                title: const Text('Usar galer\u00eda'),
                 onTap: () async {
                   Navigator.of(sheetContext).pop();
                   await onPick(ImageSource.gallery);
@@ -906,7 +991,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     final accepted = await _confirmDeleteContentItem(
       title: 'Eliminar imagen de Cartas gemelas',
       message:
-          'Esta acción quitará esta imagen del contenido global de Cartas gemelas en futuras partidas. No elimina personalizaciones de niños ni borra otros archivos ya usados. ¿Deseas continuar?',
+          'Esta acci\u00f3n quitar\u00e1 esta imagen del contenido global de Cartas gemelas en futuras partidas. No elimina personalizaciones de ni\u00f1os ni borra otros archivos ya usados. \u00bfDeseas continuar?',
       confirmLabel: 'Eliminar',
     );
     if (!accepted) return;
@@ -922,7 +1007,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     final accepted = await _confirmDeleteContentItem(
       title: 'Eliminar imagen de rompecabezas',
       message:
-          'Esta acción quitará esta imagen del contenido global de Arma la imagen en futuras partidas. No elimina personalizaciones de niños ni borra otros archivos ya usados. ¿Deseas continuar?',
+          'Esta acci\u00f3n quitar\u00e1 esta imagen del contenido global de Arma la imagen en futuras partidas. No elimina personalizaciones de ni\u00f1os ni borra otros archivos ya usados. \u00bfDeseas continuar?',
       confirmLabel: 'Eliminar',
     );
     if (!accepted) return;
@@ -932,6 +1017,106 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
           .toList();
       _working = _working.copyWith(puzzleItems: next);
     });
+  }
+
+  Future<bool> _ensureEmotionUploadContext() async {
+    final emotion = _emotionCorrectController.text.trim();
+    if (emotion.isNotEmpty) return true;
+    await NebulaSnack.show(
+      context,
+      message:
+          'Primero escribe la emoci\u00f3n correcta. La IA necesita ese contexto antes de revisar la imagen.',
+      ok: false,
+    );
+    return false;
+  }
+
+  Future<void> _pickEmotionImage(ImageSource source) async {
+    if (!await _ensureEmotionUploadContext()) return;
+    final emotion = _emotionCorrectController.text.trim();
+    await _pickNewItemImage(
+      targetKey: 'emotion',
+      gameKey: 'emociones',
+      source: source,
+      onUploaded: (url) {
+        setState(() {
+          _emotionImageController.text = url;
+        });
+        return true;
+      },
+      expectedEmotion: emotion,
+      expectedDescription: emotion,
+    );
+  }
+
+  Future<bool> _ensureSoundUploadContext() async {
+    final soundAsset = _soundAssetController.text.trim();
+    if (soundAsset.isNotEmpty) return true;
+    await NebulaSnack.show(
+      context,
+      message:
+          'Primero indica el sonido base. La IA necesita saber que debe representar la imagen correcta.',
+      ok: false,
+    );
+    return false;
+  }
+
+  List<String> _currentSoundExpectedConcepts() => <String>[
+        ..._expectedConceptsFromSource(_soundAssetController.text),
+        _soundCategoryController.text.trim(),
+      ];
+
+  String _currentSoundExpectedDescription() {
+    final soundName = _prettyNameFromSource(_soundAssetController.text);
+    if (soundName != 'Elemento') return soundName;
+    return _soundCategoryController.text.trim();
+  }
+
+  Future<void> _pickSoundImage(ImageSource source) async {
+    if (!await _ensureSoundUploadContext()) return;
+    await _pickNewItemImage(
+      targetKey: 'sound',
+      gameKey: 'sonidos',
+      source: source,
+      onUploaded: (url) {
+        setState(() {
+          _soundImageController.text = url;
+        });
+        return true;
+      },
+      expectedConcepts: _currentSoundExpectedConcepts(),
+      expectedDescription: _currentSoundExpectedDescription(),
+    );
+  }
+
+  Future<bool> _ensureDiloUploadContext() async {
+    final text = _diloTextController.text.trim();
+    if (text.isNotEmpty) return true;
+    await NebulaSnack.show(
+      context,
+      message:
+          'Primero escribe la palabra o texto. La IA usa ese contexto para validar la imagen.',
+      ok: false,
+    );
+    return false;
+  }
+
+  Future<void> _pickDiloImage(ImageSource source) async {
+    if (!await _ensureDiloUploadContext()) return;
+    final text = _diloTextController.text.trim();
+    await _pickNewItemImage(
+      targetKey: 'dilo_image',
+      gameKey: 'dilo',
+      source: source,
+      onUploaded: (url) {
+        setState(() {
+          _diloImageController.text = url;
+        });
+        return true;
+      },
+      expectedConcepts: <String>[text],
+      expectedDescription: text,
+    );
   }
 
   Future<void> _pickNewItemImage({
@@ -1102,7 +1287,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     if (_working.puzzleItems.length >= _maxPuzzleImages) {
       await NebulaSnack.show(
         context,
-        message: 'Limite alcanzado: maximo $_maxPuzzleImages imagenes.',
+        message: 'L\u00edmite alcanzado: m\u00e1ximo $_maxPuzzleImages im\u00e1genes.',
         ok: false,
       );
       return;
@@ -1235,7 +1420,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     if (source.isEmpty) {
       await NebulaSnack.show(
         context,
-        message: 'Completa la ruta de $label.',
+        message: 'Completa la imagen de $label.',
         ok: false,
       );
       return false;
@@ -1268,7 +1453,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     await NebulaSnack.show(
       context,
       message:
-          'No encontramos la ruta de $label. Usa una URL válida, un asset o una ruta local existente.',
+          'No encontramos la imagen de $label. Usa una imagen seleccionada desde el dispositivo, un asset o una ruta local existente.',
       ok: false,
     );
     return false;
@@ -1279,7 +1464,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     if (source.isEmpty) {
       await NebulaSnack.show(
         context,
-        message: 'Completa la ruta del audio.',
+        message: 'Completa el audio.',
         ok: false,
       );
       return false;
@@ -1312,55 +1497,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     await NebulaSnack.show(
       context,
       message:
-          'No encontramos la ruta del audio. Usa una URL válida, un asset o una ruta local existente.',
+          'No encontramos el audio. Usa un audio subido, un asset o una ruta local existente.',
       ok: false,
     );
     return false;
-  }
-
-  Future<void> _addPuzzleSourceManually() async {
-    final source = _puzzleSourceController.text.trim();
-    final audioSource = _puzzleAudioController.text.trim();
-    if (source.isEmpty) {
-      NebulaSnack.show(
-        context,
-        message: 'Escribe una URL o ruta de asset.',
-        ok: false,
-      );
-      return;
-    }
-    if (_working.puzzleItems.length >= _maxPuzzleImages) {
-      NebulaSnack.show(
-        context,
-        message: 'Limite alcanzado: maximo $_maxPuzzleImages imagenes.',
-        ok: false,
-      );
-      return;
-    }
-    final ok = await _validateImageSource(
-      source,
-      label: 'imagen de puzzle',
-    );
-    if (!ok) return;
-    if (audioSource.isNotEmpty) {
-      final audioOk = await _validateAudioSource(audioSource);
-      if (!audioOk) return;
-    }
-    final nextItem = PuzzleContentItem(
-      id: 'puzzle_${DateTime.now().microsecondsSinceEpoch}',
-      imageSource: source,
-      audioSource: audioSource,
-      width: 0,
-      height: 0,
-      enabled: true,
-    );
-    setState(() {
-      _working = _working.copyWith(
-        puzzleItems: [..._working.puzzleItems, nextItem],
-      );
-      _puzzleSourceController.clear();
-      _puzzleAudioController.clear();
-    });
   }
 
   void _togglePuzzleItem(String id, bool value) {
@@ -1427,15 +1567,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         children: items.map((item) {
           final busy = _globalBusyKey == '${item.gameKey}::${item.itemId}';
-          final effectiveSource = widget.controller.resolvedGameImageSourceFor(
-            gameKey: item.gameKey,
-            itemId: item.itemId,
-            defaultSource: item.defaultSource,
-          );
-          final hasOverride = _hasGlobalOverride(
-            gameKey: item.gameKey,
-            itemId: item.itemId,
-          );
+          final effectiveSource = _effectiveGlobalImageSourceForItem(item);
+          final hasOverride = _hasGlobalOverrideForItem(item);
           return Container(
             margin: const EdgeInsets.only(top: 10),
             padding: const EdgeInsets.all(10),
@@ -1491,10 +1624,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                           FilledButton.icon(
                             onPressed: busy
                                 ? null
-                                : () => _openGlobalSourceSheet(
-                                      gameKey: item.gameKey,
-                                      itemId: item.itemId,
-                                    ),
+                                : () => _openGlobalSourceSheet(item),
                             icon: busy
                                 ? const SizedBox(
                                     width: 16,
@@ -1510,10 +1640,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                           ),
                           OutlinedButton.icon(
                             onPressed: hasOverride
-                                ? () => _restoreGlobalImage(
-                                      gameKey: item.gameKey,
-                                      itemId: item.itemId,
-                                    )
+                                ? () => _restoreGlobalImageForItem(item)
                                 : null,
                             icon: const Icon(Icons.restore_rounded),
                             label: const Text('Restaurar original'),
@@ -1527,6 +1654,199 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildExploreAdminCard({
+    required List<ExploreContentItem> items,
+  }) {
+    final isEditing = _editingExploreItemId != null;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Explora y aprende',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Aqu\u00ed editas el contenido informativo que el juego muestra al tocar cada tarjeta. Puedes agregar elementos nuevos, ajustar la descripci\u00f3n y desactivar los que no quieras usar.',
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              key: ValueKey('explore_category_$_exploreCategoryId'),
+              initialValue: _exploreCategoryId,
+              decoration: const InputDecoration(
+                labelText: 'Categor\u00eda',
+              ),
+              items: exploreCategoryDefinitions
+                  .map(
+                    (category) => DropdownMenuItem<String>(
+                      value: category.id,
+                      child: Text(category.label),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _exploreCategoryId = value);
+              },
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _exploreTitleController,
+              decoration: const InputDecoration(
+                labelText: 'T\u00edtulo del elemento',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _exploreDescriptionController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Descripci\u00f3n informativa',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: NebulaSecondaryButton(
+                    text: isEditing ? 'Guardar cambios' : 'Agregar elemento',
+                    onPressed: _submitExploreItem,
+                  ),
+                ),
+                if (isEditing) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: NebulaSecondaryButton(
+                      text: 'Cancelar edici\u00f3n',
+                      onPressed: _cancelExploreEdit,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (items.isEmpty)
+              const Text('Sin elementos configurados para Explora y aprende.')
+            else
+              ...exploreCategoryDefinitions.map((category) {
+                final categoryItems = exploreItemsForCategory(
+                  items: items,
+                  categoryId: category.id,
+                );
+                if (categoryItems.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category.label,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...categoryItems.map((item) {
+                        final isDefault = isDefaultExploreItemId(item.id);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF6F8FC),
+                            borderRadius: BorderRadius.circular(14),
+                            border:
+                                Border.all(color: const Color(0xFFDCE4F2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item.description,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          isDefault
+                                              ? 'Elemento base de la app'
+                                              : 'Elemento agregado por admin',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color:
+                                                    const Color(0xFF54637E),
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: item.enabled,
+                                    onChanged: (value) =>
+                                        _toggleExploreItem(item, value),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () => _startExploreEdit(item),
+                                    icon: const Icon(Icons.edit_outlined),
+                                    label: const Text('Editar'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _deleteExploreItem(item),
+                                    icon: const Icon(Icons.delete_outline),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFFC93C4C),
+                                    ),
+                                    label: Text(
+                                      isDefault ? 'Ocultar' : 'Eliminar',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
@@ -1545,7 +1865,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
         .map(
           (source) => _GlobalDefaultImageItem(
             gameKey: 'emociones',
-            itemId: source,
+            itemId: widget.controller.customContentItemId(source: source),
             title: _prettyNameFromSource(source),
             subtitle: _emotionDifficultyLabel(source),
             defaultSource: source,
@@ -1554,11 +1874,36 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
           ),
         )
         .toList();
+    final mergedEmotionItems = _mergeConfiguredItemsIntoDefaults(
+      defaults: defaultEmotionItems,
+      configuredItems: emotionItems
+          .where(
+            (item) =>
+                item.imagePath.trim().isNotEmpty &&
+                item.correctEmotion.trim().isNotEmpty,
+          )
+          .map(
+            (item) => _GlobalDefaultImageItem(
+              gameKey: 'emociones',
+              itemId: widget.controller.customContentItemId(
+                source: item.imagePath.trim(),
+                rawId: item.id,
+              ),
+              title: _prettyNameFromSource(item.imagePath),
+              subtitle: 'Imagen agregada por admin a Descubre emoci\u00f3n.',
+              defaultSource: item.imagePath.trim(),
+              expectedEmotion: item.correctEmotion.trim(),
+              expectedDescription:
+                  _prettyEmotionName(item.correctEmotion.trim()),
+              isOriginalAppDefault: false,
+            ),
+          ),
+    );
     final defaultSoundItems = _defaultSoundImages
         .map(
           (source) => _GlobalDefaultImageItem(
             gameKey: 'sonidos',
-            itemId: source,
+            itemId: widget.controller.customContentItemId(source: source),
             title: _prettyNameFromSource(source),
             subtitle: 'Se usa como imagen predeterminada en Conecta sonidos.',
             defaultSource: source,
@@ -1567,6 +1912,36 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
           ),
         )
         .toList();
+    final mergedSoundItems = _mergeConfiguredItemsIntoDefaults(
+      defaults: defaultSoundItems,
+      configuredItems: soundItems
+          .where(
+            (item) =>
+                item.correctImage.trim().isNotEmpty &&
+                item.soundAsset.trim().isNotEmpty,
+          )
+          .map(
+            (item) => _GlobalDefaultImageItem(
+              gameKey: 'sonidos',
+              itemId: widget.controller.customContentItemId(
+                source: item.correctImage.trim(),
+                rawId: item.id,
+              ),
+              title: _prettyNameFromSource(item.correctImage),
+              subtitle: 'Imagen agregada por admin a Conecta sonidos.',
+              defaultSource: item.correctImage.trim(),
+              expectedConcepts: <String>[
+                ..._expectedConceptsFromSource(item.soundAsset),
+                item.category.trim(),
+              ],
+              expectedDescription: _prettyNameFromSource(item.soundAsset) ==
+                      'Elemento'
+                  ? item.category.trim()
+                  : _prettyNameFromSource(item.soundAsset),
+              isOriginalAppDefault: false,
+            ),
+          ),
+    );
     final defaultMemoryItems = defaultMemoryImageSources
         .map(
           (source) => _GlobalDefaultImageItem(
@@ -1627,6 +2002,42 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             ),
           ),
     );
+    final effectiveExploreItems = _effectiveExploreItems();
+    final dondeVaDefaultSections = <Widget>[
+      for (final category in dondeVaCategories) ...[
+        _buildGlobalDefaultsCard(
+          title:
+              'Predeterminadas globales \u00b7 D\u00f3nde va \u00b7 ${category.label}',
+          description:
+              'Puedes actualizar la imagen base de cada objeto de ${category.label.toLowerCase()} para todas las cuentas.',
+          items: category.items
+              .map(
+                (item) => _GlobalDefaultImageItem(
+                  gameKey: 'donde_va',
+                  itemId: dondeVaGlobalItemId(
+                    categoryId: category.id,
+                    itemId: item.id,
+                  ),
+                  title: item.label,
+                  subtitle: 'Categor\u00eda: ${category.label}',
+                  defaultSource: dondeVaItemAssetPath(
+                    categoryId: category.id,
+                    itemId: item.id,
+                    extension: item.assetExtension,
+                  ),
+                  expectedConcepts: <String>[category.label, item.label],
+                  expectedDescription: '${item.label} en ${category.label}',
+                ),
+              )
+              .toList(growable: false),
+        ),
+        const SizedBox(height: 10),
+      ],
+    ];
+    final totalDondeVaItems = dondeVaCategories.fold<int>(
+      0,
+      (sum, category) => sum + category.items.length,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -1651,11 +2062,11 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Aqui defines recursos globales de juegos. Los cambios se reflejan en todas las cuentas, mientras las personalizaciones del nino tienen prioridad. Las nuevas imagenes pasan por validaciones de formato, recorte y revision de contenido antes de subirse.',
+                      'Aqu\u00ed defines recursos globales de juegos. Los cambios se reflejan en todas las cuentas, mientras las personalizaciones del ni\u00f1o tienen prioridad. Las nuevas im\u00e1genes pasan por validaciones de formato, recorte y revisi\u00f3n de contenido antes de subirse.',
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Emociones: ${_working.emotionItems.length}  |  Sonidos: ${_working.soundItems.length}  |  Dilo: ${_working.diloItems.length}  |  Cartas: ${_working.memoryItems.length}  |  Puzzle: ${_working.puzzleItems.length}',
+                      'Emociones: ${_working.emotionItems.length}  |  Sonidos: ${_working.soundItems.length}  |  Dilo: ${_working.diloItems.length}  |  Cartas: ${_working.memoryItems.length}  |  Puzzle: ${_working.puzzleItems.length}  |  Explora: ${effectiveExploreItems.length}  |  D\u00f3nde va: $totalDondeVaItems',
                     ),
                     if (_loading) ...[
                       const SizedBox(height: 8),
@@ -1667,30 +2078,30 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
             ),
             const SizedBox(height: 10),
             _buildGlobalDefaultsCard(
-              title: 'Predeterminadas globales · Emociones',
+              title: 'Predeterminadas globales \u00b7 Emociones',
               description:
-                  'Si cambias una imagen aqui, se actualiza para todos los usuarios que no tengan una personalizacion propia del nino.',
-              items: defaultEmotionItems,
+                  'Si cambias una imagen aqu\u00ed, se actualiza para todos los usuarios que no tengan una personalizaci\u00f3n propia del ni\u00f1o.',
+              items: mergedEmotionItems,
             ),
             const SizedBox(height: 10),
             _buildGlobalDefaultsCard(
-              title: 'Predeterminadas globales · Conecta sonidos',
+              title: 'Predeterminadas globales \u00b7 Conecta sonidos',
               description:
-                  'Estas imagenes son la base global del juego. Las personalizaciones del cuidador por nino siguen teniendo prioridad.',
-              items: defaultSoundItems,
+                  'Estas im\u00e1genes son la base global del juego. Las personalizaciones del cuidador por ni\u00f1o siguen teniendo prioridad.',
+              items: mergedSoundItems,
             ),
             const SizedBox(height: 10),
             _buildGlobalDefaultsCard(
-              title: 'Predeterminadas globales Â· Cartas gemelas',
+              title: 'Predeterminadas globales \u00b7 Cartas gemelas',
               description:
-                  'Estas imagenes base se usan en Cartas gemelas para todos los usuarios que no tengan una personalizacion propia.',
+                  'Estas im\u00e1genes base se usan en Cartas gemelas para todos los usuarios que no tengan una personalizaci\u00f3n propia.',
               items: mergedMemoryItems,
             ),
             const SizedBox(height: 10),
             _buildGlobalDefaultsCard(
-              title: 'Predeterminadas globales Â· Arma la imagen',
+              title: 'Predeterminadas globales \u00b7 Arma la imagen',
               description:
-                  'Estas imagenes base se usan en Arma la imagen para todos los usuarios. Puedes verlas, cambiarlas o restaurarlas.',
+                  'Estas im\u00e1genes base se usan en Arma la imagen para todos los usuarios. Puedes verlas, cambiarlas o restaurarlas.',
               items: mergedPuzzleItems,
             ),
             const SizedBox(height: 10),
@@ -1701,7 +2112,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Descubre emocion',
+                      'Descubre emoci\u00f3n',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -1727,8 +2138,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     TextField(
                       controller: _emotionImageController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'Ruta de imagen (assets/... o local)',
+                        labelText: 'Imagen seleccionada',
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1745,24 +2157,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                           child: NebulaSecondaryButton(
                             text: _newItemBusyKey == 'emotion'
                                 ? 'Subiendo...'
-                                : 'Subir desde galeria',
+                                : 'Subir desde galer\u00eda',
                             onPressed: _newItemBusyKey == 'emotion'
                                 ? null
-                                : () => _pickNewItemImage(
-                                      targetKey: 'emotion',
-                                      gameKey: 'emociones',
-                                      source: ImageSource.gallery,
-                                      onUploaded: (url) {
-                                        setState(() {
-                                          _emotionImageController.text = url;
-                                        });
-                                        return true;
-                                      },
-                                      expectedEmotion:
-                                          _emotionCorrectController.text.trim(),
-                                      expectedDescription:
-                                          _emotionCorrectController.text.trim(),
-                                    ),
+                                : () => _pickEmotionImage(ImageSource.gallery),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1773,33 +2171,19 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                 : 'Tomar foto',
                             onPressed: _newItemBusyKey == 'emotion'
                                 ? null
-                                : () => _pickNewItemImage(
-                                      targetKey: 'emotion',
-                                      gameKey: 'emociones',
-                                      source: ImageSource.camera,
-                                      onUploaded: (url) {
-                                        setState(() {
-                                          _emotionImageController.text = url;
-                                        });
-                                        return true;
-                                      },
-                                      expectedEmotion:
-                                          _emotionCorrectController.text.trim(),
-                                      expectedDescription:
-                                          _emotionCorrectController.text.trim(),
-                                    ),
+                                : () => _pickEmotionImage(ImageSource.camera),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     NebulaSecondaryButton(
-                      text: 'Agregar item de emocion',
+                      text: 'Agregar \u00edtem de emoci\u00f3n',
                       onPressed: _addEmotionItem,
                     ),
                     const SizedBox(height: 10),
                     if (emotionItems.isEmpty)
-                      const Text('Sin items personalizados.')
+                      const Text('Sin \u00edtems personalizados.')
                     else
                       ...emotionItems.map((item) => ListTile(
                             dense: true,
@@ -1861,21 +2245,22 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     TextField(
                       controller: _soundAssetController,
                       decoration: const InputDecoration(
-                        labelText: 'Ruta de sonido (sounds/...)',
+                        labelText: 'Sonido base (sounds/...)',
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _soundImageController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'Ruta de imagen correcta',
+                        labelText: 'Imagen correcta seleccionada',
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _soundCategoryController,
                       decoration: const InputDecoration(
-                        labelText: 'Categoria (opcional)',
+                        labelText: 'Categor\u00eda (opcional)',
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1885,36 +2270,10 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                           child: NebulaSecondaryButton(
                             text: _newItemBusyKey == 'sound'
                                 ? 'Subiendo...'
-                                : 'Subir desde galeria',
+                                : 'Subir desde galer\u00eda',
                             onPressed: _newItemBusyKey == 'sound'
                                 ? null
-                                : () => _pickNewItemImage(
-                                      targetKey: 'sound',
-                                      gameKey: 'sonidos',
-                                      source: ImageSource.gallery,
-                                      onUploaded: (url) {
-                                        setState(() {
-                                          _soundImageController.text = url;
-                                        });
-                                        return true;
-                                      },
-                                      expectedConcepts: <String>[
-                                        ..._expectedConceptsFromSource(
-                                          _soundAssetController.text,
-                                        ),
-                                        _soundCategoryController.text.trim(),
-                                      ],
-                                      expectedDescription:
-                                          _prettyNameFromSource(
-                                                    _soundAssetController.text,
-                                                  ) ==
-                                                  'Elemento'
-                                              ? _soundCategoryController.text
-                                                  .trim()
-                                              : _prettyNameFromSource(
-                                                  _soundAssetController.text,
-                                                ),
-                                    ),
+                                : () => _pickSoundImage(ImageSource.gallery),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1925,45 +2284,18 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                 : 'Tomar foto',
                             onPressed: _newItemBusyKey == 'sound'
                                 ? null
-                                : () => _pickNewItemImage(
-                                      targetKey: 'sound',
-                                      gameKey: 'sonidos',
-                                      source: ImageSource.camera,
-                                      onUploaded: (url) {
-                                        setState(() {
-                                          _soundImageController.text = url;
-                                        });
-                                        return true;
-                                      },
-                                      expectedConcepts: <String>[
-                                        ..._expectedConceptsFromSource(
-                                          _soundAssetController.text,
-                                        ),
-                                        _soundCategoryController.text.trim(),
-                                      ],
-                                      expectedDescription:
-                                          _prettyNameFromSource(
-                                                    _soundAssetController.text,
-                                                  ) ==
-                                                  'Elemento'
-                                              ? _soundCategoryController.text
-                                                  .trim()
-                                              : _prettyNameFromSource(
-                                                  _soundAssetController.text,
-                                                ),
-                                    ),
+                                : () => _pickSoundImage(ImageSource.camera),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
                     NebulaSecondaryButton(
-                      text: 'Agregar item de sonido',
+                      text: 'Agregar \u00edtem de sonido',
                       onPressed: _addSoundItem,
                     ),
                     const SizedBox(height: 10),
                     if (soundItems.isEmpty)
-                      const Text('Sin items personalizados.')
+                      const Text('Sin \u00edtems personalizados.')
                     else
                       ...soundItems.map((item) => ListTile(
                             dense: true,
@@ -1974,7 +2306,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                   _toggleSoundItem(item.id, value),
                             ),
                             title: Text(
-                              'D${item.difficultyStars} | ${item.category.isEmpty ? 'sin categoria' : item.category}',
+                              'D${item.difficultyStars} | ${item.category.isEmpty ? 'sin categor\u00eda' : item.category}',
                             ),
                             subtitle: Text(
                               '${item.soundAsset} -> ${item.correctImage}',
@@ -2024,8 +2356,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     TextField(
                       controller: _diloImageController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'Ruta o URL de imagen',
+                        labelText: 'Imagen seleccionada',
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2038,8 +2371,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _diloAudioController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'URL de audio (MP3/M4A/WAV)',
+                        labelText: 'Audio seleccionado',
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -2054,22 +2388,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                             onPressed:
                                 _newItemBusyKey?.startsWith('dilo') == true
                                     ? null
-                                    : () => _pickNewItemImage(
-                                          targetKey: 'dilo_image',
-                                          gameKey: 'dilo',
-                                          source: ImageSource.gallery,
-                                          onUploaded: (url) {
-                                            setState(() {
-                                              _diloImageController.text = url;
-                                            });
-                                            return true;
-                                          },
-                                          expectedConcepts: <String>[
-                                            _diloTextController.text.trim(),
-                                          ],
-                                          expectedDescription:
-                                              _diloTextController.text.trim(),
-                                        ),
+                                    : () => _pickDiloImage(ImageSource.gallery),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -2097,12 +2416,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 10),
                     NebulaSecondaryButton(
-                      text: 'Agregar item de Dilo',
+                      text: 'Agregar \u00edtem de Dilo',
                       onPressed: _addDiloItem,
                     ),
                     const SizedBox(height: 10),
                     if (diloItems.isEmpty)
-                      const Text('Sin items personalizados.')
+                      const Text('Sin \u00edtems personalizados.')
                     else
                       ...diloItems.map((item) => ListTile(
                             dense: true,
@@ -2144,17 +2463,15 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     TextField(
-                      controller: _memoryImageController,
+                      controller: _memoryAudioController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'Ruta o URL de imagen',
+                        labelText: 'Audio seleccionado (opcional)',
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _memoryAudioController,
-                      decoration: const InputDecoration(
-                        labelText: 'URL de audio (opcional)',
-                      ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Si quieres asociar un audio, s\u00fabelo primero. Luego sube la imagen y se agregar\u00e1 de inmediato a Cartas gemelas.',
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -2227,13 +2544,8 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                   ),
                     ),
                     const SizedBox(height: 10),
-                    NebulaSecondaryButton(
-                      text: 'Agregar imagen',
-                      onPressed: _addMemoryItem,
-                    ),
-                    const SizedBox(height: 10),
                     if (memoryItems.isEmpty)
-                      const Text('Sin imagenes personalizadas.')
+                      const Text('Sin im\u00e1genes personalizadas.')
                     else
                       ...memoryItems.asMap().entries.map((entry) {
                         final index = entry.key;
@@ -2373,14 +2685,14 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Estandar recomendado: entre 256x256 y 1024x1024 px, maximo 220 KB por imagen.',
+                      'Est\u00e1ndar recomendado: entre 256x256 y 1024x1024 px, m\u00e1ximo 220 KB por imagen.',
                     ),
                     const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
                           child: NebulaSecondaryButton(
-                            text: 'Subir desde galeria',
+                            text: 'Subir desde galer\u00eda',
                             onPressed: () =>
                                 _pickPuzzleImage(ImageSource.gallery),
                           ),
@@ -2398,8 +2710,9 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: _puzzleAudioController,
+                      readOnly: true,
                       decoration: const InputDecoration(
-                        labelText: 'URL de audio (opcional)',
+                        labelText: 'Audio seleccionado (opcional)',
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2421,20 +2734,12 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                                   ),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: _puzzleSourceController,
-                      decoration: const InputDecoration(
-                        labelText: 'URL o ruta de asset (opcional)',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    NebulaSecondaryButton(
-                      text: 'Agregar fuente manual',
-                      onPressed: _addPuzzleSourceManually,
+                    const Text(
+                      'Si quieres asociar un audio, s\u00fabelo primero. Luego sube la imagen y se agregar\u00e1 de inmediato a Arma la imagen.',
                     ),
                     const SizedBox(height: 10),
                     if (puzzleItems.isEmpty)
-                      const Text('Sin imagenes de puzzle configuradas.')
+                      const Text('Sin im\u00e1genes de puzzle configuradas.')
                     else
                       ...puzzleItems.asMap().entries.map((entry) {
                         final index = entry.key;
@@ -2562,36 +2867,7 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Explora',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Interfaz preparada. Este juego aún no tiene lógica de contenido editable.',
-                    ),
-                    const SizedBox(height: 10),
-                    const NebulaSecondaryButton(
-                      text: 'Subir imagen (próximamente)',
-                      onPressed: null,
-                    ),
-                    const SizedBox(height: 8),
-                    const NebulaSecondaryButton(
-                      text: 'Subir audio (próximamente)',
-                      onPressed: null,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildExploreAdminCard(items: effectiveExploreItems),
             const SizedBox(height: 10),
             Card(
               child: Padding(
@@ -2600,30 +2876,21 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Dónde va',
+                      'D\u00f3nde va',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Interfaz preparada. Este juego aún no tiene lógica de contenido editable.',
-                    ),
-                    const SizedBox(height: 10),
-                    const NebulaSecondaryButton(
-                      text: 'Subir imagen (próximamente)',
-                      onPressed: null,
-                    ),
-                    const SizedBox(height: 8),
-                    const NebulaSecondaryButton(
-                      text: 'Subir audio (próximamente)',
-                      onPressed: null,
+                      'Este juego usa im\u00e1genes base por categor\u00eda. Desde aqu\u00ed puedes actualizar la predeterminada global de cada objeto sin tocar la mec\u00e1nica de clasificaci\u00f3n.',
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 10),
+            ...dondeVaDefaultSections,
             Row(
               children: [
                 Expanded(

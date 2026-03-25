@@ -335,10 +335,17 @@ class _DondeVaScreenState extends State<DondeVaScreen> {
                         child: _ObjectCard(
                           accent: accent,
                           item: _currentRound.item,
-                          assetPath: dondeVaItemAssetPath(
-                            categoryId: _currentRound.correctCategory.id,
-                            itemId: _currentRound.item.id,
-                            extension: _currentRound.item.assetExtension,
+                          assetPath: widget.controller.resolvedGameImageSourceFor(
+                            gameKey: 'donde_va',
+                            itemId: dondeVaGlobalItemId(
+                              categoryId: _currentRound.correctCategory.id,
+                              itemId: _currentRound.item.id,
+                            ),
+                            defaultSource: dondeVaItemAssetPath(
+                              categoryId: _currentRound.correctCategory.id,
+                              itemId: _currentRound.item.id,
+                              extension: _currentRound.item.assetExtension,
+                            ),
                           ),
                         ),
                       ),

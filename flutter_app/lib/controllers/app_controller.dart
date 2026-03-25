@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -266,7 +266,7 @@ class AppController extends ChangeNotifier {
   bool get shouldExitChildAfterTimeLimit =>
       _childLimitExitPending && _childLimitDialogShown;
   String get childTimeLimitMessage =>
-      'Tu tiempo de juego ha terminado. PÃ­dele ayuda a un adulto para volver a jugar.';
+      'Tu tiempo de juego ha terminado. P\u00eddale ayuda a un adulto para volver a jugar.';
   String? consumePendingHomeLevelUpPlanetName() {
     final value = _pendingHomeLevelUpPlanetName;
     _pendingHomeLevelUpPlanetName = null;
@@ -518,7 +518,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El acceso directo de niÃ±o ya no estÃ¡ disponible. Entra con la cuenta del cuidador y luego elige el perfil del niÃ±o.',
+          'El acceso directo de ni\u00f1o ya no est\u00e1 disponible. Entra con la cuenta del cuidador y luego elige el perfil del ni\u00f1o.',
     );
   }
 
@@ -528,7 +528,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'Sin internet. Para entrar con Google, revisa tu conexiÃ³n e intenta de nuevo.',
+            'Sin internet. Para entrar con Google, revisa tu conexi\u00f3n e intenta de nuevo.',
       );
     }
     final result = await _authService.loginWithGoogle();
@@ -643,17 +643,17 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> enterChildPortal(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'El admin no usa portal de niÃ±o.',
+        message: 'El admin no usa portal de ni\u00f1o.',
       );
     }
     if (_appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
-          ? 'La app está en mantenimiento. Intenta más tarde.'
+          ? 'La app est\u00e1 en mantenimiento. Intenta m\u00e1s tarde.'
           : _appAdminConfig.maintenanceMessage;
       return ActionResult(ok: false, message: message);
     }
@@ -661,14 +661,14 @@ class AppController extends ChangeNotifier {
     if (targetId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona un perfil de niÃ±o.',
+        message: 'Selecciona un perfil de ni\u00f1o.',
       );
     }
     final exists = childProfiles.any((item) => item.id == targetId);
     if (!exists) {
       return const ActionResult(
         ok: false,
-        message: 'Ese perfil de niÃ±o no existe.',
+        message: 'Ese perfil de ni\u00f1o no existe.',
       );
     }
     final targetChild = childProfiles.firstWhere((item) => item.id == targetId);
@@ -708,7 +708,7 @@ class AppController extends ChangeNotifier {
     _ensureActiveChildUsageDayIsToday();
     await _authService.persistPortalRole(PortalRole.child);
     notifyListeners();
-    return const ActionResult(ok: true, message: 'Portal niÃ±o listo.');
+    return const ActionResult(ok: true, message: 'Portal ni\u00f1o listo.');
   }
 
   Future<ActionResult> enterCaregiverPortal({
@@ -716,7 +716,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       _activePortalRole = PortalRole.admin;
@@ -726,7 +726,7 @@ class AppController extends ChangeNotifier {
     }
     if (_appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
-          ? 'La app está en mantenimiento. Intenta más tarde.'
+          ? 'La app est\u00e1 en mantenimiento. Intenta m\u00e1s tarde.'
           : _appAdminConfig.maintenanceMessage;
       return ActionResult(ok: false, message: message);
     }
@@ -734,7 +734,7 @@ class AppController extends ChangeNotifier {
     if (typed.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe la contraseÃ±a del cuidador.',
+        message: 'Escribe la contrase\u00f1a del cuidador.',
       );
     }
     final valid = await _authService.verifyCurrentUserPassword(typed);
@@ -753,19 +753,19 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> setCaregiverChildContext(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'El admin no usa perfiles de niÃ±o.',
+        message: 'El admin no usa perfiles de ni\u00f1o.',
       );
     }
     final targetId = childId.trim();
     if (targetId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona un perfil de niÃ±o.',
+        message: 'Selecciona un perfil de ni\u00f1o.',
       );
     }
     final list = childProfiles;
@@ -773,7 +773,7 @@ class AppController extends ChangeNotifier {
     if (!exists) {
       return const ActionResult(
         ok: false,
-        message: 'Ese perfil de niÃ±o no existe.',
+        message: 'Ese perfil de ni\u00f1o no existe.',
       );
     }
 
@@ -831,7 +831,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin) {
       return const ActionResult(
         ok: false,
-        message: 'Solo el admin puede modificar esta configuraciÃ³n.',
+        message: 'Solo el admin puede modificar esta configuraci\u00f3n.',
       );
     }
     final result = await _authService.saveAppAdminConfig(config);
@@ -970,7 +970,7 @@ class AppController extends ChangeNotifier {
     return ActionResult(ok: result.ok, message: result.message);
   }
 
-  /// Mantiene compatibilidad, pero el cambio en-app estÃ¡ deshabilitado.
+  /// Mantiene compatibilidad, pero el cambio en-app est\u00e1 deshabilitado.
   Future<ActionResult> changePasswordImproved({
     String currentPassword = '',
     required String newPassword,
@@ -979,7 +979,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseÃ±a en la app estÃ¡ deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contrase\u00f1a en la app est\u00e1 deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1027,7 +1027,7 @@ class AppController extends ChangeNotifier {
         !_authService.isValidEmailFormat(normalized)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo vÃ¡lido.',
+        message: 'Escribe un correo v\u00e1lido.',
       );
     }
 
@@ -1058,13 +1058,13 @@ class AppController extends ChangeNotifier {
     if (!_authService.isValidEmailFormat(normalizedEmail)) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe un correo vÃ¡lido para reenviar verificaciÃ³n.',
+        message: 'Escribe un correo v\u00e1lido para reenviar verificaci\u00f3n.',
       );
     }
     if (password.trim().isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Escribe la contraseÃ±a para reenviar verificaciÃ³n.',
+        message: 'Escribe la contrase\u00f1a para reenviar verificaci\u00f3n.',
       );
     }
 
@@ -1089,7 +1089,7 @@ class AppController extends ChangeNotifier {
     _cooldownService.start(key, const Duration(minutes: 1));
     return const ActionResult(
       ok: true,
-      message: 'ReenvÃ­o solicitado. Revisa tu correo.',
+      message: 'Reenv\u00edo solicitado. Revisa tu correo.',
       remainingSeconds: 60,
     );
   }
@@ -1097,7 +1097,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestProfilePasswordReset() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final key = 'profile_reset_${user.id}';
     final remaining = _cooldownService.remainingSeconds(key);
@@ -1124,7 +1124,7 @@ class AppController extends ChangeNotifier {
   }) async {
     return const ActionResult(
       ok: false,
-      message: 'El cambio de correo desde la app estÃ¡ deshabilitado.',
+      message: 'El cambio de correo desde la app est\u00e1 deshabilitado.',
     );
   }
 
@@ -1136,7 +1136,7 @@ class AppController extends ChangeNotifier {
     return const ActionResult(
       ok: false,
       message:
-          'El cambio de contraseÃ±a en la app estÃ¡ deshabilitado. Usa el correo de restablecimiento.',
+          'El cambio de contrase\u00f1a en la app est\u00e1 deshabilitado. Usa el correo de restablecimiento.',
     );
   }
 
@@ -1146,7 +1146,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (_firebaseEnabled) {
       await refreshOnlineStatus();
@@ -1191,7 +1191,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> activateParentalPin(String pin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.setParentalPin(pin: pin);
     if (result.ok && result.data != null) {
@@ -1207,7 +1207,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.changeParentalPin(
       currentPin: currentPin,
@@ -1223,7 +1223,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deactivateParentalPin(String currentPin) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result =
         await _authService.disableParentalPin(currentPin: currentPin);
@@ -1237,7 +1237,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> requestParentalPinRecoveryEmail() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.sendParentalPinRecoveryEmail();
     return ActionResult(ok: result.ok, message: result.message);
@@ -1249,7 +1249,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.recoverParentalPinWithPassword(
       accountPassword: accountPassword,
@@ -1267,7 +1267,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final result = await _authService.recoverParentalPinWithGoogle(
       newPin: newPin,
@@ -1296,7 +1296,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
 
     final result = await _authService.updateProfile(
@@ -1708,6 +1708,21 @@ class AppController extends ChangeNotifier {
         ),
       );
     }
+
+    for (final entry
+        in _gameContentConfig.globalDondeVaImageStoragePaths.entries) {
+      final storagePath = entry.value.trim();
+      final sourceUrl =
+          _gameContentConfig.globalDondeVaImageOverrides[entry.key]?.trim() ??
+              '';
+      if (storagePath.isEmpty || sourceUrl.isEmpty) continue;
+      unawaited(
+        _cacheRemoteImageLocallyBestEffort(
+          storagePath: storagePath,
+          sourceUrl: sourceUrl,
+        ),
+      );
+    }
   }
 
   String? customGameImageSourceFor({
@@ -1751,6 +1766,8 @@ class AppController extends ChangeNotifier {
         _gameContentConfig.globalPuzzleImageOverrides[normalizedKey]?.trim(),
       'cartas_gemelas' =>
         _gameContentConfig.globalMemoryImageOverrides[normalizedKey]?.trim(),
+      'donde_va' =>
+        _gameContentConfig.globalDondeVaImageOverrides[normalizedKey]?.trim(),
       _ => null,
     };
   }
@@ -1774,6 +1791,8 @@ class AppController extends ChangeNotifier {
       'puzzle' => _gameContentConfig.globalPuzzleImageStoragePaths[key]?.trim(),
       'cartas_gemelas' =>
         _gameContentConfig.globalMemoryImageStoragePaths[key]?.trim(),
+      'donde_va' =>
+        _gameContentConfig.globalDondeVaImageStoragePaths[key]?.trim(),
       _ => null,
     };
   }
@@ -1874,19 +1893,19 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!_firebaseEnabled) {
       return const ActionResult(
         ok: false,
-        message: 'Esta funciÃ³n requiere sincronizaciÃ³n con Firebase.',
+        message: 'Esta funci\u00f3n requiere sincronizaci\u00f3n con Firebase.',
       );
     }
     if (!_authService.hasActiveFirebaseSession) {
       return const ActionResult(
         ok: false,
         message:
-            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de sincronizar imagenes.',
+            'Tu sesi\u00f3n de Firebase no est\u00e1 activa. Cierra sesi\u00f3n y vuelve a entrar antes de sincronizar im\u00e1genes.',
       );
     }
     await refreshOnlineStatus();
@@ -1895,14 +1914,14 @@ class AppController extends ChangeNotifier {
     if (normalizedPath.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'No se encontrÃ³ la imagen seleccionada.',
+        message: 'No se encontr\u00f3 la imagen seleccionada.',
       );
     }
     final file = File(normalizedPath);
     if (!file.existsSync()) {
       return const ActionResult(
         ok: false,
-        message: 'La imagen seleccionada ya no estÃ¡ disponible.',
+        message: 'La imagen seleccionada ya no est\u00e1 disponible.',
       );
     }
 
@@ -1920,7 +1939,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'La imagen supera el tamaÃ±o mÃ¡ximo permitido de $maxCustomImageMegabytes MB.',
+            'La imagen supera el tama\u00f1o m\u00e1ximo permitido de $maxCustomImageMegabytes MB.',
       );
     }
 
@@ -1943,7 +1962,7 @@ class AppController extends ChangeNotifier {
     if (targetChildId.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'Selecciona primero un perfil de niÃ±o.',
+        message: 'Selecciona primero un perfil de ni\u00f1o.',
       );
     }
 
@@ -2025,20 +2044,20 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'Solo el administrador puede cambiar imagenes predeterminadas.',
+            'Solo el administrador puede cambiar im\u00e1genes predeterminadas.',
       );
     }
     if (!_firebaseEnabled) {
       return const ActionResult(
         ok: false,
-        message: 'Esta funcion requiere sincronizacion con Firebase.',
+        message: 'Esta funci\u00f3n requiere sincronizaci\u00f3n con Firebase.',
       );
     }
     if (!_authService.hasActiveFirebaseSession) {
       return const ActionResult(
         ok: false,
         message:
-            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de sincronizar imagenes globales.',
+            'Tu sesi\u00f3n de Firebase no est\u00e1 activa. Cierra sesi\u00f3n y vuelve a entrar antes de sincronizar im\u00e1genes globales.',
       );
     }
     await refreshOnlineStatus();
@@ -2046,14 +2065,14 @@ class AppController extends ChangeNotifier {
     if (normalizedPath.isEmpty) {
       return const ActionResult(
         ok: false,
-        message: 'No se encontro la imagen seleccionada.',
+        message: 'No se encontr\u00f3 la imagen seleccionada.',
       );
     }
     final file = File(normalizedPath);
     if (!file.existsSync()) {
       return const ActionResult(
         ok: false,
-        message: 'La imagen seleccionada ya no esta disponible.',
+        message: 'La imagen seleccionada ya no est\u00e1 disponible.',
       );
     }
     final extension = _fileExtension(normalizedPath);
@@ -2069,7 +2088,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'La imagen supera el tamano maximo permitido de $maxCustomImageMegabytes MB.',
+            'La imagen supera el tama\u00f1o m\u00e1ximo permitido de $maxCustomImageMegabytes MB.',
       );
     }
     final review = await ImageAiReviewService.reviewImage(
@@ -2140,13 +2159,23 @@ class AppController extends ChangeNotifier {
           )..[key] = uploaded.data!.storagePath,
         );
         break;
+      case 'donde_va':
+        nextConfig = _gameContentConfig.copyWith(
+          globalDondeVaImageOverrides: Map<String, String>.from(
+            _gameContentConfig.globalDondeVaImageOverrides,
+          )..[key] = uploaded.data!.downloadUrl,
+          globalDondeVaImageStoragePaths: Map<String, String>.from(
+            _gameContentConfig.globalDondeVaImageStoragePaths,
+          )..[key] = uploaded.data!.storagePath,
+        );
+        break;
       default:
         await _authService.deleteCustomImageFileBestEffort(
           uploaded.data!.storagePath,
         );
         return const ActionResult(
           ok: false,
-          message: 'Este juego aun no admite cambios globales de imagen.',
+          message: 'Este juego a\u00fan no admite cambios globales de imagen.',
         );
     }
     final saved = await _authService.saveGameContentConfig(nextConfig);
@@ -2183,13 +2212,13 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (_firebaseEnabled && !_authService.hasActiveFirebaseSession) {
       return const ActionResult(
         ok: false,
         message:
-            'Tu sesion de Firebase no esta activa. Cierra sesion y vuelve a entrar antes de restaurar imagenes.',
+            'Tu sesi\u00f3n de Firebase no est\u00e1 activa. Cierra sesi\u00f3n y vuelve a entrar antes de restaurar im\u00e1genes.',
       );
     }
 
@@ -2237,7 +2266,7 @@ class AppController extends ChangeNotifier {
 
     return const ActionResult(
       ok: true,
-      message: 'Se restaurÃ³ la imagen original.',
+      message: 'Se restaur\u00f3 la imagen original.',
     );
   }
 
@@ -2249,7 +2278,7 @@ class AppController extends ChangeNotifier {
       return const ActionResult(
         ok: false,
         message:
-            'Solo el administrador puede restaurar imagenes predeterminadas.',
+            'Solo el administrador puede restaurar im\u00e1genes predeterminadas.',
       );
     }
     final key = _globalGameImageStorageMapKey(gameKey: gameKey, itemId: itemId);
@@ -2343,10 +2372,31 @@ class AppController extends ChangeNotifier {
           globalMemoryImageStoragePaths: nextStorage,
         );
         break;
+      case 'donde_va':
+        final hasOverride = _gameContentConfig.globalDondeVaImageOverrides
+                .containsKey(key) ||
+            _gameContentConfig.globalDondeVaImageStoragePaths.containsKey(key);
+        if (!hasOverride && previousStoragePath == null) {
+          return const ActionResult(
+            ok: false,
+            message: 'Ese elemento ya usa la imagen predeterminada original.',
+          );
+        }
+        final nextOverrides = Map<String, String>.from(
+          _gameContentConfig.globalDondeVaImageOverrides,
+        )..remove(key);
+        final nextStorage = Map<String, String>.from(
+          _gameContentConfig.globalDondeVaImageStoragePaths,
+        )..remove(key);
+        nextConfig = _gameContentConfig.copyWith(
+          globalDondeVaImageOverrides: nextOverrides,
+          globalDondeVaImageStoragePaths: nextStorage,
+        );
+        break;
       default:
         return const ActionResult(
           ok: false,
-          message: 'Este juego aun no admite cambios globales de imagen.',
+          message: 'Este juego a\u00fan no admite cambios globales de imagen.',
         );
     }
     final saved = await _authService.saveGameContentConfig(nextConfig);
@@ -2405,7 +2455,7 @@ class AppController extends ChangeNotifier {
   }) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -2510,7 +2560,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> deleteChildProfile(String childId) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesion activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
 
     final targetChildId = childId.trim();
@@ -2527,7 +2577,7 @@ class AppController extends ChangeNotifier {
     if (index < 0) {
       return const ActionResult(
         ok: false,
-        message: 'Ese perfil ya no existe o no esta disponible.',
+        message: 'Ese perfil ya no existe o no est\u00e1 disponible.',
       );
     }
 
@@ -2604,7 +2654,7 @@ class AppController extends ChangeNotifier {
       }
       return const ActionResult(
         ok: true,
-        message: 'Perfil del nino eliminado correctamente.',
+        message: 'Perfil del ni\u00f1o eliminado correctamente.',
       );
     }
 
@@ -2626,7 +2676,7 @@ class AppController extends ChangeNotifier {
       ParentalControl nextControl) async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     final normalized = nextControl.copyWith(
       dailyLimitMinutes: nextControl.dailyLimitMinutes.clamp(0, 24 * 60),
@@ -2790,13 +2840,13 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReports() async {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (isAdmin) {
       return const ActionResult(
         ok: false,
         message:
-            'El perfil demo solo estÃ¡ disponible para cuentas de cuidador.',
+            'El perfil demo solo est\u00e1 disponible para cuentas de cuidador.',
       );
     }
 
@@ -2831,7 +2881,7 @@ class AppController extends ChangeNotifier {
   Future<ActionResult> seedDemoChildForReportsForAllUsers() async {
     final current = _currentUser;
     if (current == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!isAdmin) {
       return const ActionResult(
@@ -2951,11 +3001,11 @@ class AppController extends ChangeNotifier {
   ActionResult canLaunchGame(String gameKey) {
     final user = _currentUser;
     if (user == null) {
-      return const ActionResult(ok: false, message: 'No hay sesiÃ³n activa.');
+      return const ActionResult(ok: false, message: 'No hay sesi\u00f3n activa.');
     }
     if (!isAdmin && _appAdminConfig.maintenanceMode) {
       final message = _appAdminConfig.maintenanceMessage.trim().isEmpty
-          ? 'La app estÃ¡ en mantenimiento. Intenta mÃ¡s tarde.'
+          ? 'La app est\u00e1 en mantenimiento. Intenta m\u00e1s tarde.'
           : _appAdminConfig.maintenanceMessage;
       return ActionResult(ok: false, message: message);
     }
@@ -2986,7 +3036,7 @@ class AppController extends ChangeNotifier {
     if (!isAdmin && globallyBlocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego estÃ¡ deshabilitado por administraciÃ³n.',
+        message: 'Este juego est\u00e1 deshabilitado por administraci\u00f3n.',
       );
     }
     final blocked = control.blockedGameKeys.any(
@@ -2995,7 +3045,7 @@ class AppController extends ChangeNotifier {
     if (blocked) {
       return const ActionResult(
         ok: false,
-        message: 'Este juego estÃ¡ bloqueado por control parental.',
+        message: 'Este juego est\u00e1 bloqueado por control parental.',
       );
     }
 
@@ -3018,7 +3068,7 @@ class AppController extends ChangeNotifier {
         return ActionResult(
           ok: false,
           message:
-              'Limite diario alcanzado (${control.dailyLimitMinutes} min). Vuelve ma\u00f1ana.',
+              'L\u00edmite diario alcanzado (${control.dailyLimitMinutes} min). Vuelve ma\u00f1ana.',
         );
       }
     }

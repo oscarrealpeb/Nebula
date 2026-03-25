@@ -270,6 +270,58 @@ class MemoryContentItem {
   }
 }
 
+class ExploreContentItem {
+  const ExploreContentItem({
+    required this.id,
+    required this.categoryId,
+    required this.title,
+    required this.description,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String categoryId;
+  final String title;
+  final String description;
+  final bool enabled;
+
+  ExploreContentItem copyWith({
+    String? id,
+    String? categoryId,
+    String? title,
+    String? description,
+    bool? enabled,
+  }) {
+    return ExploreContentItem(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'categoryId': categoryId,
+      'title': title,
+      'description': description,
+      'enabled': enabled,
+    };
+  }
+
+  factory ExploreContentItem.fromJson(Map<String, dynamic> json) {
+    return ExploreContentItem(
+      id: (json['id'] as String?) ?? '',
+      categoryId: (json['categoryId'] as String?) ?? '',
+      title: (json['title'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
+      enabled: (json['enabled'] as bool?) ?? true,
+    );
+  }
+}
+
 class GameContentConfig {
   const GameContentConfig({
     this.emotionItems = const [],
@@ -277,14 +329,17 @@ class GameContentConfig {
     this.puzzleItems = const [],
     this.diloItems = const [],
     this.memoryItems = const [],
+    this.exploreItems = const [],
     this.globalEmotionImageOverrides = const {},
     this.globalSoundImageOverrides = const {},
     this.globalPuzzleImageOverrides = const {},
     this.globalMemoryImageOverrides = const {},
+    this.globalDondeVaImageOverrides = const {},
     this.globalEmotionImageStoragePaths = const {},
     this.globalSoundImageStoragePaths = const {},
     this.globalPuzzleImageStoragePaths = const {},
     this.globalMemoryImageStoragePaths = const {},
+    this.globalDondeVaImageStoragePaths = const {},
     this.updatedAtMillis = 0,
   });
 
@@ -293,14 +348,17 @@ class GameContentConfig {
   final List<PuzzleContentItem> puzzleItems;
   final List<DiloContentItem> diloItems;
   final List<MemoryContentItem> memoryItems;
+  final List<ExploreContentItem> exploreItems;
   final Map<String, String> globalEmotionImageOverrides;
   final Map<String, String> globalSoundImageOverrides;
   final Map<String, String> globalPuzzleImageOverrides;
   final Map<String, String> globalMemoryImageOverrides;
+  final Map<String, String> globalDondeVaImageOverrides;
   final Map<String, String> globalEmotionImageStoragePaths;
   final Map<String, String> globalSoundImageStoragePaths;
   final Map<String, String> globalPuzzleImageStoragePaths;
   final Map<String, String> globalMemoryImageStoragePaths;
+  final Map<String, String> globalDondeVaImageStoragePaths;
   final int updatedAtMillis;
 
   GameContentConfig copyWith({
@@ -309,14 +367,17 @@ class GameContentConfig {
     List<PuzzleContentItem>? puzzleItems,
     List<DiloContentItem>? diloItems,
     List<MemoryContentItem>? memoryItems,
+    List<ExploreContentItem>? exploreItems,
     Map<String, String>? globalEmotionImageOverrides,
     Map<String, String>? globalSoundImageOverrides,
     Map<String, String>? globalPuzzleImageOverrides,
     Map<String, String>? globalMemoryImageOverrides,
+    Map<String, String>? globalDondeVaImageOverrides,
     Map<String, String>? globalEmotionImageStoragePaths,
     Map<String, String>? globalSoundImageStoragePaths,
     Map<String, String>? globalPuzzleImageStoragePaths,
     Map<String, String>? globalMemoryImageStoragePaths,
+    Map<String, String>? globalDondeVaImageStoragePaths,
     int? updatedAtMillis,
   }) {
     return GameContentConfig(
@@ -325,6 +386,7 @@ class GameContentConfig {
       puzzleItems: puzzleItems ?? this.puzzleItems,
       diloItems: diloItems ?? this.diloItems,
       memoryItems: memoryItems ?? this.memoryItems,
+      exploreItems: exploreItems ?? this.exploreItems,
       globalEmotionImageOverrides:
           globalEmotionImageOverrides ?? this.globalEmotionImageOverrides,
       globalSoundImageOverrides:
@@ -333,6 +395,8 @@ class GameContentConfig {
           globalPuzzleImageOverrides ?? this.globalPuzzleImageOverrides,
       globalMemoryImageOverrides:
           globalMemoryImageOverrides ?? this.globalMemoryImageOverrides,
+      globalDondeVaImageOverrides:
+          globalDondeVaImageOverrides ?? this.globalDondeVaImageOverrides,
       globalEmotionImageStoragePaths:
           globalEmotionImageStoragePaths ?? this.globalEmotionImageStoragePaths,
       globalSoundImageStoragePaths:
@@ -341,6 +405,9 @@ class GameContentConfig {
           globalPuzzleImageStoragePaths ?? this.globalPuzzleImageStoragePaths,
       globalMemoryImageStoragePaths:
           globalMemoryImageStoragePaths ?? this.globalMemoryImageStoragePaths,
+      globalDondeVaImageStoragePaths:
+          globalDondeVaImageStoragePaths ??
+          this.globalDondeVaImageStoragePaths,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
     );
   }
@@ -352,14 +419,17 @@ class GameContentConfig {
       'puzzleItems': puzzleItems.map((item) => item.toJson()).toList(),
       'diloItems': diloItems.map((item) => item.toJson()).toList(),
       'memoryItems': memoryItems.map((item) => item.toJson()).toList(),
+      'exploreItems': exploreItems.map((item) => item.toJson()).toList(),
       'globalEmotionImageOverrides': globalEmotionImageOverrides,
       'globalSoundImageOverrides': globalSoundImageOverrides,
       'globalPuzzleImageOverrides': globalPuzzleImageOverrides,
       'globalMemoryImageOverrides': globalMemoryImageOverrides,
+      'globalDondeVaImageOverrides': globalDondeVaImageOverrides,
       'globalEmotionImageStoragePaths': globalEmotionImageStoragePaths,
       'globalSoundImageStoragePaths': globalSoundImageStoragePaths,
       'globalPuzzleImageStoragePaths': globalPuzzleImageStoragePaths,
       'globalMemoryImageStoragePaths': globalMemoryImageStoragePaths,
+      'globalDondeVaImageStoragePaths': globalDondeVaImageStoragePaths,
       'updatedAtMillis': updatedAtMillis,
     };
   }
@@ -406,6 +476,14 @@ class GameContentConfig {
             ),
           )
           .toList(),
+      exploreItems: (json['exploreItems'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => ExploreContentItem.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(),
       globalEmotionImageOverrides: Map<String, String>.from(
         json['globalEmotionImageOverrides'] as Map? ?? const {},
       ),
@@ -418,6 +496,9 @@ class GameContentConfig {
       globalMemoryImageOverrides: Map<String, String>.from(
         json['globalMemoryImageOverrides'] as Map? ?? const {},
       ),
+      globalDondeVaImageOverrides: Map<String, String>.from(
+        json['globalDondeVaImageOverrides'] as Map? ?? const {},
+      ),
       globalEmotionImageStoragePaths: Map<String, String>.from(
         json['globalEmotionImageStoragePaths'] as Map? ?? const {},
       ),
@@ -429,6 +510,9 @@ class GameContentConfig {
       ),
       globalMemoryImageStoragePaths: Map<String, String>.from(
         json['globalMemoryImageStoragePaths'] as Map? ?? const {},
+      ),
+      globalDondeVaImageStoragePaths: Map<String, String>.from(
+        json['globalDondeVaImageStoragePaths'] as Map? ?? const {},
       ),
       updatedAtMillis: (json['updatedAtMillis'] as num?)?.toInt() ?? 0,
     );

@@ -123,20 +123,20 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
       ),
       build: (context) => [
         pw.Text(
-          'Reporte de uso y desempeno funcional',
+          'Reporte de uso y desempeño funcional',
           style: pw.TextStyle(
             fontSize: 20,
             fontWeight: pw.FontWeight.bold,
           ),
         ),
         pw.SizedBox(height: 8),
-        pw.Text('Nino: ${data.childName}'),
+        pw.Text('Niño: ${data.childName}'),
         pw.Text('Cuidador: ${data.caregiverName}'),
-        pw.Text('Periodo evaluado: ultimos ${data.periodDays} dias'),
+        pw.Text('Periodo evaluado: últimos ${data.periodDays} días'),
         pw.Text('Generado: ${_formatDateTime(generatedAt)}'),
         pw.SizedBox(height: 4),
         pw.Text(
-          'Nota: este reporte apoya la evaluacion clinica y no constituye diagnostico.',
+          'Nota: este reporte apoya la evaluación clínica y no constituye diagnóstico.',
           style: const pw.TextStyle(fontSize: 9),
         ),
         pw.SizedBox(height: 12),
@@ -165,12 +165,12 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
         ),
         pw.SizedBox(height: 12),
         pw.Text(
-          'Visual rapido (lectura intuitiva)',
+          'Visual rápido (lectura intuitiva)',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 2),
         pw.Text(
-          'Las graficas resumen cuando y cuanto se usa la app.',
+          'Las gráficas resumen cuándo y cuánto se usa la app.',
           style: const pw.TextStyle(fontSize: 9),
         ),
         pw.SizedBox(height: 6),
@@ -193,31 +193,31 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
           },
           data: [
             [
-              'Sesiones registradas (ultimos ${data.periodDays} dias)',
+              'Sesiones registradas (últimos ${data.periodDays} días)',
               '${data.sessions.length} sesiones',
             ],
             [
-              'Minutos totales acumulados (ultimos ${data.periodDays} dias)',
+              'Minutos totales acumulados (últimos ${data.periodDays} días)',
               '$totalMinutes min',
             ],
             [
-              'Dias con uso (ultimos ${data.dailyWindowDays} dias)',
-              '$activeDays dias',
+              'Días con uso (últimos ${data.dailyWindowDays} días)',
+              '$activeDays días',
             ],
             [
-              'Promedio diario (base ${data.periodDays} dias)',
-              '${avgDailyMinutes.toStringAsFixed(1)} min/dia'
+              'Promedio diario (base ${data.periodDays} días)',
+              '${avgDailyMinutes.toStringAsFixed(1)} min/día'
             ],
             [
-              'Promedio por sesion (ultimos ${data.periodDays} dias)',
+              'Promedio por sesión (últimos ${data.periodDays} días)',
               '${avgSessionMinutes.toStringAsFixed(1)} min'
             ],
             [
-              'Franja horaria dominante (ultimos ${data.hourlyWindowDays} dias)',
+              'Franja horaria dominante (últimos ${data.hourlyWindowDays} días)',
               _formatHourLabel(dominantHour),
             ],
             [
-              'Precision promedio (ultimos ${data.periodDays} dias)',
+              'Precisión promedio (últimos ${data.periodDays} días)',
               '${avgAccuracy.toStringAsFixed(1)}%'
             ],
           ],
@@ -235,7 +235,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
             headers: const [
               'Habilidad',
               'Puntaje',
-              'Interpretacion',
+              'Interpretación',
               'Tendencia',
               'Evidencia',
               'Confianza'
@@ -288,12 +288,12 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
           ),
         pw.SizedBox(height: 12),
         pw.Text(
-          'Generalizacion funcional',
+          'Generalización funcional',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 6),
         if (prioritySkills.isEmpty)
-          pw.Text('No hay habilidades criticas en este periodo.')
+          pw.Text('No hay habilidades críticas en este periodo.')
         else
           ...prioritySkills.map((item) {
             final skill = skillById(item.id);
@@ -379,7 +379,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
           ),
         pw.NewPage(),
         pw.Text(
-          'Guia rapida para interpretar este reporte',
+          'Guía rápida para interpretar este reporte',
           style: pw.TextStyle(
             fontSize: 18,
             fontWeight: pw.FontWeight.bold,
@@ -387,7 +387,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
         ),
         pw.SizedBox(height: 8),
         _guideBullet(
-          'Puntaje por habilidad (0 a 100): valores altos indican mejor desempeno observado en las sesiones.',
+          'Puntaje por habilidad (0 a 100): combina precisión (85%), ritmo de respuesta (10%) y nivel de dificultad jugado (5%).',
         ),
         _guideBullet(
           'Tendencia: compara este periodo frente al anterior. "Mejora relevante" sugiere avance, "Descenso" requiere seguimiento.',
@@ -399,7 +399,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
           'Error estimado: porcentaje aproximado de respuestas incorrectas en la habilidad.',
         ),
         _guideBullet(
-          'Las metricas apoyan el seguimiento. No reemplazan la valoracion clinica profesional.',
+          'Las métricas apoyan el seguimiento. No reemplazan la valoración clínica profesional.',
         ),
         pw.SizedBox(height: 12),
         pw.Text(
@@ -421,7 +421,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
               'Habilidad funcional en este periodo; mantener y generalizar.'
             ],
             [
-              'En consolidacion',
+              'En consolidación',
               'Hay avance parcial; mantener practica guiada y reforzar.'
             ],
             [
@@ -441,7 +441,7 @@ Future<Uint8List> buildChildReportPdfBytes(ChildReportPdfData data) async {
         ),
         pw.SizedBox(height: 6),
         pw.TableHelper.fromTextArray(
-          headers: const ['Juego', 'Habilidades que trabaja', 'Como aporta'],
+          headers: const ['Juego', 'Habilidades que trabaja', 'Cómo aporta'],
           headerStyle: _tableHeaderStyle(),
           cellStyle: _tableCellStyle,
           columnWidths: const {
@@ -574,7 +574,7 @@ pw.Widget _buildDailyUsageBars(Map<String, int> dailyMinutes) {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Grafica de barras: minutos por dia (ultimo bloque semanal)',
+          'Gráfica de barras: minutos por día (último bloque semanal)',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
         ),
         pw.SizedBox(height: 3),
@@ -680,13 +680,13 @@ pw.Widget _buildPeriodPieChart(Map<String, double> distribution) {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Grafica circular: distribucion de uso por franja horaria',
+                'Gráfica circular: distribución de uso por franja horaria',
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
               ),
               pw.SizedBox(height: 3),
               pw.Text(
-                'Rangos: Madrugada 00-05 | Manana 06-11 | Tarde 12-17 | Noche 18-23.',
+                'Rangos: Madrugada 00-05 | Mañana 06-11 | Tarde 12-17 | Noche 18-23.',
                 style: const pw.TextStyle(fontSize: 8),
               ),
               pw.SizedBox(height: 4),
@@ -733,7 +733,7 @@ pw.Widget _buildPeriodPieChart(Map<String, double> distribution) {
 Map<String, double> _periodDistribution(Map<int, int> hourlyMinutes) {
   final buckets = <String, int>{
     'Madrugada': 0,
-    'Manana': 0,
+    'Mañana': 0,
     'Tarde': 0,
     'Noche': 0,
   };
@@ -742,7 +742,7 @@ Map<String, double> _periodDistribution(Map<int, int> hourlyMinutes) {
     final hour = entry.key;
     final minutes = entry.value.clamp(0, 24 * 60);
     if (hour >= 6 && hour <= 11) {
-      buckets['Manana'] = (buckets['Manana'] ?? 0) + minutes;
+      buckets['Mañana'] = (buckets['Mañana'] ?? 0) + minutes;
     } else if (hour >= 12 && hour <= 17) {
       buckets['Tarde'] = (buckets['Tarde'] ?? 0) + minutes;
     } else if (hour >= 18 && hour <= 23) {
@@ -756,7 +756,7 @@ Map<String, double> _periodDistribution(Map<int, int> hourlyMinutes) {
   if (total <= 0) {
     return {
       'Madrugada': 0,
-      'Manana': 0,
+      'Mañana': 0,
       'Tarde': 0,
       'Noche': 0,
     };
@@ -824,7 +824,7 @@ List<String> _buildExecutiveSummary({
   if (sessionsCount <= 0) {
     return const [
       'No hay sesiones en el periodo evaluado.',
-      'Aun no es posible construir un perfil de desempeno confiable.',
+      'Aún no es posible construir un perfil de desempeño confiable.',
       'Se recomienda completar al menos 4 sesiones para una primera lectura.',
     ];
   }
@@ -840,10 +840,10 @@ List<String> _buildExecutiveSummary({
 
   if (priorities.isNotEmpty) {
     lines.add(
-      'Areas que requieren apoyo: ${priorities.map((item) => item.title).join(', ')}.',
+      'Áreas que requieren apoyo: ${priorities.map((item) => item.title).join(', ')}.',
     );
   } else {
-    lines.add('No se observan areas criticas (<60) en este periodo.');
+    lines.add('No se observan áreas críticas (<60) en este periodo.');
   }
 
   final bestImprovement = _bestImprovement(skills);
@@ -854,7 +854,7 @@ List<String> _buildExecutiveSummary({
   }
 
   final recommendation = priorities.isNotEmpty
-      ? 'Priorizar ${priorities.first.title} en sesiones guiadas de 10 a 15 min, 4 o 5 dias por semana.'
+      ? 'Priorizar ${priorities.first.title} en sesiones guiadas de 10 a 15 min, 4 o 5 días por semana.'
       : 'Mantener frecuencia y reforzar variacion de actividades.';
   lines.add(recommendation);
 
@@ -865,9 +865,9 @@ List<String> _buildCaregiverRecommendations(
     List<ReportSkillMetric> priorities) {
   if (priorities.isEmpty) {
     return const [
-      'Mantener una rutina de uso 4 o 5 dias por semana.',
-      'Reforzar en casa con ejemplos cotidianos de comunicacion funcional.',
-      'Registrar observaciones breves despues de cada sesion.',
+      'Mantener una rutina de uso 4 o 5 días por semana.',
+      'Reforzar en casa con ejemplos cotidianos de comunicación funcional.',
+      'Registrar observaciones breves después de cada sesión.',
     ];
   }
   final first = priorities.first;
@@ -887,7 +887,7 @@ List<String> _buildCaregiverRecommendations(
 List<String> _buildTherapistSuggestions(List<ReportSkillMetric> priorities) {
   if (priorities.isEmpty) {
     return const [
-      'Mantener el plan terapeutico actual y revisar avance mensual.',
+      'Mantener el plan terapéutico actual y revisar avance mensual.',
       'Aumentar complejidad de forma progresiva sin reducir adherencia.',
     ];
   }
@@ -916,12 +916,12 @@ ReportSkillMetric? _bestImprovement(List<ReportSkillMetric> skills) {
 
 String _stateLabel(double score) {
   if (score >= 80) return 'Fortaleza consolidada';
-  if (score >= 60) return 'En consolidacion';
+  if (score >= 60) return 'En consolidación';
   return 'Requiere apoyo prioritario';
 }
 
 String _trendLabel(double current, double previous) {
-  if (previous < 0) return 'Sin linea base';
+  if (previous < 0) return 'Sin línea base';
   final delta = current - previous;
   if (delta >= 8) return 'Mejora relevante';
   if (delta <= -8) return 'Descenso';
@@ -939,9 +939,9 @@ String _qualityNote(int sessionsCount) {
     return 'Calidad de datos baja: interpretar con cautela (menos de 4 sesiones).';
   }
   if (sessionsCount < 8) {
-    return 'Calidad de datos media: util para seguimiento inicial y ajuste temprano.';
+    return 'Calidad de datos media: útil para seguimiento inicial y ajuste temprano.';
   }
-  return 'Calidad de datos alta: patron suficientemente consistente para seguimiento clinico.';
+  return 'Calidad de datos alta: patrón suficientemente consistente para seguimiento clínico.';
 }
 
 int _dominantHour(Map<int, int> hourlyMinutes) {

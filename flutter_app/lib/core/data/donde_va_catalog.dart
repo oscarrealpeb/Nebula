@@ -70,6 +70,15 @@ String dondeVaItemAssetPath({
   return 'assets/images/donde_va/$categoryId/$itemId.$extension';
 }
 
+String dondeVaGlobalItemId({
+  required String categoryId,
+  required String itemId,
+}) {
+  final normalizedCategory = categoryId.trim().toLowerCase();
+  final normalizedItem = itemId.trim().toLowerCase();
+  return '$normalizedCategory::$normalizedItem';
+}
+
 const List<DondeVaCategory> dondeVaCategories = <DondeVaCategory>[
   DondeVaCategory(
     id: 'cocina',

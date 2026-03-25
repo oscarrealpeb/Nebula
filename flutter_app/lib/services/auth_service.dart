@@ -42,6 +42,7 @@ class _DashboardSessionSnapshot {
   const _DashboardSessionSnapshot({
     required this.gameKey,
     required this.startedAtMillis,
+    required this.endedAtMillis,
     required this.durationSeconds,
     required this.correctAnswers,
     required this.totalAttempts,
@@ -49,6 +50,7 @@ class _DashboardSessionSnapshot {
 
   final String gameKey;
   final int startedAtMillis;
+  final int endedAtMillis;
   final int durationSeconds;
   final int correctAnswers;
   final int totalAttempts;
@@ -58,13 +60,13 @@ class _DashboardUserSnapshot {
   const _DashboardUserSnapshot({
     required this.role,
     required this.hasChildProfile,
-    required this.childProfileActive,
+    required this.activeChildProfilesCount,
     required this.sessions,
   });
 
   final String role;
   final bool hasChildProfile;
-  final bool childProfileActive;
+  final int activeChildProfilesCount;
   final List<_DashboardSessionSnapshot> sessions;
 }
 
@@ -325,6 +327,7 @@ class AuthService {
   Future<bool> _retryAdminWrite({
     required String docId,
     required Map<String, dynamic> payload,
+    bool merge = true,
   }) async {
     final user = _currentUser;
     if (!_useFirebase || user == null || user.role != UserRole.admin) {
@@ -337,7 +340,7 @@ class AuthService {
         await _firestore!
             .collection('app')
             .doc(docId)
-            .set(payload, SetOptions(merge: true));
+            .set(payload, SetOptions(merge: merge));
         return true;
       } on FirebaseException catch (e) {
         if (e.code != 'permission-denied' || attempt == 3) {
@@ -356,16 +359,18 @@ class AuthService {
     if (!_useFirebase || user == null || user.role != UserRole.admin) {
       return false;
     }
+    final firestore = _firestore;
+    if (firestore == null) return false;
     final uid = _firebaseAuth?.currentUser?.uid ?? '';
     if (uid.isEmpty) return false;
     final cloudUser = uid != user.id ? _copyUserWithId(user, uid) : user;
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
-        await _firestore!
+        await firestore
             .collection('users')
             .doc(uid)
             .set(_adminRoleSeedData(cloudUser), SetOptions(merge: true));
-        final snapshot = await _firestore!
+        final snapshot = await firestore
             .collection('users')
             .doc(uid)
             .get(const GetOptions(source: Source.server));
@@ -538,6 +543,22 @@ class AuthService {
           ),
         )
         .toList();
+    final exploreItems = config.exploreItems
+        .where(
+          (item) =>
+              item.id.trim().isNotEmpty &&
+              item.categoryId.trim().isNotEmpty &&
+              item.title.trim().isNotEmpty &&
+              item.description.trim().isNotEmpty,
+        )
+        .map(
+          (item) => item.copyWith(
+            categoryId: item.categoryId.trim(),
+            title: item.title.trim(),
+            description: item.description.trim(),
+          ),
+        )
+        .toList();
     final emotionOverrides = Map<String, String>.fromEntries(
       config.globalEmotionImageOverrides.entries
           .map(
@@ -567,6 +588,15 @@ class AuthService {
     );
     final memoryOverrides = Map<String, String>.fromEntries(
       config.globalMemoryImageOverrides.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
+    final dondeVaOverrides = Map<String, String>.fromEntries(
+      config.globalDondeVaImageOverrides.entries
           .map(
             (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
           )
@@ -610,20 +640,32 @@ class AuthService {
             (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
           ),
     );
+    final dondeVaStoragePaths = Map<String, String>.fromEntries(
+      config.globalDondeVaImageStoragePaths.entries
+          .map(
+            (entry) => MapEntry(entry.key.trim(), entry.value.trim()),
+          )
+          .where(
+            (entry) => entry.key.isNotEmpty && entry.value.isNotEmpty,
+          ),
+    );
     final normalized = GameContentConfig(
       emotionItems: emotions,
       soundItems: sounds,
       puzzleItems: puzzles,
       diloItems: diloItems,
       memoryItems: memoryItems,
+      exploreItems: exploreItems,
       globalEmotionImageOverrides: emotionOverrides,
       globalSoundImageOverrides: soundOverrides,
       globalPuzzleImageOverrides: puzzleOverrides,
       globalMemoryImageOverrides: memoryOverrides,
+      globalDondeVaImageOverrides: dondeVaOverrides,
       globalEmotionImageStoragePaths: emotionStoragePaths,
       globalSoundImageStoragePaths: soundStoragePaths,
       globalPuzzleImageStoragePaths: puzzleStoragePaths,
       globalMemoryImageStoragePaths: memoryStoragePaths,
+      globalDondeVaImageStoragePaths: dondeVaStoragePaths,
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -650,12 +692,13 @@ class AuthService {
           await _firestore!
               .collection('app')
               .doc('game_content_config')
-              .set(normalized.toJson(), SetOptions(merge: true));
+              .set(normalized.toJson());
         } on FirebaseException catch (e) {
           if (e.code == 'permission-denied') {
             final retryOk = await _retryAdminWrite(
               docId: 'game_content_config',
               payload: normalized.toJson(),
+              merge: false,
             );
             if (!retryOk) {
               return ServiceResult(
@@ -4092,13 +4135,15 @@ class AuthService {
             role: user.role,
             hasChildProfile:
                 user.childProfile != null || user.childProfiles.isNotEmpty,
-            childProfileActive: user.childProfiles.any((item) => item.active) ||
-                (user.childProfile?.active ?? false),
+            activeChildProfilesCount: user.childProfiles.isNotEmpty
+                ? user.childProfiles.where((item) => item.active).length
+                : ((user.childProfile?.active ?? false) ? 1 : 0),
             sessions: user.gameSessions
                 .map(
                   (session) => _DashboardSessionSnapshot(
                     gameKey: session.gameKey,
                     startedAtMillis: session.startedAtMillis,
+                    endedAtMillis: session.endedAtMillis,
                     durationSeconds: session.durationSeconds,
                     correctAnswers: session.correctAnswers,
                     totalAttempts: session.totalAttempts,
@@ -4122,9 +4167,9 @@ class AuthService {
       final childList =
           childListRaw is List ? childListRaw.whereType<Map>() : const <Map>[];
       final hasChildProfile = childRaw is Map || childList.isNotEmpty;
-      final childActive = childList
-              .any((item) => (item['active'] as bool?) ?? false) ||
-          (childRaw is Map ? ((childRaw['active'] as bool?) ?? false) : false);
+      final activeChildProfilesCount = childList.isNotEmpty
+          ? childList.where((item) => (item['active'] as bool?) ?? false).length
+          : (childRaw is Map && ((childRaw['active'] as bool?) ?? false) ? 1 : 0);
 
       final sessions = <_DashboardSessionSnapshot>[];
       final sessionsRaw = data['gameSessions'];
@@ -4135,6 +4180,7 @@ class AuthService {
             _DashboardSessionSnapshot(
               gameKey: (json['gameKey'] as String?) ?? '',
               startedAtMillis: (json['startedAtMillis'] as num?)?.toInt() ?? 0,
+              endedAtMillis: (json['endedAtMillis'] as num?)?.toInt() ?? 0,
               durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
               correctAnswers: (json['correctAnswers'] as num?)?.toInt() ?? 0,
               totalAttempts: (json['totalAttempts'] as num?)?.toInt() ?? 0,
@@ -4147,7 +4193,7 @@ class AuthService {
         _DashboardUserSnapshot(
           role: role,
           hasChildProfile: hasChildProfile,
-          childProfileActive: childActive,
+          activeChildProfilesCount: activeChildProfilesCount,
           sessions: sessions,
         ),
       );
@@ -4191,13 +4237,13 @@ class AuthService {
       if (user.hasChildProfile) {
         usersWithChildProfile += 1;
       }
-      if (user.childProfileActive) {
-        activeChildProfiles += 1;
+      if (user.activeChildProfilesCount > 0) {
+        activeChildProfiles += user.activeChildProfilesCount;
       }
 
       for (final session in user.sessions) {
         totalGameSessions += 1;
-        final duration = session.durationSeconds.clamp(0, 24 * 3600);
+        final duration = _effectiveDashboardSessionDurationSeconds(session);
         totalUsageSeconds += duration;
         if (session.startedAtMillis >= from7Days) {
           sessionsLast7Days += 1;
@@ -4239,6 +4285,19 @@ class AuthService {
       refreshedAtMillis: now.millisecondsSinceEpoch,
       source: source,
     );
+  }
+
+  int _effectiveDashboardSessionDurationSeconds(
+    _DashboardSessionSnapshot session,
+  ) {
+    final stored = session.durationSeconds.clamp(0, 24 * 3600);
+    if (stored > 0) return stored;
+
+    final startedAt = session.startedAtMillis;
+    final endedAt = session.endedAtMillis;
+    if (startedAt <= 0 || endedAt <= startedAt) return 0;
+
+    return ((endedAt - startedAt) ~/ 1000).clamp(0, 24 * 3600);
   }
 
   Future<List<DeletedAccountRecord>> _readLocalDeletedAccountRecords() async {
