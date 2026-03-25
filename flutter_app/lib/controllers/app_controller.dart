@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -876,6 +876,10 @@ class AppController extends ChangeNotifier {
       ok: true,
       message: 'Sesión admin Firebase recuperada.',
     );
+  }
+
+  Future<ActionResult> ensureAdminFirebaseSessionForUpload() async {
+    return _ensureAdminFirebaseSessionIfNeeded();
   }
 
   Future<ActionResult> reloadAppAdminConfig({bool notify = true}) async {
@@ -3735,3 +3739,4 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
+

@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -78,15 +79,30 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     if (source.isEmpty) return;
 
     await _player.stop();
-    if (source.startsWith('http://') || source.startsWith('https://')) {
-      await _player.play(UrlSource(source));
-      return;
+    await _player.play(_audioSourceFor(source), volume: 1.0);
+  }
+
+  Source _audioSourceFor(String rawPath) {
+    final path = rawPath.trim();
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return UrlSource(path);
     }
-    if (source.startsWith('assets/')) {
-      await _player.play(AssetSource(source.substring('assets/'.length)));
-      return;
+
+    final looksAbsoluteWindows = RegExp(r'^[a-zA-Z]:\\').hasMatch(path);
+    final looksAbsoluteUnix = path.startsWith('/');
+    final looksUnc = path.startsWith(r'\\');
+    if (looksAbsoluteWindows || looksAbsoluteUnix || looksUnc) {
+      return DeviceFileSource(path);
     }
-    await _player.play(DeviceFileSource(source));
+
+    final file = File(path);
+    if (file.existsSync()) {
+      return DeviceFileSource(path);
+    }
+
+    final normalizedAsset =
+        path.startsWith('assets/') ? path.substring('assets/'.length) : path;
+    return AssetSource(normalizedAsset);
   }
 
   void _selectRandomItem({required bool forceDifferent}) {

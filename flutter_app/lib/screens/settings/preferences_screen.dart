@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -197,7 +197,10 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Activar narrador de juegos'),
+                      title: const Text('Activar voz narradora'),
+                      subtitle: const Text(
+                        'No desactiva los sonidos propios de los juegos.',
+                      ),
                       value: _soundEnabled,
                       onChanged: (value) {
                         setState(() => _soundEnabled = value);
@@ -304,3 +307,4 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     );
   }
 }
+

@@ -1037,6 +1037,18 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
     String expectedEmotion = '',
     String expectedDescription = '',
   }) async {
+    final firebaseSession =
+        await widget.controller.ensureAdminFirebaseSessionForUpload();
+    if (!firebaseSession.ok) {
+      if (!mounted) return false;
+      await NebulaSnack.show(
+        context,
+        message: firebaseSession.message,
+        ok: false,
+      );
+      return false;
+    }
+
     final concepts = expectedConcepts
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
@@ -1599,6 +1611,17 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       );
       return;
     }
+    final firebaseSession =
+        await widget.controller.ensureAdminFirebaseSessionForUpload();
+    if (!firebaseSession.ok) {
+      if (!mounted) return;
+      await NebulaSnack.show(
+        context,
+        message: firebaseSession.message,
+        ok: false,
+      );
+      return;
+    }
     setState(() => _newItemBusyKey = targetKey);
     try {
       final picked = await _picker.pickImage(
@@ -1692,6 +1715,17 @@ class _AdminGameContentScreenState extends State<AdminGameContentScreen> {
       await NebulaSnack.show(
         context,
         message: 'Necesitas internet para subir el audio.',
+        ok: false,
+      );
+      return;
+    }
+    final firebaseSession =
+        await widget.controller.ensureAdminFirebaseSessionForUpload();
+    if (!firebaseSession.ok) {
+      if (!mounted) return;
+      await NebulaSnack.show(
+        context,
+        message: firebaseSession.message,
         ok: false,
       );
       return;
